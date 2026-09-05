@@ -1,0 +1,12 @@
+ALL TABLES EXPOSED VIA API:
+
+orders: id, buyer_id, status, total, payment_method, receipt_url, notes, created_at
+
+order_items: id, order_id, product_id, seller_id, quantity, unit_price, variant, product_name, product_image_url
+
+products: id, seller_id, name, description, category, price, image_url, stock, status, bao_comment, badge, created_at, updated_at
+
+
+PROBE seller_profiles:
+status: 404
+{"code":"PGRST205","details":null,"hint":null,"message":"Could not find the table 'public.seller_profiles' in the schema cache"}
