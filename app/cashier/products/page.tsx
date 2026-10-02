@@ -1,4 +1,4 @@
-﻿import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card"
 import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
-import { deleteProduct } from "./actions"
+import { deleteProduct } from "@/app/seller/products/actions"
 
 const STATUS_STYLES = {
   pending:  { label: "Pending BAO Review",  icon: Clock,         color: "bg-amber-100/90 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
@@ -15,14 +15,18 @@ const STATUS_STYLES = {
   rejected: { label: "Rejected",            icon: XCircle,      color: "bg-destructive/10 text-destructive" },
 }
 
-export default async function CashierProductsPage() {
-  const { id: sellerId, email, profile } = await requireUser(["seller", "admin"])
+export default async function CashierProductsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  // Dashboard header search (?q=) filters products by name
+  const term = ((await searchParams).q ?? "").trim().replace(/[%,()]/g, "")
+  const ctx = await requireDashboard("cashier", "products")
+  const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
   const { data: products, error } = await supabase
     .from("products")
     .select("*")
     .eq("seller_id", sellerId)
+    .ilike("name", `%${term}%`)
     .order("created_at", { ascending: false })
 
   const items = products ?? []
@@ -34,10 +38,10 @@ export default async function CashierProductsPage() {
   }
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeading title="Add Walk-in Product" description="Quickly list a product for BAO approval from the cashier counter." />
-        <AddProductModal sellerId={sellerId} />
+        <AddProductModal sellerId={sellerId} module="cashier" />
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -99,7 +103,7 @@ export default async function CashierProductsPage() {
                       </p>
                     )}
                     {product.status === "pending" && (
-                      <form action={deleteProduct.bind(null, product.id)}>
+                      <form action={deleteProduct.bind(null, product.id, "cashier")}>
                         <button type="submit" className="mt-1.5 w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">
                           Withdraw
                         </button>

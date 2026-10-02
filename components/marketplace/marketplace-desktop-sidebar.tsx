@@ -2,83 +2,25 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import {
-  Home, Store, ShoppingCart, Tag, Boxes, BarChart2, Settings,
-  Users, ShieldCheck, FileText, ClipboardList, CheckSquare,
-  TrendingUp, LayoutDashboard, type LucideIcon,
-} from "lucide-react"
+import { Home, Tag, ShoppingCart, Users, Settings, ShieldCheck, Building2, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { roleDashboard, type UserRole } from "@/lib/roles"
+import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
 
 type NavItem = { label: string; href: string; icon: LucideIcon }
 
-function buildNav(role: UserRole): NavItem[] {
-  const marketItem = { label: "Marketplace", href: "/marketplace", icon: Home }
-  const dash = roleDashboard(role)
+/** Every signed-in person is a user; the same user navigation for everyone. */
+export const USER_NAV: NavItem[] = [
+  { label: "Home",         href: "/marketplace",            icon: Home },
+  { label: "Categories",   href: "/marketplace/categories", icon: Tag },
+  { label: "My Orders",    href: "/marketplace/orders",     icon: ShoppingCart },
+  { label: "My Account",   href: "/marketplace/account",    icon: Users },
+  { label: "Verification", href: "/verify",                 icon: ShieldCheck },
+  { label: "Settings",     href: "/marketplace/settings",   icon: Settings },
+]
 
-  const roleNav: Record<UserRole, NavItem[]> = {
-    buyer: [
-      { label: "Home",       href: "/marketplace",        icon: Home },
-      { label: "Categories", href: "/marketplace/categories", icon: Tag },
-      { label: "My Orders",  href: "/marketplace/orders", icon: ShoppingCart },
-      { label: "Account",    href: "/marketplace/account",icon: Users },
-      { label: "Settings",   href: "/marketplace/settings",icon: Settings },
-    ],
-    seller: [
-      marketItem,
-      { label: "My Dashboard",  href: "/seller",           icon: LayoutDashboard },
-      { label: "My Products",   href: "/seller/products",  icon: Tag },
-      { label: "Orders",        href: "/seller/orders",    icon: ShoppingCart },
-      { label: "Inventory",     href: "/seller/inventory", icon: Boxes },
-      { label: "Analytics",     href: "/seller/analytics", icon: BarChart2 },
-      { label: "Shop Settings", href: "/seller/shop",      icon: Store },
-      { label: "Settings",      href: "/seller/settings",  icon: Settings },
-    ],
-    bao: [
-      marketItem,
-      { label: "BAO Dashboard",    href: "/bao",           icon: LayoutDashboard },
-      { label: "Seller Management",href: "/bao/sellers",   icon: Users },
-      { label: "Product Approvals",href: "/bao/approvals", icon: CheckSquare },
-      { label: "Analytics",        href: "/bao/analytics", icon: BarChart2 },
-      { label: "Reports",          href: "/bao/reports",   icon: FileText },
-      { label: "Activity Logs",    href: "/bao/logs",      icon: ClipboardList },
-      { label: "Settings",         href: "/bao/settings",  icon: Settings },
-    ],
-    admin: [
-      marketItem,
-      { label: "BAO Dashboard",    href: "/bao",           icon: LayoutDashboard },
-      { label: "Seller Management",href: "/bao/sellers",   icon: Users },
-      { label: "Product Approvals",href: "/bao/approvals", icon: CheckSquare },
-      { label: "Analytics",        href: "/bao/analytics", icon: BarChart2 },
-      { label: "Reports",          href: "/bao/reports",   icon: FileText },
-      { label: "Activity Logs",    href: "/bao/logs",      icon: ClipboardList },
-      { label: "Settings",         href: "/bao/settings",  icon: Settings },
-    ],
-    supply_office: [
-      marketItem,
-      { label: "Supply Dashboard", href: "/supply-office",           icon: LayoutDashboard },
-      { label: "Inventory",        href: "/supply-office/inventory", icon: Boxes },
-      { label: "Stock Movement",   href: "/supply-office/movement",  icon: TrendingUp },
-      { label: "Restricted Items", href: "/supply-office/restricted",icon: ShieldCheck },
-      { label: "Reports",          href: "/supply-office/reports",   icon: FileText },
-      { label: "Settings",         href: "/supply-office/settings",  icon: Settings },
-    ],
-    registrar: [
-      marketItem,
-      { label: "Registrar Home",   href: "/registrar",              icon: LayoutDashboard },
-      { label: "Verify Queue",     href: "/registrar/verification", icon: ShieldCheck },
-      { label: "Approved",         href: "/registrar/approved",     icon: CheckSquare },
-      { label: "Reports",          href: "/registrar/reports",      icon: FileText },
-      { label: "Settings",         href: "/registrar/settings",     icon: Settings },
-    ],
-  }
-
-  return roleNav[role] ?? roleNav.buyer
-}
-
-export function MarketplaceDesktopSidebar({ role }: { role: UserRole }) {
+export function MarketplaceDesktopSidebar({ dashboards = [] }: { dashboards?: DashboardSummary[] }) {
   const pathname = usePathname()
-  const nav = buildNav(role)
+  const nav = USER_NAV
 
   function isActive(href: string) {
     if (href === "/marketplace") return pathname === "/marketplace"
@@ -107,6 +49,22 @@ export function MarketplaceDesktopSidebar({ role }: { role: UserRole }) {
           )
         })}
       </nav>
+
+      {dashboards.length > 0 && (
+        <div className="px-2 pb-3">
+          <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/45">My dashboards</p>
+          {dashboards.map((d) => (
+            <a key={d.id} href={dashboardHref(d)}
+              className="group flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-primary-foreground/75 hover:bg-primary-foreground/8 hover:text-primary-foreground">
+              <Building2 className="size-4 shrink-0 text-gold/60 group-hover:text-gold/80" />
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate font-medium">{d.name}</span>
+                <span className="block text-[10px] text-primary-foreground/50">{MODULES[d.module].name}{d.isMain ? " · Main Admin" : ""}</span>
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
 
       <div className="h-px bg-gradient-to-r from-gold/40 to-transparent mx-3" />
       <div className="px-4 py-3">

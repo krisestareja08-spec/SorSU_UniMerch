@@ -4,18 +4,15 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { ROLE_LABELS, type UserRole } from "@/lib/roles"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { LogOut } from "lucide-react"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 export function AppHeader({
   fullName,
-  role,
   email,
 }: {
   fullName: string | null
-  role: UserRole
   email: string
 }) {
   const router = useRouter()
@@ -53,9 +50,7 @@ export function AppHeader({
         </Link>
 
         <div className="flex items-center gap-3">
-          <Badge variant="secondary" className="hidden sm:inline-flex">
-            {ROLE_LABELS[role]}
-          </Badge>
+          <NotificationBell />
           <div className="flex items-center gap-2.5">
             <span className="flex size-9 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
               {initials}

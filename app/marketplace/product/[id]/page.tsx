@@ -1,11 +1,14 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import Image from "next/image"
-import { AddToCartButton } from "@/components/marketplace/add-to-cart-button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, Package } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
+import { ProductVariantActions } from "@/components/marketplace/product-variant-actions"
+import { SellerVisitBar } from "@/components/storefront/seller-visit-bar"
+import { SellerProductCarousel } from "@/components/storefront/seller-product-carousel"
+import { getStorefront, storefrontHref } from "@/lib/storefront"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":      "bg-emerald-100 text-emerald-700 border border-emerald-200",
@@ -20,20 +23,38 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
   const { data: product } = await supabase
     .from("products")
-    .select("id, name, description, category, price, image_url, badge, stock, seller_id")
+    .select("id, name, description, category, price, final_price, is_royalty_product, image_url, badge, stock, seller_id, variations")
     .eq("id", id)
     .eq("status", "approved")
     .maybeSingle()
 
+  // notFound() also covers restricted products the signed-in viewer isn't verified for — the
+  // "approved products are public" RLS policy in scripts/5_seller_ecosystem.sql simply omits the row.
   if (!product) notFound()
 
-  const { data: sellerProfile } = await supabase
-    .from("seller_profiles")
-    .select("org_name")
-    .eq("id", product.seller_id)
-    .maybeSingle()
+  // The seller is the store that owns this product (products.seller_id) — never the viewer.
+  const storefront = await getStorefront(supabase, product.seller_id)
+  const sellerName = storefront?.name ?? "Campus Seller"
+  const sellerHref = storefrontHref(product.seller_id)
+  // Buyers pay the listed price; the logo royalty is deducted from the seller's earnings and goes to BAO.
+  const displayPrice = Number(product.price)
+  const variations: string[] = Array.isArray(product.variations) ? product.variations : []
 
-  const sellerName = sellerProfile?.org_name ?? "Campus Seller"
+  const { data: relatedRows } = await supabase
+    .from("products")
+    .select("id, name, price, final_price, is_royalty_product, image_url, stock")
+    .eq("seller_id", product.seller_id)
+    .eq("status", "approved")
+    .neq("id", product.id)
+    .limit(10)
+
+  const relatedProducts = (relatedRows ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: Number(p.price),
+    image_url: p.image_url,
+    stock: p.stock,
+  }))
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
@@ -60,14 +81,28 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               {product.badge}
             </span>
             <h1 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground">{product.name}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Sold by {sellerName}</p>
+            <Link href={sellerHref} className="mt-1 inline-block text-sm text-muted-foreground hover:text-primary hover:underline">
+              Sold by {sellerName}
+            </Link>
           </div>
 
-          <p className="text-3xl font-bold text-gold">₱{Number(product.price).toLocaleString()}</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-3xl font-bold text-gold">₱{displayPrice.toLocaleString()}</p>
+            {product.is_royalty_product && (
+              <p className="text-xs text-muted-foreground">Official university merch — includes a BAO royalty</p>
+            )}
+          </div>
 
           {product.description && (
             <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
           )}
+
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>Seller:</span>
+            <Link href={sellerHref} className="font-medium text-foreground hover:text-primary hover:underline">
+              {sellerName}
+            </Link>
+          </div>
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Category:</span>
@@ -80,9 +115,16 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             <p className="text-sm text-destructive">Out of stock</p>
           ) : null}
 
-          <AddToCartButton product={{ id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id, price: Number(product.price), image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out", quantity: 1 }} />
+          <ProductVariantActions
+            product={{ id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id, price: displayPrice, image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out" }}
+            variations={variations}
+          />
         </div>
       </div>
+
+      {storefront && <SellerVisitBar storefront={storefront} />}
+
+      <SellerProductCarousel products={relatedProducts} sellerHref={sellerHref} sellerName={sellerName} />
     </div>
   )
 }

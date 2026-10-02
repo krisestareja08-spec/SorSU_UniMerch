@@ -1,8 +1,6 @@
 import Image from "next/image"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { roleHome } from "@/lib/roles"
-import { profileFromUser } from "@/lib/profile"
 import { UniMerchWordmark } from "@/components/brand/unimerch-wordmark"
 import { LoginForm } from "@/components/auth/login-form"
 
@@ -12,11 +10,7 @@ export default async function LoginPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user) {
-    const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-    const profileRole = error || !data ? profileFromUser(user).role : (data.role ?? "buyer")
-    redirect(roleHome(profileRole))
-  }
+  if (user) redirect("/")
 
   return (
     <main className="relative flex min-h-screen flex-col overflow-hidden bg-background">
@@ -24,7 +18,7 @@ export default async function LoginPage() {
       <div className="relative shrink-0">
         <div
           aria-hidden
-          className="h-[32vh] min-h-[180px] rounded-b-[45%] bg-gradient-to-b from-primary to-primary/85"
+          className="h-[32vh] min-h-45 rounded-b-[45%] bg-linear-to-b from-primary to-primary/85"
         />
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2">
           <div className="rounded-full bg-card p-2 shadow-xl ring-2 ring-gold/50">
@@ -34,7 +28,7 @@ export default async function LoginPage() {
               width={92}
               height={92}
               priority
-              className="size-[92px] rounded-full"
+              className="size-23 rounded-full"
             />
           </div>
         </div>
@@ -55,7 +49,7 @@ export default async function LoginPage() {
           Browsing and buying are open to everyone. Verification only unlocks restricted, role-based items.
         </p>
 
-        <p className="mt-auto pt-6 text-center text-xs text-muted-foreground/60">Est. 1907 · Bulan, Sorsogon</p>
+        <p className="mt-auto pt-6 text-center text-xs text-muted-foreground/60">Est. 2026 · Bulan, Sorsogon</p>
       </div>
     </main>
   )

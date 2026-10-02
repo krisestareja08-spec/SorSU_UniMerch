@@ -1,4 +1,4 @@
-import type { Affiliation, UserRole, VerificationStatus } from "@/lib/roles"
+import type { Affiliation, Campus, UserRole, VerificationStatus } from "@/lib/roles"
 
 export type Profile = {
   full_name: string | null
@@ -6,22 +6,18 @@ export type Profile = {
   affiliation: Affiliation
   verification_status: VerificationStatus
   is_identity_verified: boolean
+  campus?: Campus | null
 }
 
-const USER_ROLE_VALUES: UserRole[] = ["buyer", "seller", "bao", "supply_office", "registrar", "admin"]
 const AFFILIATION_VALUES: Affiliation[] = ["student", "faculty", "staff", "alumni", "external"]
-const VERIFICATION_VALUES: VerificationStatus[] = ["unverified", "pending", "approved", "rejected"]
-
-function isUserRole(value: unknown): value is UserRole {
-  return typeof value === "string" && USER_ROLE_VALUES.includes(value as UserRole)
-}
+const CAMPUS_VALUES: Campus[] = ["sorsogon_city_main", "bulan", "castilla", "magallanes", "sorsogon_city_baribag"]
 
 function isAffiliation(value: unknown): value is Affiliation {
   return typeof value === "string" && AFFILIATION_VALUES.includes(value as Affiliation)
 }
 
-function isVerificationStatus(value: unknown): value is VerificationStatus {
-  return typeof value === "string" && VERIFICATION_VALUES.includes(value as VerificationStatus)
+function isCampus(value: unknown): value is Campus {
+  return typeof value === "string" && CAMPUS_VALUES.includes(value as Campus)
 }
 
 export function profileFromUser(user: {
@@ -36,17 +32,20 @@ export function profileFromUser(user: {
     user.email?.split("@")[0] ||
     null
 
-  const role = isUserRole(metadata.role) ? metadata.role : "buyer"
+  // Roles don't come from (user-editable) metadata; dashboard access is membership-based.
+  const role: UserRole = "buyer"
   const affiliation = isAffiliation(metadata.affiliation) ? metadata.affiliation : "external"
-  const verificationStatus = isVerificationStatus(metadata.verification_status)
-    ? metadata.verification_status
-    : "unverified"
+  // Verification is only ever granted by the Verification Admin (stored on the profiles row).
+  // User metadata is editable by the user, so it is never trusted for verification.
+  const verificationStatus = metadata.verification_status === "pending" ? "pending" : "unverified"
+  const campus = isCampus(metadata.campus) ? metadata.campus : null
 
   return {
     full_name: fullName,
     role,
     affiliation,
     verification_status: verificationStatus,
-    is_identity_verified: Boolean(metadata.is_identity_verified),
+    is_identity_verified: false,
+    campus,
   }
 }

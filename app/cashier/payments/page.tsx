@@ -1,5 +1,5 @@
-﻿import Link from "next/link"
-import { requireUser } from "@/lib/auth"
+import Link from "next/link"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, DashTable, StatusBadge, type Stat } from "@/components/management/dashboard-ui"
@@ -7,7 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, CreditCard, QrCode, Wallet } from "lucide-react"
 
 export default async function Page() {
-  const { id: sellerId, email, profile } = await requireUser(["seller", "admin"])
+  const ctx = await requireDashboard("cashier", "payments")
+  const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
   const { data: orderItems, error } = await supabase
@@ -49,7 +50,7 @@ export default async function Page() {
   ])
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <PageHeading title="Payment Transactions" description="Consolidated cash and GCash payment log for your shop." />
       <div className="mt-6 space-y-6">
         <StatGrid stats={stats} />

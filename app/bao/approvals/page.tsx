@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react"
 
 export default async function BaoApprovalsPage() {
-  const { email, profile } = await requireUser(["bao", "admin"])
+  const ctx = await requireDashboard("bao", "approvals")
   const supabase = await createClient()
 
   const { data: products, error } = await supabase
@@ -21,7 +21,7 @@ export default async function BaoApprovalsPage() {
   const rejected = all.filter((p) => p.status === "rejected")
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <PageHeading title="Product Approvals" description="Review seller-submitted products. Approved products go live on the marketplace." />
 
       <div className="mt-5 grid grid-cols-3 gap-3">

@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, DashTable, StatGrid, StatusBadge, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ const PAYMENTS = [
 ]
 
 export default async function SellerPaymentsPage() {
-  const { email, profile } = await requireUser(["seller","admin"])
+  const ctx = await requireDashboard("seller", "payments")
   const stats: Stat[] = [
     { label: "Walk-in Revenue",  value: "₱21,400", icon: Wallet,     hint: "Cash payments",   accent: "primary" },
     { label: "Online Revenue",   value: "₱12,800", icon: CreditCard, hint: "GCash verified",  accent: "gold" },
@@ -20,7 +20,7 @@ export default async function SellerPaymentsPage() {
     { label: "Refunds Issued",   value: 0,          icon: RefreshCw,  hint: "This month",      accent: "primary" },
   ]
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <PageHeading title="Payment Transactions" description="Your shop payment logs. Sales data is confidential to your organisation only." />
       <div className="mt-6 space-y-6">
         <StatGrid stats={stats} />

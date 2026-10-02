@@ -19,7 +19,7 @@ export default async function VerifySubmittedPage() {
         </div>
         <h1 className="mt-6 text-balance font-serif text-2xl font-semibold tracking-tight">Submission received</h1>
         <p className="mt-3 text-pretty text-sm text-muted-foreground">
-          Your document was submitted for review. The Registrar will verify your university identity, and your account
+          Your document was submitted for review. The Admin will verify your university identity, and your account
           will be updated once approved. Restricted items unlock automatically after approval.
         </p>
         <Button asChild size="lg" className="mt-8 w-full">

@@ -3,35 +3,30 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
-import { Search, Bell, MessageCircle, ShoppingCart, Menu, LayoutDashboard } from "lucide-react"
+import { Search, MessageCircle, ShoppingCart, Menu, LayoutDashboard, BadgeCheck } from "lucide-react"
 import { BurgerDrawer } from "./burger-drawer"
-import { roleDashboard, type UserRole } from "@/lib/roles"
+import { NotificationBell } from "@/components/notifications/notification-bell"
+import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
+import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
 
-const ROLE_BADGES: Record<UserRole, { label: string; color: string }> = {
-  buyer:         { label: "Buyer",          color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" },
-  seller:        { label: "Seller",         color: "bg-gold/20 text-amber-700 dark:text-gold" },
-  bao:           { label: "BAO Admin",      color: "bg-primary/15 text-primary" },
-  admin:         { label: "BAO Admin",      color: "bg-primary/15 text-primary" },
-  supply_office: { label: "Supply Office",  color: "bg-primary/10 text-primary" },
-  registrar:     { label: "Registrar",      color: "bg-primary/10 text-primary" },
-}
-
 export function MarketplaceHeader({
-  role = "buyer",
+  dashboards = [],
   fullName,
+  isVerified = false,
+  affiliation,
 }: {
-  role?: UserRole
+  dashboards?: DashboardSummary[]
   fullName?: string | null
+  isVerified?: boolean
+  affiliation?: string | null
 }) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [query, setQuery] = useState("")
   const { itemCount } = useCart()
 
-  const isBuyer = role === "buyer"
-  const isStaff = !isBuyer
-  const badge = ROLE_BADGES[role] ?? ROLE_BADGES.buyer
-  const dashHref = roleDashboard(role)
+  const hasDashboards = dashboards.length > 0
+  const dashHref = dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard"
   const initials = (fullName || "U").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()
 
   return (
@@ -56,67 +51,65 @@ export function MarketplaceHeader({
             </span>
           </Link>
 
-          {/* Search bar */}
-          <div className="relative flex-1">
+          {/* Search bar — products and stores */}
+          <form action="/marketplace/search" role="search" className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
+              name="q"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search campus goods, orgs, merch…"
+              aria-label="Search products and stores"
               className="h-9 w-full rounded-full border border-transparent bg-background pl-9 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             />
-          </div>
+          </form>
 
           {/* Right icons */}
           <div className="flex shrink-0 items-center gap-1">
-            {/* Role badge — desktop only */}
-            <span className={`hidden rounded-full px-2.5 py-0.5 text-xs font-semibold sm:inline ${badge.color}`}>
-              {badge.label}
-            </span>
 
             {/* Notifications */}
-            <button className="relative rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Notifications">
-              <Bell className="size-5" />
-              <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-gold" />
-            </button>
+            <NotificationBell tone="dark" />
 
-            {/* Messages — buyer + seller only */}
-            {(isBuyer || role === "seller") && (
-              <Link href="/marketplace/messages" className="hidden rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 sm:block" aria-label="Messages">
-                <MessageCircle className="size-5" />
-              </Link>
-            )}
+            {/* Messages */}
+            <Link href="/marketplace/messages" className="hidden rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 sm:block" aria-label="Messages">
+              <MessageCircle className="size-5" />
+            </Link>
 
-            {/* Cart — buyer only */}
-            {isBuyer && (
-              <Link href="/marketplace/cart" className="relative rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Cart">
-                <ShoppingCart className="size-5" />
-                {itemCount > 0 && (
-                  <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-primary">
-                    {itemCount > 99 ? "99+" : itemCount}
-                  </span>
-                )}
-              </Link>
-            )}
+            {/* Cart */}
+            <Link href="/marketplace/cart" className="relative rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Cart">
+              <ShoppingCart className="size-5" />
+              {itemCount > 0 && (
+                <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-primary">
+                  {itemCount > 99 ? "99+" : itemCount}
+                </span>
+              )}
+            </Link>
 
-            {/* Dashboard shortcut — staff roles */}
-            {isStaff && (
+            {/* Dashboard shortcut — only for users assigned to a management dashboard */}
+            {hasDashboards && (
               <Link href={dashHref} className="hidden rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 sm:block" aria-label="My Dashboard">
                 <LayoutDashboard className="size-5" />
               </Link>
             )}
 
             {/* Avatar */}
-            <span className="flex size-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-primary ml-1">
+            <Link
+              href="/marketplace/account"
+              className="relative ml-1 flex size-8 items-center justify-center rounded-full bg-gold text-xs font-bold text-primary"
+              title={isVerified ? `Verified ${AFFILIATION_LABELS[affiliation as Affiliation] ?? ""}`.trim() : "Guest — not verified"}
+            >
               {initials}
-            </span>
+              {isVerified && (
+                <BadgeCheck className="absolute -bottom-1 -right-1 size-4 rounded-full bg-primary fill-emerald-500 text-primary" aria-label="Verified" />
+              )}
+            </Link>
           </div>
         </div>
         <div className="h-0.5 w-full bg-gold/70" />
       </header>
 
-      <BurgerDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} role={role} />
+      <BurgerDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} dashboards={dashboards} />
     </>
   )
 }

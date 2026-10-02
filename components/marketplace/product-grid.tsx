@@ -1,9 +1,8 @@
 import Link from "next/link"
 import { ProductCard, type Product } from "./product-card"
-import type { UserRole } from "@/lib/roles"
 import { createClient } from "@/lib/supabase/server"
 
-export async function ProductGrid({ title = "All Products", viewerRole = "buyer" }: { title?: string; viewerRole?: UserRole }) {
+export async function ProductGrid({ title = "All Products" }: { title?: string }) {
   const supabase = await createClient()
   const { data } = await supabase
     .from("products")
@@ -39,7 +38,7 @@ export async function ProductGrid({ title = "All Products", viewerRole = "buyer"
       <div className="mb-4 mt-1.5 h-px bg-linear-to-r from-gold/60 via-gold/20 to-transparent" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {products.map((p) => (
-          <ProductCard key={p.id} product={p} viewerRole={viewerRole} />
+          <ProductCard key={p.id} product={p} />
         ))}
         {products.length === 0 && (
           <p className="col-span-full rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">

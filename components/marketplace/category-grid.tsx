@@ -12,6 +12,7 @@ import {
   Package,
   Star,
   Grid2x2,
+  Store,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -27,6 +28,7 @@ const CATEGORIES = [
   { label: "Hoodies",         icon: Briefcase,    slug: "hoodies" },
   { label: "Tumblers",        icon: Package,      slug: "tumblers" },
   { label: "Featured",        icon: Star,         slug: "featured" },
+  { label: "Stores",          icon: Store,        slug: "#stores" },
   { label: "All Items",       icon: Grid2x2,      slug: null },
 ]
 
@@ -46,7 +48,7 @@ export function CategoryGrid() {
         {CATEGORIES.map(({ label, icon: Icon, slug }) => (
           <Link
             key={label}
-            href={slug ? `/marketplace/categories/${slug}` : "/marketplace/categories"}
+            href={slug?.startsWith("#") ? `/marketplace/categories${slug}` : slug ? `/marketplace/categories/${slug}` : "/marketplace/categories"}
             className="group flex flex-col items-center gap-2"
           >
             <div className={cn(
