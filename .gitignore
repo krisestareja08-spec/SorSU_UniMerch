@@ -162,3 +162,6 @@ vite.config.ts.timestamp-*
 
 # Thesis manuscript
 data/*.docx
+
+.vercel
+.env*
