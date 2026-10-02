@@ -20,7 +20,7 @@ create table if not exists public.profiles (
   id                   uuid primary key references auth.users(id) on delete cascade,
   full_name            text,
   role                 text not null default 'buyer'
-                       check (role in ('buyer','seller','bao','supply_office','registrar','admin')),
+                       check (role in ('buyer','seller','bao','supply_office','admin')),
   affiliation          text not null default 'external'
                        check (affiliation in ('student','faculty','staff','alumni','external')),
   verification_status  text not null default 'unverified'
@@ -48,7 +48,7 @@ returns boolean
 language sql security definer set search_path = public stable as $$
   select exists (
     select 1 from public.profiles
-    where id = auth.uid() and role in ('admin','bao','registrar','supply_office')
+    where id = auth.uid() and role in ('admin','bao','supply_office')
   );
 $$;
 
@@ -172,8 +172,8 @@ drop policy if exists "seller updates own profile" on public.seller_profiles;
 create policy "seller updates own profile"
   on public.seller_profiles for update using (auth.uid() = id);
 
-drop policy if exists "registrar inserts seller profiles" on public.seller_profiles;
-create policy "registrar inserts seller profiles"
+drop policy if exists "admin inserts seller profiles" on public.seller_profiles;
+create policy "admin inserts seller profiles"
   on public.seller_profiles for insert
   with check (public.is_staff());
 

@@ -1,5 +1,6 @@
 import { Bell, ShieldCheck, Globe, Moon, Smartphone } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ThemeSelect } from "@/components/theme-select"
 
 const SECTIONS = [
   {
@@ -24,7 +25,7 @@ const SECTIONS = [
     title: "Appearance",
     icon: Moon,
     settings: [
-      { label: "Use system theme",  desc: "Follow your device's light/dark preference", defaultOn: true },
+      { label: "Theme", desc: "System follows your device's light/dark preference", defaultOn: true, control: "theme" },
     ],
   },
   {
@@ -54,18 +55,20 @@ export default function SettingsPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-0 divide-y divide-border">
-              {settings.map(({ label, desc, defaultOn }) => (
+              {settings.map(({ label, desc, defaultOn, ...rest }) => (
                 <div key={label} className="flex items-center justify-between gap-4 py-3">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">{label}</p>
                     <p className="text-xs text-muted-foreground">{desc}</p>
                   </div>
-                  {/* Toggle */}
+                  {"control" in rest && rest.control === "theme" ? <ThemeSelect /> : (
+                  /* Toggle */
                   <label className="relative shrink-0 cursor-pointer">
                     <input type="checkbox" defaultChecked={defaultOn} className="sr-only peer" />
                     <div className="h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30" />
                     <div className="absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
                   </label>
+                  )}
                 </div>
               ))}
             </CardContent>

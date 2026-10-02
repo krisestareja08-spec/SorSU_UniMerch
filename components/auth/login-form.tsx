@@ -5,12 +5,12 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { roleHome } from "@/lib/roles"
-import { profileFromUser } from "@/lib/profile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
+import { GoogleOneTap } from "@/components/auth/google-one-tap"
 import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 
 export function LoginForm() {
@@ -48,15 +48,8 @@ export function LoginForm() {
       return
     }
 
-    // Route by role. Fall back to auth metadata if the profiles table is not available yet.
-    const userId = data.user?.id
-    let dest = "/dashboard"
-    if (userId) {
-      const { data: profile, error } = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle()
-      const role = error || !profile ? profileFromUser(data.user).role : profile.role
-      dest = roleHome(role)
-    }
-    router.push(dest)
+    // "/" sends dashboard members (e.g. the Verification Admin) to their dashboard, others to the marketplace.
+    router.push("/")
     router.refresh()
   }
 
@@ -122,6 +115,15 @@ export function LoginForm() {
           "Sign in"
         )}
       </Button>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <GoogleSignInButton />
+      <GoogleOneTap />
 
       <p className="text-center text-sm text-muted-foreground">
         {"Don't have an account? "}

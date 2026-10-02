@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { Plus, X, Upload, FileText, Loader2, AlertCircle } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { Plus, X, Upload, FileText, Loader2, AlertCircle, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,17 +9,26 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { addProduct } from "@/app/seller/products/actions"
+import { computeRoyalty } from "@/lib/access"
 
 const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
 const BADGES = ["Available", "Pre-Order", "Interest Check"]
 const SIZE_OPTIONS = ["XS", "S", "M", "L", "XL", "XXL", "XXXL", "One Size"]
+const MAX_IMAGES = 5
+// Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
+const RESTRICTABLE: { value: string; label: string }[] = [
+  { value: "student", label: "Verified Student" },
+  { value: "faculty", label: "Verified Faculty (teaching)" },
+  { value: "staff",   label: "Verified Staff (non-teaching)" },
+  { value: "alumni",  label: "Verified Alumni" },
+]
 
-export function AddProductModal({ sellerId }: { sellerId: string }) {
+export function AddProductModal({ sellerId, module = "seller" }: { sellerId: string; module?: "seller" | "cashier" | "supply_office" }) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [imageFile, setImageFile] = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [category, setCategory] = useState("")
@@ -30,25 +39,51 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
   const [tags, setTags] = useState("")
   const [sizes, setSizes] = useState<string[]>([])
   const [customVariant, setCustomVariant] = useState("")
+  const [isRestricted, setIsRestricted] = useState(false)
+  const [allowedRoles, setAllowedRoles] = useState<string[]>([])
+  const [hasLogo, setHasLogo] = useState(false)
+  const [royaltyPercentage, setRoyaltyPercentage] = useState(3)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const supabase = createClient()
+    supabase.from("bao_settings").select("global_royalty_percentage").eq("id", 1).maybeSingle()
+      .then(({ data }) => { if (data?.global_royalty_percentage != null) setRoyaltyPercentage(Number(data.global_royalty_percentage)) })
+  }, [open])
 
   function reset() {
     setName(""); setDescription(""); setCategory(""); setPrice(""); setStock(""); setBadge("Available")
     setSku(""); setTags(""); setSizes([]); setCustomVariant("")
-    setImageFile(null); setImagePreview(null); setError(null)
+    setImageFiles([]); setImagePreviews([]); setError(null)
+    setIsRestricted(false); setAllowedRoles([]); setHasLogo(false)
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (file.size > 5 * 1024 * 1024) { setError("Image must be under 5 MB."); return }
-    if (!file.type.startsWith("image/")) { setError("Please select an image file."); return }
-    setImageFile(file)
-    setImagePreview(URL.createObjectURL(file))
+    const files = Array.from(e.target.files ?? [])
+    if (files.length === 0) return
+    const room = MAX_IMAGES - imageFiles.length
+    if (room <= 0) { setError(`You can upload up to ${MAX_IMAGES} images.`); return }
+    const accepted = files.slice(0, room)
+    for (const file of accepted) {
+      if (file.size > 5 * 1024 * 1024) { setError("Each image must be under 5 MB."); return }
+      if (!file.type.startsWith("image/")) { setError("Please select image files only."); return }
+    }
+    setImageFiles((prev) => [...prev, ...accepted])
+    setImagePreviews((prev) => [...prev, ...accepted.map((f) => URL.createObjectURL(f))])
     setError(null)
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function removeImage(index: number) {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+    setImagePreviews((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  function toggleAllowedRole(role: string) {
+    setAllowedRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role])
+  }
+
+  async function handleSubmit(e: React.FormEvent, draft: boolean) {
     e.preventDefault()
     setError(null)
     if (!name.trim()) { setError("Product name is required."); return }
@@ -57,30 +92,31 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
     if (isNaN(priceNum) || priceNum < 0) { setError("Enter a valid price."); return }
     const stockNum = parseInt(stock, 10)
     if (isNaN(stockNum) || stockNum < 0) { setError("Enter a valid stock quantity."); return }
+    if (imageFiles.length === 0) { setError("At least one product image is required."); return }
+    if (isRestricted && allowedRoles.length === 0) { setError("Select who can buy this restricted product."); return }
 
     setLoading(true)
     try {
-      let imageUrl: string | null = null
-
-      if (imageFile) {
-        const supabase = createClient()
-        const ext = imageFile.name.split(".").pop() || "jpg"
-        const path = `${sellerId}/${Date.now()}.${ext}`
+      const supabase = createClient()
+      const imageUrls: string[] = []
+      for (const file of imageFiles) {
+        const ext = file.name.split(".").pop() || "jpg"
+        const path = `${sellerId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
         const { error: uploadError } = await supabase.storage
           .from("product-images")
-          .upload(path, imageFile, { cacheControl: "3600", upsert: false })
-
+          .upload(path, file, { cacheControl: "3600", upsert: false })
         if (uploadError) {
           setError("Image upload failed. Make sure the product-images bucket exists in Supabase.")
           setLoading(false)
           return
         }
-
         const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(path)
-        imageUrl = urlData.publicUrl
+        imageUrls.push(urlData.publicUrl)
       }
 
       const formData = new FormData()
+
+      formData.set("module", module)
       formData.set("name", name.trim())
       formData.set("description", description.trim())
       formData.set("category", category)
@@ -91,7 +127,11 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
       if (tags.trim()) formData.set("tags", tags.trim())
       const allVariants = [...sizes, ...(customVariant.trim() ? customVariant.split(",").map((s) => s.trim()).filter(Boolean) : [])]
       if (allVariants.length > 0) formData.set("variations", JSON.stringify(allVariants))
-      if (imageUrl) formData.set("image_url", imageUrl)
+      formData.set("images", imageUrls.join(","))
+      formData.set("draft", String(draft))
+      formData.set("is_restricted", String(isRestricted))
+      if (isRestricted) formData.set("allowed_roles", JSON.stringify(allowedRoles))
+      formData.set("has_logo", String(hasLogo))
 
       await addProduct(formData)
       reset()
@@ -111,6 +151,9 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
     )
   }
 
+  const priceNum = parseFloat(price) || 0
+  const royaltyPreview = computeRoyalty(priceNum, hasLogo, royaltyPercentage)
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8 backdrop-blur-sm">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl">
@@ -118,7 +161,7 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div>
             <h2 className="font-serif text-lg font-semibold text-foreground">Add New Product</h2>
-            <p className="text-xs text-muted-foreground">Submitted products go to BAO for review before going live.</p>
+            <p className="text-xs text-muted-foreground">Save as draft, or publish to send it to BAO for review.</p>
           </div>
           <button onClick={() => { setOpen(false); reset() }} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground">
             <X className="size-5" />
@@ -126,7 +169,7 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4 p-6">
+        <form onSubmit={(e) => handleSubmit(e, false)} className="flex flex-col gap-4 p-6">
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="size-4" />
@@ -134,33 +177,36 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
             </Alert>
           )}
 
-          {/* Image upload */}
+          {/* Image upload (1-5) */}
           <div className="flex flex-col gap-2">
-            <Label>Product Image</Label>
-            <input ref={fileRef} type="file" accept="image/*" className="sr-only" onChange={handleImageChange} />
-            {imagePreview ? (
-              <div className="relative h-40 w-full overflow-hidden rounded-xl border border-border bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+            <Label>Product Images * ({imagePreviews.length}/{MAX_IMAGES})</Label>
+            <input ref={fileRef} type="file" accept="image/*" multiple className="sr-only" onChange={handleImageChange} />
+            <div className="grid grid-cols-3 gap-2">
+              {imagePreviews.map((src, i) => (
+                <div key={src} className="relative aspect-square overflow-hidden rounded-xl border border-border bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt={`Preview ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    className="absolute right-1 top-1 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                  >
+                    <X className="size-3" />
+                  </button>
+                </div>
+              ))}
+              {imagePreviews.length < MAX_IMAGES && (
                 <button
                   type="button"
-                  onClick={() => { setImageFile(null); setImagePreview(null); if (fileRef.current) fileRef.current.value = "" }}
-                  className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white hover:bg-black/70"
+                  onClick={() => fileRef.current?.click()}
+                  className="flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-border bg-muted/30 transition-colors hover:border-primary/50 hover:bg-muted/60"
                 >
-                  <X className="size-3.5" />
+                  <Upload className="size-6 text-muted-foreground/50" />
+                  <span className="text-[10px] text-muted-foreground">Add image</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 py-8 transition-colors hover:border-primary/50 hover:bg-muted/60"
-              >
-                <Upload className="size-8 text-muted-foreground/50" />
-                <span className="text-sm text-muted-foreground">Click to upload image</span>
-                <span className="text-xs text-muted-foreground/60">PNG, JPG, WEBP up to 5 MB</span>
-              </button>
-            )}
+              )}
+            </div>
+            <span className="text-xs text-muted-foreground/60">PNG, JPG, WEBP up to 5 MB each. First image is the cover photo.</span>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -224,7 +270,7 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label>Size Variations</Label>
+            <Label>Add Variant (size / type)</Label>
             <div className="flex flex-wrap gap-2">
               {SIZE_OPTIONS.map((s) => (
                 <button key={s} type="button"
@@ -236,15 +282,49 @@ export function AddProductModal({ sellerId }: { sellerId: string }) {
                 </button>
               ))}
             </div>
-            <Input placeholder="Custom variations (comma-separated, e.g. 27, 28, 29)" value={customVariant} onChange={(e) => setCustomVariant(e.target.value)} className="text-xs" />
+            <Input placeholder="Custom variations (comma-separated, e.g. Red, Blue, Green)" value={customVariant} onChange={(e) => setCustomVariant(e.target.value)} className="text-xs" />
+          </div>
+
+          {/* Restricted access */}
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <input type="checkbox" checked={isRestricted} onChange={(e) => setIsRestricted(e.target.checked)} />
+              Restrict this product to verified users
+            </label>
+            {isRestricted && (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {RESTRICTABLE.map(({ value: r, label }) => (
+                  <label key={r} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${allowedRoles.includes(r) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    <input type="checkbox" checked={allowedRoles.includes(r)} onChange={() => toggleAllowedRole(r)} className="sr-only" />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Logo royalty */}
+          <div className="flex flex-col gap-2 rounded-xl border border-gold/30 bg-gold/5 p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <input type="checkbox" checked={hasLogo} onChange={(e) => setHasLogo(e.target.checked)} />
+              Uses official university logo
+            </label>
+            {hasLogo && (
+              <p className="text-xs text-muted-foreground">
+                A {royaltyPercentage}% BAO royalty applies. Buyers pay ₱{priceNum.toLocaleString()}; ₱{royaltyPreview.royaltyAmount.toLocaleString()} per sale goes to BAO and you receive ₱{royaltyPreview.finalPrice.toLocaleString()}.
+              </p>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => { setOpen(false); reset() }}>
               Cancel
             </Button>
+            <Button type="button" variant="outline" disabled={loading} className="flex-1 gap-2" onClick={(e) => handleSubmit(e, true)}>
+              {loading ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />} Save as Draft
+            </Button>
             <Button type="submit" disabled={loading} className="flex-1 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-              {loading ? <><Loader2 className="size-4 animate-spin" /> Submitting...</> : <><FileText className="size-4" /> Submit for Review</>}
+              {loading ? <><Loader2 className="size-4 animate-spin" /> Submitting...</> : <><FileText className="size-4" /> Publish</>}
             </Button>
           </div>
         </form>

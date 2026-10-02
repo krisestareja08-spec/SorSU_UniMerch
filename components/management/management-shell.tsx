@@ -5,175 +5,41 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { ROLE_LABELS, type UserRole } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Menu, X, LogOut, Store, ChevronsUpDown, Check, Crown } from "lucide-react"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 import {
-  Menu,
-  X,
-  LogOut,
-  LayoutDashboard,
-  ShieldCheck,
-  Wallet,
-  Package,
-  Store,
-  Users,
-  Settings,
-  BarChart2,
-  ClipboardList,
-  FileText,
-  Bell,
-  Search,
-  CreditCard,
-  Boxes,
-  Tag,
-  ShoppingCart,
-  MessageCircle,
-  CheckSquare,
-  TrendingUp,
-  Home,
-  type LucideIcon,
-} from "lucide-react"
-
-type NavItem = {
-  label: string
-  href: string
-  icon: LucideIcon
-}
-
-const MODULES: Record<UserRole, { moduleName: string; nav: NavItem[]; bottomTabs: NavItem[] }> = {
-  registrar: {
-    moduleName: "Registrar",
-    nav: [
-      { label: "Marketplace",        href: "/marketplace",               icon: Store },
-      { label: "Overview",            href: "/registrar",                 icon: LayoutDashboard },
-      { label: "Products",            href: "/registrar/products",        icon: Tag },
-      { label: "Orders",              href: "/registrar/orders",          icon: ShoppingCart },
-      { label: "Verification Queue",  href: "/registrar/verification",    icon: ShieldCheck },
-      { label: "New Seller",          href: "/registrar/new-seller",      icon: Users },
-      { label: "Analytics",           href: "/registrar/reports",         icon: BarChart2 },
-      { label: "Settings",            href: "/registrar/settings",        icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Market",    href: "/marketplace",             icon: Store },
-      { label: "Home",      href: "/registrar",               icon: Home },
-      { label: "Products",  href: "/registrar/products",      icon: Tag },
-      { label: "Orders",    href: "/registrar/orders",        icon: ShoppingCart },
-      { label: "Profile",   href: "/registrar/settings",      icon: Users },
-    ],
-  },
-  bao: {
-    moduleName: "BAO Admin",
-    nav: [
-      { label: "Marketplace",       href: "/marketplace",    icon: Store },
-      { label: "Dashboard",         href: "/bao",            icon: LayoutDashboard },
-      { label: "Seller Management", href: "/bao/sellers",    icon: Users },
-      { label: "Product Approvals", href: "/bao/approvals",  icon: CheckSquare },
-      { label: "Analytics",         href: "/bao/analytics",  icon: BarChart2 },
-      { label: "Reports",           href: "/bao/reports",    icon: FileText },
-      { label: "Logs",              href: "/bao/logs",       icon: ClipboardList },
-      { label: "Settings",          href: "/bao/settings",   icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Market",  href: "/marketplace", icon: Store },
-      { label: "Home",    href: "/bao",         icon: Home },
-      { label: "Sellers", href: "/bao/sellers", icon: Users },
-      { label: "Reports", href: "/bao/reports", icon: FileText },
-      { label: "Profile", href: "/bao/settings",icon: Users },
-    ],
-  },
-  supply_office: {
-    moduleName: "Supply Office",
-    nav: [
-      { label: "Marketplace",      href: "/marketplace",               icon: Store },
-      { label: "Dashboard",        href: "/supply-office",             icon: LayoutDashboard },
-      { label: "Products",         href: "/supply-office/products",    icon: Tag },
-      { label: "Orders",           href: "/supply-office/orders",      icon: ShoppingCart },
-      { label: "Inventory",        href: "/supply-office/inventory",   icon: Boxes },
-      { label: "Analytics",        href: "/supply-office/reports",     icon: BarChart2 },
-      { label: "Settings",         href: "/supply-office/settings",    icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Market",    href: "/marketplace",              icon: Store },
-      { label: "Home",      href: "/supply-office",            icon: Home },
-      { label: "Products",  href: "/supply-office/products",   icon: Tag },
-      { label: "Orders",    href: "/supply-office/orders",     icon: ShoppingCart },
-      { label: "Profile",   href: "/supply-office/settings",   icon: Users },
-    ],
-  },
-  seller: {
-    moduleName: "Seller Center",
-    nav: [
-      { label: "Marketplace",   href: "/marketplace",     icon: Store },
-      { label: "Dashboard",     href: "/seller",          icon: LayoutDashboard },
-      { label: "Products",      href: "/seller/products", icon: Tag },
-      { label: "Orders",        href: "/seller/orders",   icon: ShoppingCart },
-      { label: "Shop Settings", href: "/seller/shop",     icon: Store },
-      { label: "Settings",      href: "/seller/settings", icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Market",   href: "/marketplace",     icon: Store },
-      { label: "Home",     href: "/seller",          icon: Home },
-      { label: "Products", href: "/seller/products", icon: Tag },
-      { label: "Orders",   href: "/seller/orders",   icon: ShoppingCart },
-      { label: "Profile",  href: "/seller/settings", icon: Users },
-    ],
-  },
-  admin: {
-    moduleName: "BAO Admin",
-    nav: [
-      { label: "Marketplace",   href: "/marketplace",    icon: Store },
-      { label: "Dashboard",     href: "/bao",            icon: LayoutDashboard },
-      { label: "Marketplace View",  href: "/bao/marketplace", icon: Store },
-      { label: "Seller Management", href: "/bao/sellers",     icon: Users },
-      { label: "Product Approvals", href: "/bao/approvals",   icon: CheckSquare },
-      { label: "Analytics",         href: "/bao/analytics",   icon: BarChart2 },
-      { label: "Reports",           href: "/bao/reports",     icon: FileText },
-      { label: "Logs",              href: "/bao/logs",        icon: ClipboardList },
-      { label: "Settings",          href: "/bao/settings",    icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Market",    href: "/marketplace",    icon: Store },
-      { label: "Home",      href: "/bao",            icon: Home },
-      { label: "Sellers",   href: "/bao/sellers",    icon: Users },
-      { label: "Reports",   href: "/bao/reports",    icon: FileText },
-      { label: "Profile",   href: "/bao/settings",   icon: Users },
-    ],
-  },
-  buyer: {
-    moduleName: "Marketplace",
-    nav: [
-      { label: "Dashboard",   href: "/dashboard",           icon: LayoutDashboard },
-      { label: "Marketplace", href: "/marketplace",         icon: Store },
-      { label: "My Orders",   href: "/marketplace/orders",  icon: ShoppingCart },
-      { label: "Settings",    href: "/marketplace/settings",icon: Settings },
-    ],
-    bottomTabs: [
-      { label: "Home",    href: "/dashboard",           icon: Home },
-      { label: "Market",  href: "/marketplace",         icon: Store },
-      { label: "Orders",  href: "/marketplace/orders",  icon: ShoppingCart },
-      { label: "Profile", href: "/marketplace/account", icon: Users },
-    ],
-  },
-}
+  MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
+  type DashboardCtx, type ModulePage,
+} from "@/lib/modules"
 
 export function ManagementShell({
-  role,
-  fullName,
-  email,
+  ctx,
   children,
 }: {
-  role: UserRole
-  fullName: string | null
-  email: string
+  ctx: DashboardCtx
   children: React.ReactNode
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [switcherOpen, setSwitcherOpen] = useState(false)
 
-  const { moduleName, nav, bottomTabs } = MODULES[role]
+  const moduleDef = MODULES[ctx.module]
+  const fullName = ctx.fullName
+  const email = ctx.email
+  const nav: Pick<ModulePage, "label" | "href" | "icon">[] = [
+    ...moduleDef.pages.filter((p) => canUse(ctx, p.perm)),
+    ...(ctx.isMain ? [{ label: MEMBERS_PAGE.label, href: membersHref(ctx.module), icon: MEMBERS_PAGE.icon }] : []),
+    // Supply Office: internal office, no marketplace shortcut. BAO: its own view-only
+    // marketplace inside the BAO dashboard (see /bao/browse) — never the buyer marketplace.
+    ...(ctx.module === "supply_office" || ctx.module === "bao" ? [] : [{ label: "Marketplace", href: "/marketplace", icon: Store }]),
+  ]
+  const homeHref = ctx.module === "supply_office" || ctx.module === "bao" ? moduleDef.basePath : "/marketplace"
+  const bottomTabs = nav.slice(0, 5)
+  const roleLabel = ctx.isMain ? "Main Admin" : "Member"
 
   async function signOut() {
     const supabase = createClient()
@@ -190,25 +56,48 @@ export function ManagementShell({
       .join("")
       .toUpperCase() || "U"
 
-  function isActive(href: string, index: number) {
-    if (href === "/bao" || href === "/seller" || href === "/supply-office" || href === "/registrar" || href === "/admin" || href === "/dashboard") {
-      return pathname === href
-    }
+  function isActive(href: string) {
+    if (href === moduleDef.basePath) return pathname === href
     return pathname === href || pathname.startsWith(href + "/")
   }
 
   // ─── Sidebar inner content (shared desktop + drawer) ────────────────────────
   const SidebarContent = (
     <div className="flex h-full flex-col bg-primary text-primary-foreground">
-      {/* Module label */}
-      <div className="px-4 pb-2 pt-4">
-        <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-foreground/50">{moduleName}</p>
+      {/* Dashboard (module) + switcher across every dashboard this user manages */}
+      <div className="relative px-3 pb-1 pt-4">
+        <button
+          type="button"
+          onClick={() => setSwitcherOpen((o) => !o)}
+          className="flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left hover:bg-primary-foreground/8"
+          aria-expanded={switcherOpen}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-foreground/50">{moduleDef.name}</p>
+            <p className="truncate text-sm font-semibold text-primary-foreground">{ctx.dashboardName}</p>
+          </div>
+          {ctx.dashboards.length > 1 && <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/60" />}
+        </button>
+        {switcherOpen && ctx.dashboards.length > 1 && (
+          <div className="absolute inset-x-3 top-full z-10 mt-1 overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-xl">
+            <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">My dashboards</p>
+            {ctx.dashboards.map((d) => (
+              <a key={d.id} href={dashboardHref(d)} className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium">{d.name}</span>
+                  <span className="block text-[11px] text-muted-foreground">{MODULES[d.module].name}{d.isMain ? " · Main Admin" : ""}</span>
+                </span>
+                {d.id === ctx.dashboardId && <Check className="size-4 text-primary" />}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto py-3 px-2">
-        {nav.map((item, i) => {
-          const active = isActive(item.href, i)
+        {nav.map((item) => {
+          const active = isActive(item.href)
           const Icon = item.icon
           return (
             <Link key={item.href + item.label} href={item.href}
@@ -238,7 +127,9 @@ export function ManagementShell({
         </span>
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate text-sm font-medium text-primary-foreground">{fullName || "Staff"}</p>
-          <p className="truncate text-xs text-primary-foreground/60">{ROLE_LABELS[role]}</p>
+          <p className="flex items-center gap-1 truncate text-xs text-primary-foreground/60">
+            {ctx.isMain && <Crown className="size-3 text-gold" />}{roleLabel}
+          </p>
         </div>
         <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out"
           className="text-primary-foreground/60 hover:bg-primary-foreground/10 hover:text-primary-foreground">
@@ -288,32 +179,20 @@ export function ManagementShell({
             </button>
 
             {/* Logo — always visible in header */}
-            <Link href="/marketplace" className="flex shrink-0 items-center gap-2">
+            <Link href={homeHref} className="flex shrink-0 items-center gap-2">
               <Image src="/sorsu-seal.png" alt="SorSU seal" width={28} height={28} className="rounded-full ring-1 ring-border" />
               <span className="font-serif text-sm font-semibold">
                 Uni<span className="text-gold">Merch</span>
               </span>
             </Link>
 
-            {/* Search — only shown on the marketplace page */}
-            {pathname.startsWith("/marketplace") && (
-              <div className="relative hidden flex-1 max-w-sm lg:block">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <input type="search" placeholder="Search…"
-                  className="h-8 w-full rounded-lg border border-border bg-muted/40 pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20" />
-              </div>
-            )}
-
             <div className="ml-auto flex items-center gap-2">
-              {/* Role badge */}
+              {/* Dashboard + membership level */}
               <Badge variant="secondary" className="hidden sm:inline-flex text-xs">
-                {ROLE_LABELS[role]}
+                {ctx.dashboardName} · {roleLabel}
               </Badge>
               {/* Notifications */}
-              <button className="relative rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Notifications">
-                <Bell className="size-5" />
-                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-gold" />
-              </button>
+              <NotificationBell />
               {/* Avatar + name */}
               <div className="flex items-center gap-2.5">
                 <span className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -337,10 +216,10 @@ export function ManagementShell({
       <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card shadow-[0_-2px_16px_rgba(0,0,0,0.07)] lg:hidden">
         <div className="mx-auto flex h-16 max-w-lg items-end justify-around px-2 pb-2 pt-1">
           {bottomTabs.map((tab) => {
-            const active = isActive(tab.href, 0)
+            const active = isActive(tab.href)
             const Icon = tab.icon
             return (
-              <Link key={tab.href} href={tab.href}
+              <Link key={tab.href + tab.label} href={tab.href}
                 className={cn(
                   "relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium transition-all active:scale-95",
                   active ? "text-primary" : "text-muted-foreground",

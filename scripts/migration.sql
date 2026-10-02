@@ -202,7 +202,7 @@ create policy "product message senders"
 -- Seller profiles
 drop policy if exists "anyone reads seller profiles"      on public.seller_profiles;
 drop policy if exists "seller updates own profile"         on public.seller_profiles;
-drop policy if exists "registrar inserts seller profiles" on public.seller_profiles;
+drop policy if exists "admin inserts seller profiles" on public.seller_profiles;
 
 create policy "anyone reads seller profiles"
   on public.seller_profiles for select using (true);
@@ -210,9 +210,9 @@ create policy "anyone reads seller profiles"
 create policy "seller updates own profile"
   on public.seller_profiles for update using (auth.uid() = id);
 
-create policy "registrar inserts seller profiles"
+create policy "admin inserts seller profiles"
   on public.seller_profiles for insert
-  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('registrar','admin')));
+  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin')));
 
 -- Storage policies
 drop policy if exists "authenticated can upload product images" on storage.objects;

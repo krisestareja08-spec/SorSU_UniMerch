@@ -1,9 +1,12 @@
+"use client"
+
+import { useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { Heart, ShoppingCart, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-const WISHLIST_ITEMS = [
+const INITIAL_WISHLIST = [
   { id: "p2",  name: "SSU Maroon Hoodie",       seller: "Supreme Student Council", price: 680, image: "/placeholder.jpg", badge: "Pre-Order" as const },
   { id: "p6",  name: "Education Faculty Polo",  seller: "Education Faculty Assoc", price: 550, image: "/placeholder.jpg", badge: "Interest Check" as const },
   { id: "p9",  name: "SSU Tote Bag",            seller: "Supreme Student Council", price: 220, image: "/placeholder.jpg", badge: "Available" as const },
@@ -17,6 +20,8 @@ const BADGE_STYLES = {
 }
 
 export default function WishlistPage() {
+  const [items, setItems] = useState(INITIAL_WISHLIST)
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
       <div className="mb-6">
@@ -27,7 +32,7 @@ export default function WishlistPage() {
         <div className="mt-3 h-px bg-gradient-to-r from-gold/60 via-gold/20 to-transparent" />
       </div>
 
-      {WISHLIST_ITEMS.length === 0 ? (
+      {items.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border py-16 text-center">
           <Heart className="size-10 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">Your wishlist is empty.</p>
@@ -37,10 +42,15 @@ export default function WishlistPage() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {WISHLIST_ITEMS.map((item) => (
+          {items.map((item) => (
             <div key={item.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md hover:shadow-primary/10">
               {/* Remove button */}
-              <button className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm text-muted-foreground shadow transition-colors hover:text-destructive">
+              <button
+                type="button"
+                onClick={() => setItems((prev) => prev.filter((i) => i.id !== item.id))}
+                aria-label={`Remove ${item.name} from wishlist`}
+                className="absolute right-2 top-2 z-10 flex size-7 items-center justify-center rounded-full bg-background/80 backdrop-blur-sm text-muted-foreground shadow transition-colors hover:text-destructive"
+              >
                 <Heart className="size-3.5 fill-current" />
               </button>
 

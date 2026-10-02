@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShoppingCart, Tag, TrendingUp, Package } from "lucide-react"
 
 export default async function SellerPage() {
-  const { id: sellerId, email, profile } = await requireUser(["seller", "admin", "supply_office", "registrar"])
+  const ctx = await requireDashboard("seller")
+  const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
   const [{ data: products }, { data: orders }] = await Promise.all([
@@ -34,7 +35,7 @@ export default async function SellerPage() {
   ]
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <PageHeading title="Seller Dashboard" description="Manage your shop, orders, and products." />
       <div className="mt-6 space-y-6">
         <StatGrid stats={stats} />

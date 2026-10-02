@@ -98,6 +98,9 @@ dist
 # vuepress build output
 .vuepress/dist
 
+# Windows folder metadata
+desktop.ini
+
 # vuepress v2.x temp directory
 .temp
 
@@ -153,4 +156,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
->>>>>>> bec24bc65076576cb45d53f930becbbb8d2db0a5
+
+# Local AI tooling
+.claude/
+
+# Thesis manuscript
+data/*.docx

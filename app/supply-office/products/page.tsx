@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
@@ -15,24 +15,28 @@ const STATUS_STYLES = {
   rejected: { label: "Rejected",            icon: XCircle,      color: "bg-destructive/10 text-destructive" },
 }
 
-export default async function SupplyOfficeProductsPage() {
-  const { id: sellerId, email, profile } = await requireUser(["supply_office", "admin"])
+export default async function SupplyOfficeProductsPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  // Dashboard header search (?q=) filters products by name
+  const term = ((await searchParams).q ?? "").trim().replace(/[%,()]/g, "")
+  const ctx = await requireDashboard("supply_office", "products")
+  const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
   const { data: products, error } = await supabase
     .from("products")
     .select("*")
     .eq("seller_id", sellerId)
+    .ilike("name", `%${term}%`)
     .order("created_at", { ascending: false })
 
   const items = products ?? []
   const counts = { all: items.length, pending: items.filter((p) => p.status === "pending").length, approved: items.filter((p) => p.status === "approved").length, rejected: items.filter((p) => p.status === "rejected").length }
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <PageHeading title="My Products" description="Submit products for BAO approval. Approved products appear on the marketplace." />
-        <AddProductModal sellerId={sellerId} />
+        <AddProductModal sellerId={sellerId} module="supply_office" />
       </div>
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[{ label: "Total", value: counts.all, color: "text-foreground" }, { label: "Pending", value: counts.pending, color: "text-amber-600" }, { label: "Approved", value: counts.approved, color: "text-emerald-600" }, { label: "Rejected", value: counts.rejected, color: "text-destructive" }].map((s) => (
@@ -66,7 +70,7 @@ export default async function SupplyOfficeProductsPage() {
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">₱{Number(product.price).toLocaleString()}</p>
                     {product.status === "rejected" && product.bao_comment && <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">BAO: {product.bao_comment}</p>}
                     {product.status === "pending" && (
-                      <form action={deleteProduct.bind(null, product.id)}>
+                      <form action={deleteProduct.bind(null, product.id, "supply_office")}>
                         <button type="submit" className="mt-1.5 w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">Withdraw</button>
                       </form>
                     )}

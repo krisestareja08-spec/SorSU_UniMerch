@@ -17,7 +17,7 @@ alter table public.orders add column if not exists amount_paid      numeric(10,2
 -- Add partially_paid to orders status constraint
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
-  check (status in ('pending','paid','partially_paid','ready_for_pickup','completed','cancelled'));
+  check (status in ('pending','paid','partially_paid','ready_for_pickup','completed','cancelled')) not valid;
 
 -- Seller profile payment columns
 alter table public.seller_profiles add column if not exists gcash_qr_url         text;

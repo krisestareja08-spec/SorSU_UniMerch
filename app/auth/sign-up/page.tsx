@@ -2,8 +2,6 @@ import Image from "next/image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { roleHome } from "@/lib/roles"
-import { profileFromUser } from "@/lib/profile"
 import { BrandPanel } from "@/components/auth/brand-panel"
 import { SignUpForm } from "@/components/auth/sign-up-form"
 
@@ -13,11 +11,7 @@ export default async function SignUpPage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user) {
-    const { data, error } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-    const profileRole = error || !data ? profileFromUser(user).role : (data.role ?? "buyer")
-    redirect(roleHome(profileRole))
-  }
+  if (user) redirect("/")
 
   return (
     <main className="grid min-h-screen lg:grid-cols-2">

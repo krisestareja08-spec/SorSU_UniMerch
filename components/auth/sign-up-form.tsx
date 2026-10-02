@@ -5,7 +5,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
+import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation, type Campus } from "@/lib/roles"
+import { validateFullName } from "@/lib/profile-rules"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -18,8 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 
 const AFFILIATIONS = Object.entries(AFFILIATION_LABELS) as [Affiliation, string][]
+const CAMPUSES = Object.entries(CAMPUS_LABELS) as [Campus, string][]
 
 export function SignUpForm() {
   const router = useRouter()
@@ -29,6 +32,7 @@ export function SignUpForm() {
   const [affiliation, setAffiliation] = useState<Affiliation>("student")
   const [idNumber, setIdNumber] = useState("")
   const [department, setDepartment] = useState("")
+  const [campus, setCampus] = useState<Campus | "">("")
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -50,15 +54,36 @@ export function SignUpForm() {
       return
     }
 
+    // Every account must use a real name — dummy accounts can be reported and banned.
+    const nameError = validateFullName(`${firstName.trim()} ${lastName.trim()}`)
+    if (nameError) {
+      setError(nameError)
+      return
+    }
+
     if (isUniversityMember && idNumber.trim()) {
       if (!/^\d{8}$/.test(idNumber.trim())) {
         setError("Student / Employee ID must be exactly 8 digits (numbers only).")
         return
       }
     }
+    if (isUniversityMember && !campus) {
+      setError("Please select your campus.")
+      return
+    }
 
     setLoading(true)
     const supabase = createClient()
+
+    // One account per I.D. number.
+    if (isUniversityMember && idNumber.trim()) {
+      const { data: taken } = await supabase.rpc("id_number_taken", { p_id: idNumber.trim() })
+      if (taken === true) {
+        setError("An account with this Student / Employee ID already exists. Each person may only have one account.")
+        setLoading(false)
+        return
+      }
+    }
 
     const fullName = `${firstName.trim()} ${lastName.trim()}`.trim()
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -69,10 +94,12 @@ export function SignUpForm() {
           full_name: fullName,
           affiliation,
           student_or_employee_id: isUniversityMember ? idNumber.trim() : null,
+          student_employee_id: isUniversityMember ? idNumber.trim() : null,
           department: isUniversityMember ? department.trim() : null,
-          // Temporary default until the replacement verification API is connected.
-          is_identity_verified: true,
-          verification_status: "approved",
+          campus: isUniversityMember ? campus : null,
+          // Accounts start unverified; the Verification Admin approves them via the Verification Queue.
+          is_identity_verified: false,
+          verification_status: "unverified",
         },
       },
     })
@@ -100,6 +127,15 @@ export function SignUpForm() {
 
     // If Supabase returned a live session, the user is already signed in
     if (signUpData.session) {
+      // Save the details to the profile right away so checkout and the profile page show them.
+      await supabase.from("profiles").upsert({
+        id: signUpData.user.id,
+        full_name: fullName,
+        affiliation,
+        student_employee_id: isUniversityMember ? idNumber.trim() || null : null,
+        department: isUniversityMember ? department.trim() || null : null,
+        campus: isUniversityMember ? campus || null : null,
+      }, { onConflict: "id" }).then(() => {}, () => {})
       router.push("/dashboard")
       return
     }
@@ -203,6 +239,25 @@ export function SignUpForm() {
         </div>
       )}
 
+      {isUniversityMember && (
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="campus">Campus</Label>
+          <Select value={campus} onValueChange={(v) => setCampus(v as Campus)}>
+            <SelectTrigger id="campus">
+              <SelectValue placeholder="Select your campus" />
+            </SelectTrigger>
+            <SelectContent>
+              {CAMPUSES.map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">Identifies which SorSU campus you belong to.</p>
+        </div>
+      )}
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="password">Password</Label>
         <div className="relative">
@@ -250,6 +305,14 @@ export function SignUpForm() {
           "Create account"
         )}
       </Button>
+
+      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        or
+        <span className="h-px flex-1 bg-border" />
+      </div>
+
+      <GoogleSignInButton />
 
       <p className="text-center text-sm text-muted-foreground">
         {"Already have an account? "}

@@ -88,10 +88,21 @@ alter table public.profiles add column if not exists contact              text;
 alter table public.profiles add column if not exists birthday             date;
 alter table public.profiles add column if not exists avatar_url           text;
 
+-- Campus identity — required for verified members/sellers, not applicable to guest/external accounts.
+alter table public.profiles add column if not exists campus text;
+alter table public.profiles drop constraint if exists profiles_campus_check;
+alter table public.profiles add constraint profiles_campus_check
+  check (campus is null or campus in ('sorsogon_city_main','bulan','castilla','magallanes','sorsogon_city_baribag')) not valid;
+
+alter table public.seller_profiles add column if not exists campus text;
+alter table public.seller_profiles drop constraint if exists seller_profiles_campus_check;
+alter table public.seller_profiles add constraint seller_profiles_campus_check
+  check (campus is null or campus in ('sorsogon_city_main','bulan','castilla','magallanes','sorsogon_city_baribag')) not valid;
+
 -- Update orders status constraint if table already existed with old values
 alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
-  check (status in ('pending','paid','ready_for_pickup','completed','cancelled'));
+  check (status in ('pending','paid','partially_paid','ready_for_pickup','completed','cancelled')) not valid;
 
 -- ── Row Level Security ────────────────────────────────────────
 alter table public.products         enable row level security;
@@ -171,7 +182,7 @@ create policy "sellers read orders with their items"
 create policy "sellers update their orders"
   on public.orders for update
   using (public.auth_seller_has_order(id))
-  with check (status in ('pending','paid','ready_for_pickup','completed','cancelled'));
+  with check (status in ('pending','paid','partially_paid','ready_for_pickup','completed','cancelled'));
 
 -- Order items
 drop policy if exists "insert order items for own order" on public.order_items;
@@ -212,7 +223,7 @@ create policy "product message senders"
 -- Seller profiles
 drop policy if exists "anyone reads seller profiles"      on public.seller_profiles;
 drop policy if exists "seller updates own profile"        on public.seller_profiles;
-drop policy if exists "registrar inserts seller profiles" on public.seller_profiles;
+drop policy if exists "admin inserts seller profiles" on public.seller_profiles;
 
 create policy "anyone reads seller profiles"
   on public.seller_profiles for select using (true);
@@ -220,6 +231,6 @@ create policy "anyone reads seller profiles"
 create policy "seller updates own profile"
   on public.seller_profiles for update using (auth.uid() = id);
 
-create policy "registrar inserts seller profiles"
+create policy "admin inserts seller profiles"
   on public.seller_profiles for insert
-  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('registrar','admin')));
+  with check (exists (select 1 from public.profiles where id = auth.uid() and role in ('admin')));

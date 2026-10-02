@@ -15,7 +15,7 @@ const points = [
   {
     icon: ShieldCheck,
     title: "Governed by the university",
-    body: "The BAO, Supply Office, and Registrar oversee listings, restrictions, and orders.",
+    body: "The BAO, Supply Office, and Verification Admin oversee listings, restrictions, and orders.",
   },
 ]
 

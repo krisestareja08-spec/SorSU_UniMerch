@@ -2,8 +2,9 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import {
   MapPin,
   CreditCard,
@@ -17,11 +18,14 @@ import {
   AlertCircle,
   Loader2,
   ShoppingBag,
+  AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useCart } from "@/lib/cart-context"
 import { submitOrder } from "./actions"
+import { validateFullName } from "@/lib/profile-rules"
+import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":    "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -44,6 +48,52 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false)
   const [orderError, setOrderError] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [buyer, setBuyer] = useState<{ full_name: string; student_employee_id: string; course: string; department: string; contact: string; campus: string; account_status: string } | null>(null)
+  // Orders need a real name, a contact number and an account in good standing.
+  const profileProblem = !buyer ? null
+    : buyer.account_status === "suspended" || buyer.account_status === "banned" ? "Your account is restricted and can't place orders."
+    : validateFullName(buyer.full_name) ?? (!buyer.contact ? "Add your contact number so the seller can reach you." : null)
+  const [sellerQrs, setSellerQrs] = useState<{ sellerId: string; orgName: string; qrUrl: string }[]>([])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, student_employee_id, course, department, contact, campus, account_status")
+        .eq("id", user.id)
+        .maybeSingle()
+      setBuyer({
+        full_name: data?.full_name ?? "",
+        student_employee_id: data?.student_employee_id ?? "",
+        course: data?.course ?? "",
+        department: data?.department ?? "",
+        contact: data?.contact ?? "",
+        campus: data?.campus ? CAMPUS_LABELS[data.campus as Campus] ?? data.campus : "",
+        account_status: data?.account_status ?? "active",
+      })
+    })
+  }, [])
+
+  // Section 8 — checkout logic: only show a seller's QR when their qr_status is active.
+  useEffect(() => {
+    const sellerIds = [...new Set(items.map((i) => i.sellerId).filter((id): id is string => !!id))]
+    const supabase = createClient()
+    let query = supabase
+      .from("seller_profiles")
+      .select("id, org_name, gcash_qr_url, qr_status")
+      .eq("qr_status", "active")
+    if (sellerIds.length > 0) query = query.in("id", sellerIds)
+    query.then(({ data }) => {
+      const rows = sellerIds.length === 0 ? [] : (data ?? [])
+      setSellerQrs(
+        rows
+          .filter((s) => !!s.gcash_qr_url)
+          .map((s) => ({ sellerId: s.id, orgName: s.org_name, qrUrl: s.gcash_qr_url as string })),
+      )
+    })
+  }, [items])
 
   const subtotal = total
 
@@ -73,9 +123,9 @@ export default function CheckoutPage() {
           receiptUrl = urlData.publicUrl
         }
       }
-      await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal })
+      const { orderIds } = await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal })
       clearCart()
-      router.push("/marketplace/order-success")
+      router.push(`/marketplace/order-success?orders=${orderIds.join(",")}`)
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : "Failed to place order. Please try again.")
       setSubmitting(false)
@@ -112,26 +162,35 @@ export default function CheckoutPage() {
                 <MapPin className="size-4 text-primary" />
                 Buyer Information
               </h2>
-              <button className="flex items-center gap-1 text-xs font-medium text-gold hover:underline">
+              <Link href="/marketplace/account" className="flex items-center gap-1 text-xs font-medium text-gold hover:underline">
                 <Edit2 className="size-3.5" />Edit
-              </button>
+              </Link>
             </div>
             <div className="mt-3 h-px bg-linear-to-r from-gold/40 to-transparent" />
             <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               {[
-                ["Full Name", "Juan Dela Cruz"],
-                ["Student ID", "2021-00123"],
-                ["Department", "CICT"],
-                ["Contact", "09XX-XXX-XXXX"],
+                ["Full Name", buyer?.full_name],
+                ["I.D. Number", buyer?.student_employee_id],
+                ["Course", buyer?.course],
+                ["Department", buyer?.department],
+                ["Contact", buyer?.contact],
+                ["Campus", buyer?.campus],
                 ["Pickup Method", "Walk-in (SSU Campus)"],
-                ["Campus", "Bulan Campus"],
               ].map(([k, v]) => (
                 <div key={k}>
                   <p className="text-xs text-muted-foreground">{k}</p>
-                  <p className="font-medium text-foreground">{v}</p>
+                  <p className={v ? "font-medium text-foreground" : buyer ? "font-medium text-amber-700 dark:text-amber-300" : "text-muted-foreground"}>
+                    {buyer ? v || "Not set" : "Loading…"}
+                  </p>
                 </div>
               ))}
             </div>
+            {profileProblem && (
+              <p className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>{profileProblem} <Link href="/marketplace/account" className="font-semibold underline">Update your profile</Link></span>
+              </p>
+            )}
           </section>
 
           {/* Order summary */}
@@ -204,15 +263,26 @@ export default function CheckoutPage() {
               <h2 className="font-serif text-sm font-semibold text-foreground sm:text-base">GCash Payment</h2>
               <div className="mt-2 h-px bg-linear-to-r from-gold/40 to-transparent" />
 
-              {/* QR placeholder */}
+              {/* Seller QR — hidden unless the seller's e-wallet QR is active (Section 8) */}
               <div className="mt-4 flex flex-col items-center gap-3">
-                <div className="flex size-44 items-center justify-center rounded-2xl border-2 border-dashed border-primary/30 bg-muted/40">
-                  <div className="text-center">
-                    <QrCode className="mx-auto size-16 text-primary/30" />
-                    <p className="mt-1 text-[10px] font-medium text-muted-foreground">QR Code Placeholder</p>
-                    <p className="text-[9px] text-muted-foreground">Upload in Seller Dashboard</p>
+                {sellerQrs.length > 0 ? (
+                  sellerQrs.map((s) => (
+                    <div key={s.sellerId} className="flex flex-col items-center gap-2">
+                      <div className="relative size-44 overflow-hidden rounded-2xl border border-border bg-muted/40">
+                        <Image src={s.qrUrl} alt={`${s.orgName} GCash QR`} fill className="object-contain" />
+                      </div>
+                      <p className="text-xs font-medium text-muted-foreground">{s.orgName}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="flex size-44 items-center justify-center rounded-2xl border-2 border-dashed border-primary/30 bg-muted/40">
+                    <div className="text-center">
+                      <QrCode className="mx-auto size-16 text-primary/30" />
+                      <p className="mt-1 text-[10px] font-medium text-muted-foreground">QR Code Placeholder</p>
+                      <p className="text-[9px] text-muted-foreground">Seller hasn&apos;t uploaded an e-wallet QR yet</p>
+                    </div>
                   </div>
-                </div>
+                )}
                 <p className="text-sm font-semibold text-foreground">Scan to Pay via GCash</p>
                 <p className="text-xs text-muted-foreground">Replace this QR image in your Seller Dashboard</p>
               </div>
@@ -317,7 +387,7 @@ export default function CheckoutPage() {
                 onClick={handlePlaceOrder}
                 size="lg"
                 className="mt-5 w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={submitting || (payment === "gcash" && !receipt)}
+                disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt)}
               >
                 {submitting ? <><Loader2 className="size-4 animate-spin" /> Placing Order...</> : <>{payment === "gcash" ? "Mark as Paid & Place Order" : "Place Order"}<ChevronRight className="size-4" /></>}
               </Button>
@@ -339,7 +409,7 @@ export default function CheckoutPage() {
           </div>
           <Button
             onClick={handlePlaceOrder}
-            disabled={submitting || (payment === "gcash" && !receipt)}
+            disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt)}
             className="rounded-full bg-gold px-6 font-semibold text-primary hover:bg-gold/80"
           >
             {submitting ? <Loader2 className="size-4 animate-spin" /> : payment === "gcash" ? "Pay & Order" : "Place Order"}

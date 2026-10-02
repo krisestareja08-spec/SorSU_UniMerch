@@ -5,81 +5,36 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
 import {
-  Home, LayoutGrid, PackageSearch, Store, Wallet, Settings,
-  HelpCircle, X, ChevronRight, Tag, Boxes, BarChart2, Users,
-  ShieldCheck, FileText, ClipboardList, CheckSquare, TrendingUp,
-  CreditCard, MessageCircle, LogOut,
+  Home, LayoutGrid, PackageSearch, Settings, HelpCircle, X, ChevronRight, Users, ShieldCheck, LogOut, Building2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
-import type { UserRole } from "@/lib/roles"
+import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
 
 type NavItem = { href: string; label: string; icon: React.ElementType }
 
-function buildDrawerNav(role: UserRole): NavItem[] {
-  const common: NavItem[] = [
-    { href: "/marketplace",            label: "Marketplace",    icon: Home },
-    { href: "/marketplace/categories", label: "Categories",     icon: LayoutGrid },
-    { href: "/marketplace/settings",   label: "Settings",       icon: Settings },
-    { href: "/marketplace/help",       label: "Help Centre",    icon: HelpCircle },
-  ]
-
-  const roleItems: Record<UserRole, NavItem[]> = {
-    buyer: [
-      { href: "/marketplace/orders",  label: "My Orders",   icon: PackageSearch },
-      { href: "/marketplace/account", label: "My Account",  icon: Users },
-      { href: "/marketplace/wallet",  label: "Wallet",      icon: Wallet },
-    ],
-    seller: [
-      { href: "/seller",              label: "Seller Dashboard", icon: LayoutGrid },
-      { href: "/seller/products",     label: "My Products",      icon: Tag },
-      { href: "/seller/orders",       label: "Orders",           icon: PackageSearch },
-      { href: "/seller/inventory",    label: "Inventory",        icon: Boxes },
-      { href: "/seller/analytics",    label: "Analytics",        icon: BarChart2 },
-      { href: "/seller/chat",         label: "Messages",         icon: MessageCircle },
-    ],
-    bao: [
-      { href: "/bao",                 label: "BAO Dashboard",    icon: LayoutGrid },
-      { href: "/bao/sellers",         label: "Sellers",          icon: Users },
-      { href: "/bao/approvals",       label: "Product Approvals",icon: CheckSquare },
-      { href: "/bao/analytics",       label: "Analytics",        icon: BarChart2 },
-      { href: "/bao/reports",         label: "Reports",          icon: FileText },
-      { href: "/bao/logs",            label: "Logs",             icon: ClipboardList },
-    ],
-    admin: [
-      { href: "/bao",                 label: "BAO Dashboard",    icon: LayoutGrid },
-      { href: "/bao/sellers",         label: "Sellers",          icon: Users },
-      { href: "/bao/approvals",       label: "Product Approvals",icon: CheckSquare },
-      { href: "/bao/analytics",       label: "Analytics",        icon: BarChart2 },
-    ],
-    supply_office: [
-      { href: "/supply-office",            label: "Supply Dashboard",icon: LayoutGrid },
-      { href: "/supply-office/inventory",  label: "Inventory",       icon: Boxes },
-      { href: "/supply-office/movement",   label: "Stock Movement",  icon: TrendingUp },
-      { href: "/supply-office/restricted", label: "Restricted Items",icon: ShieldCheck },
-    ],
-    registrar: [
-      { href: "/registrar",                label: "Registrar Home",  icon: LayoutGrid },
-      { href: "/registrar/verification",   label: "Verify Queue",    icon: ShieldCheck },
-      { href: "/registrar/reports",        label: "Reports",         icon: FileText },
-    ],
-  }
-
-  return [...(roleItems[role] ?? []), ...common]
-}
+const USER_NAV: NavItem[] = [
+  { href: "/marketplace",            label: "Marketplace",  icon: Home },
+  { href: "/marketplace/categories", label: "Categories",   icon: LayoutGrid },
+  { href: "/marketplace/orders",     label: "My Orders",    icon: PackageSearch },
+  { href: "/marketplace/account",    label: "My Account",   icon: Users },
+  { href: "/verify",                 label: "Verification", icon: ShieldCheck },
+  { href: "/marketplace/settings",   label: "Settings",     icon: Settings },
+  { href: "/marketplace/help",       label: "Help Centre",  icon: HelpCircle },
+]
 
 export function BurgerDrawer({
   open,
   onClose,
-  role = "buyer",
+  dashboards = [],
 }: {
   open: boolean
   onClose: () => void
-  role?: UserRole
+  dashboards?: DashboardSummary[]
 }) {
   const pathname = usePathname()
   const router = useRouter()
-  const nav = buildDrawerNav(role)
+  const nav = USER_NAV
 
   async function signOut() {
     const supabase = createClient()
@@ -131,6 +86,22 @@ export function BurgerDrawer({
               </Link>
             )
           })}
+          {dashboards.length > 0 && (
+            <>
+              <p className="px-5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/45">My dashboards</p>
+              {dashboards.map((d) => (
+                <a key={d.id} href={dashboardHref(d)} onClick={onClose}
+                  className="group flex items-center gap-3 px-5 py-3 text-sm text-primary-foreground/80 hover:bg-primary-foreground/8 hover:text-primary-foreground">
+                  <Building2 className="size-5 shrink-0 text-gold/60 group-hover:text-gold/80" />
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <span className="block truncate font-medium">{d.name}</span>
+                    <span className="block text-[11px] text-primary-foreground/50">{MODULES[d.module].name}{d.isMain ? " · Main Admin" : ""}</span>
+                  </span>
+                  <ChevronRight className="size-4 opacity-30 group-hover:opacity-60" />
+                </a>
+              ))}
+            </>
+          )}
         </nav>
 
         <div className="border-t border-primary-foreground/10 px-5 py-4 flex items-center justify-between">

@@ -1,13 +1,14 @@
 "use server"
 
-import { requireUser } from "@/lib/auth"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { SellerChatPanel } from "@/components/seller/chat-panel"
 
 export default async function SellerChatPage() {
-  const { id: sellerId, email, profile } = await requireUser(["seller", "admin"])
+  const ctx = await requireDashboard("seller", "messages")
+  const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
   const { data: products } = await supabase
@@ -17,13 +18,13 @@ export default async function SellerChatPage() {
     .order("created_at", { ascending: false })
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
+    <ManagementShell ctx={ctx}>
       <PageHeading
         title="BAO Conversations"
         description="Messages from the Business Affairs Office about your product submissions."
       />
       <div className="mt-6">
-        <SellerChatPanel products={products ?? []} sellerId={sellerId} />
+        <SellerChatPanel products={products ?? []} sellerId={ctx.userId} />
       </div>
     </ManagementShell>
   )

@@ -1,17 +1,19 @@
-export type UserRole = "buyer" | "seller" | "bao" | "supply_office" | "registrar" | "admin"
+/**
+ * Legacy `profiles.role` column. It no longer grants access: every person is a user, and
+ * management dashboards (modules) are assigned through dashboard membership — see lib/modules.ts.
+ */
+export type UserRole = "buyer" | "seller" | "bao" | "supply_office" | "cashier" | "admin"
 
 export type Affiliation = "student" | "faculty" | "staff" | "alumni" | "external"
 
-export type VerificationStatus = "unverified" | "pending" | "approved" | "rejected"
+export type Campus =
+  | "sorsogon_city_main"
+  | "bulan"
+  | "castilla"
+  | "magallanes"
+  | "sorsogon_city_baribag"
 
-export const ROLE_LABELS: Record<UserRole, string> = {
-  buyer:         "Buyer",
-  seller:        "Organisation Seller",
-  bao:           "BAO Admin",
-  supply_office: "Supply Office",
-  registrar:     "Registrar",
-  admin:         "BAO Admin",   // admin is an alias for bao
-}
+export type VerificationStatus = "unverified" | "pending" | "approved" | "rejected"
 
 export const AFFILIATION_LABELS: Record<Affiliation, string> = {
   student:  "Student",
@@ -21,28 +23,11 @@ export const AFFILIATION_LABELS: Record<Affiliation, string> = {
   external: "General public",
 }
 
-/**
- * The marketplace is the universal home page for ALL roles.
- * Role-specific dashboards are accessed via sidebar navigation.
- */
-export function roleHome(role?: string | null): string {
-  return "/marketplace"
-}
-
-/** Returns the role-specific dashboard path (for sidebar links). */
-export function roleDashboard(role?: string | null): string {
-  switch (role) {
-    case "seller":        return "/seller"
-    case "bao":
-    case "admin":         return "/bao"
-    case "supply_office": return "/supply-office"
-    case "registrar":     return "/registrar"
-    case "cashier":       return "/cashier"
-    default:              return "/dashboard"
-  }
-}
-
-/** True if the role has management dashboard access. */
-export function isStaffRole(role?: string | null): boolean {
-  return ["bao", "admin", "supply_office", "registrar", "seller"].includes(role ?? "")
+/** Campus identity — required for all verified members (students, staff, sellers). Not applicable to guest/external accounts. */
+export const CAMPUS_LABELS: Record<Campus, string> = {
+  sorsogon_city_main:     "Sorsogon City Main Campus",
+  bulan:                  "Bulan Campus",
+  castilla:               "Castilla Campus",
+  magallanes:             "Magallanes Campus",
+  sorsogon_city_baribag:  "Sorsogon City Campus Extension \u2013 Baribag",
 }

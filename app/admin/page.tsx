@@ -1,129 +1,91 @@
-import { requireUser } from "@/lib/auth"
+import Link from "next/link"
+import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Users, ShieldCheck, Store, Boxes } from "lucide-react"
-import { updateUserRole } from "./actions"
-import { ROLE_LABELS, type UserRole } from "@/lib/roles"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ShieldCheck, UserCheck, Users, AlertOctagon, Store, ClipboardList, ChevronRight, Building2, Flag, Wallet } from "lucide-react"
+import { canUse } from "@/lib/modules"
+import { ACTION_LABELS, findDuplicateGroups, formatDateTime, profilesById } from "@/lib/admin"
 
-const ASSIGNABLE_ROLES: UserRole[] = ["buyer", "seller", "bao", "supply_office", "registrar", "admin"]
+const SECTIONS = [
+  { perm: "queue", href: "/admin/queue",      label: "Verification Queue",  desc: "Review profile details and uploaded I.D. / COR, then approve or decline.", icon: ShieldCheck },
+  { perm: "users", href: "/admin/users",      label: "User Management",     desc: "All users, dashboard memberships, account standing and change history.",      icon: Users },
+  { perm: "duplicates", href: "/admin/duplicates", label: "Duplicate Detection", desc: "Accounts sharing the same I.D. number — one account per user.",          icon: AlertOctagon },
+  { perm: "reports", href: "/admin/reports",    label: "Reported Accounts",   desc: "Buyers reported by sellers as dummy or fake — suspend or ban them.",    icon: Flag },
+  { perm: "organizations", href: "/admin/sellers",    label: "Seller Management",   desc: "Create organizations — each gets a storefront and its own Seller Dashboard.", icon: Store },
+  { perm: "cashiers", href: "/admin/cashiers",   label: "Cashier Branches",    desc: "Create a cashier office per campus, department or centralized, and appoint its Main Admin.", icon: Wallet },
+  { perm: "dashboards", href: "/admin/dashboards", label: "Dashboard Admins",    desc: "Appoint the Main Admin of BAO, Supply Office, Cashier and this dashboard.", icon: Building2 },
+  { perm: "logs", href: "/admin/logs",       label: "Activity Logs",       desc: "Every action taken in the Verification Admin dashboard.",                icon: ClipboardList },
+]
 
 export default async function AdminPage() {
-  const { email, profile } = await requireUser(["admin"])
+  const ctx = await requireDashboard("verification")
   const supabase = await createClient()
 
-  let userCount = 0
-  let verifiedCount = 0
-  let sellerCount = 0
-  let catalogCount = 0
-  let users: { id: string; full_name: string | null; role: UserRole; affiliation: string }[] = []
+  const [pending, verified, sellers, duplicates, recent] = await Promise.all([
+    supabase.from("verification_requests").select("id", { count: "exact", head: true }).in("status", ["pending", "under_review"]),
+    supabase.from("profiles").select("id", { count: "exact", head: true }).eq("is_identity_verified", true),
+    supabase.from("dashboards").select("id", { count: "exact", head: true }).eq("module", "seller"),
+    findDuplicateGroups(supabase).catch(() => []),
+    supabase.from("verification_audit_log").select("id, actor_id, user_id, action, reason, created_at").order("created_at", { ascending: false }).limit(5),
+  ])
 
-  try {
-    const userResult = await supabase.from("profiles").select("id", { count: "exact", head: true })
-    userCount = userResult.count ?? 0
-
-    const verifiedResult = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("is_identity_verified", true)
-    verifiedCount = verifiedResult.count ?? 0
-
-    const sellerResult = await supabase
-      .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "seller")
-    sellerCount = sellerResult.count ?? 0
-
-    const catalogResult = await supabase.from("products").select("id", { count: "exact", head: true })
-    catalogCount = catalogResult.count ?? 0
-
-    const usersResult = await supabase
-      .from("profiles")
-      .select("id, full_name, role, affiliation")
-      .order("created_at", { ascending: false })
-      .limit(20)
-    users = usersResult.data ?? []
-  } catch {
-    userCount = 0
-    verifiedCount = 0
-    sellerCount = 0
-    catalogCount = 0
-    users = []
-  }
+  const logs = recent.data ?? []
+  const people = await profilesById(supabase, logs.flatMap((l) => [l.actor_id, l.user_id]))
 
   const stats: Stat[] = [
-    { label: "Total users", value: userCount ?? 0, icon: Users, hint: "Registered" },
-    { label: "Verified", value: verifiedCount ?? 0, icon: ShieldCheck, hint: "Identity confirmed" },
-    { label: "Sellers", value: sellerCount, icon: Store, hint: "Accredited" },
-    { label: "Catalog items", value: catalogCount, icon: Boxes, hint: "Listed" },
+    { label: "Pending review",  value: pending.count ?? 0,  icon: ClipboardList, hint: "In the queue",         accent: "red" },
+    { label: "Verified users",  value: verified.count ?? 0, icon: UserCheck,     hint: "Approved identities",  accent: "green" },
+    { label: "Duplicate I.D.s", value: duplicates.length,   icon: AlertOctagon,  hint: "Needs manual review",  accent: "gold" },
+    { label: "Organizations",   value: sellers.count ?? 0,  icon: Store,         hint: "Seller dashboards",    accent: "primary" },
   ]
 
   return (
-    <ManagementShell role={profile.role} fullName={profile.full_name} email={email}>
-      <PageHeading title="Administration" description="Manage users, roles, and platform-wide settings." />
+    <ManagementShell ctx={ctx}>
+      <PageHeading title="Verification Admin" description="Validates university identity, manages accounts and seller onboarding." />
+
       <div className="mt-6">
         <StatGrid stats={stats} />
       </div>
 
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {SECTIONS.filter((m) => canUse(ctx, m.perm)).map(({ href, label, desc, icon: Icon }) => (
+          <Link key={href} href={href} className="group flex items-start gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition hover:border-primary/30 hover:shadow-md">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Icon className="size-4 text-primary" /></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">{label}</p>
+              <p className="text-xs text-muted-foreground">{desc}</p>
+            </div>
+            <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 group-hover:text-primary" />
+          </Link>
+        ))}
+      </div>
+
       <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 font-serif text-lg">
-            <Users className="size-5 text-primary" />
-            Users &amp; roles
-          </CardTitle>
-          <CardDescription>Assign module roles (BAO, Supply Office, Registrar, Seller) to accounts.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="font-serif text-lg">Recent activity</CardTitle>
+          <Link href="/admin/logs" className="text-xs font-medium text-primary hover:underline">View all</Link>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          {users.length === 0 ? (
-            <p>
-              No accounts found. Run <code>scripts/fix-schema.sql</code> in Supabase if this looks wrong.
-            </p>
+          {logs.length === 0 ? (
+            <p>No activity yet.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-140 text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-medium">Name</th>
-                    <th className="py-2 pr-4 font-medium">Affiliation</th>
-                    <th className="py-2 pr-4 font-medium">Role</th>
-                    <th className="py-2 pr-4 font-medium" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id} className="border-b border-border/60 last:border-0">
-                      <td className="py-2 pr-4 font-medium text-foreground">{u.full_name || "—"}</td>
-                      <td className="py-2 pr-4 capitalize">{u.affiliation}</td>
-                      <td className="py-2 pr-4">
-                        <form action={updateUserRole} className="flex items-center gap-2">
-                          <input type="hidden" name="user_id" value={u.id} />
-                          <select
-                            name="role"
-                            defaultValue={u.role}
-                            className="rounded-lg border border-input bg-background px-2 py-1 text-xs"
-                          >
-                            {ASSIGNABLE_ROLES.map((r) => (
-                              <option key={r} value={r}>{ROLE_LABELS[r]}</option>
-                            ))}
-                          </select>
-                          <button
-                            type="submit"
-                            className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                          >
-                            Save
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul className="divide-y divide-border">
+              {logs.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-xs">
+                  <span>
+                    <strong className="text-foreground">{people.get(l.actor_id ?? "")?.full_name ?? "Admin"}</strong>{" "}
+                    {(ACTION_LABELS[l.action] ?? l.action).toLowerCase()}
+                    {l.user_id && <> · <Link href={`/admin/users/${l.user_id}`} className="text-primary hover:underline">{people.get(l.user_id)?.full_name ?? "user"}</Link></>}
+                  </span>
+                  <span>{formatDateTime(l.created_at)}</span>
+                </li>
+              ))}
+            </ul>
           )}
         </CardContent>
       </Card>
     </ManagementShell>
   )
 }
-

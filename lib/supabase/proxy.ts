@@ -56,10 +56,12 @@ export async function updateSession(request: NextRequest) {
     '/seller',
     '/bao',
     '/supply-office',
-    '/registrar',
+    '/cashier',
     '/admin',
   ]
-  const isProtected = protectedPrefixes.some((p) => request.nextUrl.pathname.startsWith(p))
+  // Seller storefronts (/seller/{uuid}) are public; the rest of /seller is the Seller Dashboard.
+  const isPublicStorefront = /^\/seller\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i.test(request.nextUrl.pathname)
+  const isProtected = !isPublicStorefront && protectedPrefixes.some((p) => request.nextUrl.pathname.startsWith(p))
 
   if (
     // if the user is not logged in and a protected app path is accessed, redirect to the login page
@@ -70,6 +72,24 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
+  }
+
+  // BAO oversees the marketplace but never shops: BAO members are kept inside the BAO dashboard's
+  // view-only marketplace (no cart, no orders). Product pages → BAO product review,
+  // storefronts → Seller Monitoring, anything else in the buyer marketplace → BAO marketplace view.
+  const path = request.nextUrl.pathname
+  if (user && (path.startsWith('/marketplace') || isPublicStorefront)) {
+    const { data: isBao } = await supabase.rpc('module_access', { p_module: 'bao' })
+    if (isBao === true) {
+      const url = request.nextUrl.clone()
+      const product = path.match(/^\/marketplace\/product\/([^/]+)/)
+      const storefront = path.match(/^\/seller\/([0-9a-f-]{36})/i)
+      url.pathname = product ? `/bao/browse/${product[1]}` : storefront ? `/bao/sellers/${storefront[1]}` : '/bao/browse'
+      url.search = ''
+      const redirect = NextResponse.redirect(url)
+      supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
+      return redirect
+    }
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.
