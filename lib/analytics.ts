@@ -11,7 +11,6 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
  */
 
 export const EARNED_STATUSES = ["paid", "ready_for_pickup", "completed"]
-export const PENDING_STATUSES = ["pending", "partially_paid"]
 
 export type SaleLine = {
   orderId: string

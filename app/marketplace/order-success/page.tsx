@@ -62,7 +62,7 @@ export default async function OrderSuccessPage({ searchParams }: { searchParams:
                 <span className="text-muted-foreground">{PAYMENT_LABELS[order.paymentMethod] ?? order.paymentMethod}</span>
                 <span className="font-bold text-gold">{peso(order.total)}</span>
               </div>
-              <PickupLocationCard location={order.pickupLocation} notes={order.pickupNotes} compact />
+              <PickupLocationCard location={order.pickupLocation} notes={order.pickupNotes} storeHours={order.storeHours} deadline={order.pickupDeadline} compact />
               <Link href={`/marketplace/orders/${order.id}`} className="inline-block text-xs font-medium text-primary hover:underline">Track this order →</Link>
             </section>
           ))}

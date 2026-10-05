@@ -1,12 +1,3 @@
-/** Section 5 — restricted products unlock by VERIFIED affiliation. Mirrors viewer_role_allowed() in scripts/10_dashboards.sql. */
-export function canAccessProduct(
-  product: { is_restricted?: boolean | null; allowed_roles?: string[] | null },
-  viewer?: { affiliation?: string | null; isVerified?: boolean | null },
-): boolean {
-  if (!product.is_restricted) return true
-  return !!viewer?.isVerified && !!viewer.affiliation && (product.allowed_roles ?? []).includes(viewer.affiliation)
-}
-
 export type RoyaltyResult = {
   royaltyAmount: number
   finalPrice: number

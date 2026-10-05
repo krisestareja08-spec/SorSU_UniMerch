@@ -21,6 +21,7 @@ type ShopProfile = {
   bank_account_name: string; bank_account_number: string
   logo_url: string | null; banner_url: string | null
   pickup_location: string | null; pickup_notes: string | null
+  store_hours: string | null; claim_window_days: number
   theme: StorefrontTheme
 }
 
@@ -34,6 +35,7 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
   const [uploading, setUploading] = useState<"gcash" | "bank" | "logo" | "banner" | null>(null)
   const [brandingAvailable, setBrandingAvailable] = useState(true)
   const [pickupAvailable, setPickupAvailable] = useState(true)
+  const [hoursAvailable, setHoursAvailable] = useState(true)
   const logoRef = useRef<HTMLInputElement>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
   const gcashRef = useRef<HTMLInputElement>(null)
@@ -56,7 +58,10 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
       // Pickup location columns arrive with scripts/13_orders_pickup.sql
       const { data: pickup, error: pickupError } = await supabase.from("seller_profiles").select("pickup_location, pickup_notes").eq("id", ctx.storeId ?? "").maybeSingle()
       if (pickupError) setPickupAvailable(false)
-      if (sp) setShop({ ...sp, ...(pickup ?? {}), theme: { ...DEFAULT_THEME, ...((sp as { theme?: Partial<StorefrontTheme> }).theme ?? {}) } })
+      // Store hours + claim window arrive with scripts/22_preorder_pickup.sql
+      const { data: hours, error: hoursError } = await supabase.from("seller_profiles").select("store_hours, claim_window_days").eq("id", ctx.storeId ?? "").maybeSingle()
+      if (hoursError) setHoursAvailable(false)
+      if (sp) setShop({ ...sp, ...(pickup ?? {}), ...(hours ?? {}), theme: { ...DEFAULT_THEME, ...((sp as { theme?: Partial<StorefrontTheme> }).theme ?? {}) } })
     })
   }, [])
 
@@ -97,11 +102,12 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
     // Section 8 — QR upload logic: mark the e-wallet QR active once any QR image is on file.
     const qrStatus = shop.gcash_qr_url || shop.bank_qr_url ? "active" : "inactive"
     // Update only this dashboard's store (the store record is created together with the seller).
-    const { logo_url, banner_url, theme: shopTheme, pickup_location, pickup_notes, ...rest } = shop
+    const { logo_url, banner_url, theme: shopTheme, pickup_location, pickup_notes, store_hours, claim_window_days, ...rest } = shop
     const payload = {
       ...rest,
       ...(brandingAvailable ? { logo_url, banner_url, theme: shopTheme ?? DEFAULT_THEME } : {}),
       ...(pickupAvailable ? { pickup_location: pickup_location?.trim() || null, pickup_notes: pickup_notes?.trim() || null } : {}),
+      ...(hoursAvailable ? { store_hours: store_hours?.trim() || null, claim_window_days: Math.min(60, Math.max(1, Math.round(Number(claim_window_days) || 7))) } : {}),
       org_name: shop.org_name?.trim() || profile?.full_name || "My Shop",
       qr_status: qrStatus,
       qr_updated_at: new Date().toISOString(),
@@ -159,6 +165,23 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
                 className="mt-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                 placeholder="e.g. Mon–Fri, 8:00 AM – 5:00 PM. Look for the council officer on duty."
                 value={shop.pickup_notes ?? ""} onChange={(e) => setShop((s) => ({ ...s, pickup_notes: e.target.value }))} />
+            </div>
+            {!hoursAvailable && (
+              <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">Run <code>scripts/22_preorder_pickup.sql</code> in Supabase to enable store hours and pre-order claim deadlines.</p>
+            )}
+            <div>
+              <Label htmlFor="store_hours">Store hours</Label>
+              <textarea id="store_hours" rows={2} disabled={!hoursAvailable}
+                className="mt-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g. Mon–Fri, 8:00 AM – 5:00 PM (closed 12:00 – 1:00 PM)"
+                value={shop.store_hours ?? ""} onChange={(e) => setShop((s) => ({ ...s, store_hours: e.target.value }))} />
+              <p className="mt-1 text-xs text-muted-foreground">Shown to buyers at checkout so they know when they can walk in to claim a pre-order.</p>
+            </div>
+            <div>
+              <Label htmlFor="claim_window_days">Claim deadline (days after ordering)</Label>
+              <Input id="claim_window_days" type="number" min={1} max={60} disabled={!hoursAvailable} className="mt-1 w-28"
+                value={shop.claim_window_days ?? 7} onChange={(e) => setShop((s) => ({ ...s, claim_window_days: Number(e.target.value) }))} />
+              <p className="mt-1 text-xs text-muted-foreground">Pre-orders not claimed within this many days of being placed may be cancelled.</p>
             </div>
             <p className="text-xs text-muted-foreground">Buyers see this on their receipt and order details. New orders keep the location that was set when they were placed.</p>
           </CardContent>

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 
 export function GoogleSignInButton() {
   const [loading, setLoading] = useState(false)
@@ -11,6 +12,7 @@ export function GoogleSignInButton() {
     setError(null)
     setLoading(true)
     const supabase = createClient()
+    resetTheme() // the browser leaves for Google, so reset before redirecting
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: `${window.location.origin}/auth/callback` },

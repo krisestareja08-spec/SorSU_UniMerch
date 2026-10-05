@@ -15,16 +15,6 @@ export function PageHeading({ title, description }: { title: string; description
   )
 }
 
-export function SectionHeading({ title, action }: { title: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between">
-      <h2 className="font-serif text-base font-semibold text-foreground sm:text-lg">{title}</h2>
-      {action}
-      <div className="absolute" />
-    </div>
-  )
-}
-
 // ─── KPI Card ────────────────────────────────────────────────────────────────
 export type Stat = {
   label: string
@@ -97,24 +87,6 @@ export function MiniBarChart({
         </div>
       ))}
     </div>
-  )
-}
-
-// ─── Inline sparkline (SVG) ──────────────────────────────────────────────────
-export function Sparkline({ data, color = "#800000" }: { data: number[]; color?: string }) {
-  const w = 120, h = 36
-  const max = Math.max(...data, 1)
-  const min = Math.min(...data, 0)
-  const range = max - min || 1
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w
-    const y = h - ((v - min) / range) * (h - 4) - 2
-    return `${x},${y}`
-  }).join(" ")
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-9" preserveAspectRatio="none">
-      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" points={pts} />
-    </svg>
   )
 }
 

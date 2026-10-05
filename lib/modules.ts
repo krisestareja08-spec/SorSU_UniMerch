@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShieldCheck, Users, AlertOctagon, Store, ClipboardList, Building2,
   CheckSquare, BarChart2, FileText, Settings, Boxes, ShoppingCart, Package,
-  Tag, CreditCard, MessageCircle, Wallet, Globe, UserCog, Flag, Coins, type LucideIcon,
+  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, type LucideIcon,
 } from "lucide-react"
 
 /**
@@ -61,7 +61,9 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
     pages: [
       { perm: null,         label: "Dashboard",        href: "/supply-office",            icon: LayoutDashboard },
       { perm: "storefront", label: "Storefront",       href: "/supply-office/shop",       icon: Store },
+      { perm: "storefront", label: "Banners",          href: "/supply-office/banners",    icon: Megaphone },
       { perm: "orders",     label: "Orders",           href: "/supply-office/orders",     icon: ShoppingCart },
+      { perm: "messages",   label: "Buyer Messages",   href: "/supply-office/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",         href: "/supply-office/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",        href: "/supply-office/inventory",  icon: Boxes },
       { perm: "restricted", label: "Restricted Items", href: "/supply-office/restricted", icon: ShieldCheck },
@@ -76,7 +78,9 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
     pages: [
       { perm: null,         label: "Dashboard",           href: "/cashier",            icon: LayoutDashboard },
       { perm: "storefront", label: "Storefront",          href: "/cashier/shop",       icon: Store },
+      { perm: "storefront", label: "Banners",             href: "/cashier/banners",    icon: Megaphone },
       { perm: "orders",     label: "Orders",              href: "/cashier/orders",     icon: ShoppingCart },
+      { perm: "messages",   label: "Buyer Messages",      href: "/cashier/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",            href: "/cashier/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",           href: "/cashier/inventory",  icon: Boxes },
       { perm: "restricted", label: "Restricted Items",    href: "/cashier/restricted", icon: ShieldCheck },
@@ -92,13 +96,15 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
     pages: [
       { perm: null,         label: "Dashboard",   href: "/seller",           icon: LayoutDashboard },
       { perm: "storefront", label: "Storefront",  href: "/seller/shop",      icon: Store },
+      { perm: "storefront", label: "Banners",     href: "/seller/banners",   icon: Megaphone },
       { perm: "products",   label: "Products",    href: "/seller/products",  icon: Tag },
       { perm: "orders",     label: "Orders",      href: "/seller/orders",    icon: ShoppingCart },
       { perm: "inventory",  label: "Inventory",   href: "/seller/inventory", icon: Boxes },
       { perm: "analytics",  label: "Analytics",   href: "/seller/analytics", icon: BarChart2 },
       { perm: "reports",    label: "Sales Reports", href: "/seller/reports", icon: FileText },
       { perm: "payments",   label: "Payments",    href: "/seller/payments",  icon: CreditCard },
-      { perm: "messages",   label: "Messages",    href: "/seller/chat",      icon: MessageCircle },
+      { perm: "messages",   label: "Buyer Messages", href: "/seller/messages", icon: MessageCircle },
+      { perm: "messages",   label: "BAO Messages", href: "/seller/chat",      icon: MessagesSquare },
       { perm: "settings",   label: "Settings",    href: "/seller/settings",  icon: Settings },
     ],
   },
@@ -108,7 +114,14 @@ export const MEMBERS_PAGE = { label: "Members", icon: UserCog }
 
 /** Pages a Main Admin can grant to members (everything except the home page). */
 export function grantablePages(module: ModuleKey) {
-  return MODULES[module].pages.filter((p): p is ModulePage & { perm: string } => p.perm !== null)
+  // Pages sharing a permission become one checkbox ("Buyer Messages / BAO Messages")
+  const byPerm = new Map<string, ModulePage & { perm: string }>()
+  for (const p of MODULES[module].pages) {
+    if (p.perm === null) continue
+    const seen = byPerm.get(p.perm)
+    byPerm.set(p.perm, seen ? { ...seen, label: `${seen.label} / ${p.label}` } : { ...p, perm: p.perm })
+  }
+  return [...byPerm.values()]
 }
 
 export function membersHref(module: ModuleKey) {

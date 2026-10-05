@@ -4,9 +4,10 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { ShoppingCart, Zap, Settings, Eye, CheckCircle2, XCircle, EyeOff, RefreshCw } from "lucide-react"
+import { ShoppingCart, Zap, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCart } from "@/lib/cart-context"
+import { RatingSummary } from "@/components/reviews/stars"
 
 export type ProductBadge = "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
 
@@ -14,14 +15,13 @@ export type Product = {
   id: string
   name: string
   price: number
-  originalPrice?: number
   seller: string
   sellerId?: string
   image: string
   badge: ProductBadge
   rating?: number
+  ratingCount?: number
   sold?: number
-  usesUniversityLogo?: boolean
   stock?: number
 }
 
@@ -72,21 +72,11 @@ function BuyerActions({ product }: { product: Product }) {
 }
 
 export function ProductCard({ product }: { product: Product }) {
-  const discount = product.originalPrice
-    ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
-    : 0
-
   return (
     <Link
       href={`/marketplace/product/${product.id}`}
       className="group relative flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98]"
     >
-      {discount > 0 && (
-        <span className="absolute left-2 top-2 z-10 rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
-          -{discount}%
-        </span>
-      )}
-
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         <Image src={product.image} alt={product.name} fill
           className="object-cover transition-transform duration-300 group-hover:scale-105" />
@@ -100,19 +90,17 @@ export function ProductCard({ product }: { product: Product }) {
       <div className="flex flex-1 flex-col gap-1 p-3">
         <p className="line-clamp-2 text-xs font-medium leading-tight text-foreground sm:text-sm">{product.name}</p>
         <p className="text-[11px] text-muted-foreground">{product.seller}</p>
+        <RatingSummary avg={product.rating ?? 0} count={product.ratingCount ?? 0} />
 
-        <div className="mt-auto flex items-baseline gap-1.5 pt-1">
+        <div className="mt-auto pt-1">
           <span className="text-sm font-bold text-gold sm:text-base">₱{product.price.toLocaleString()}</span>
-          {product.originalPrice && (
-            <span className="text-[11px] text-muted-foreground line-through">₱{product.originalPrice.toLocaleString()}</span>
-          )}
         </div>
 
         <div className="flex items-center justify-between">
           <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold", BADGE_STYLES[product.badge])}>
             {product.badge}
           </span>
-          {product.sold != null && (
+          {!!product.sold && (
             <span className="text-[10px] text-muted-foreground">{product.sold} sold</span>
           )}
         </div>

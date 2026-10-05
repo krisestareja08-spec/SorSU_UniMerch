@@ -17,7 +17,7 @@ declare
 begin
   select id into admin_id from auth.users where lower(email) = lower(admin_email);
   if admin_id is null then
-    return format('SKIPPED %s — no account uses this email (sign up / run seed-admins.mjs first)', admin_email);
+    return format('SKIPPED %s — no account uses this email (sign up first)', admin_email);
   end if;
 
   insert into public.profiles (id, full_name) values (admin_id, display_name) on conflict (id) do nothing;

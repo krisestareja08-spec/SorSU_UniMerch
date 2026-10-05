@@ -53,6 +53,12 @@ export async function submitOrder(args: {
     throw new Error("One or more products are no longer available.")
   }
 
+  // Pre-orders are paid upfront: GCash with an uploaded receipt, never cash on pickup.
+  if (products.some((product) => product.badge === "Pre-Order")) {
+    if (args.paymentMethod !== "gcash") throw new Error("Pre-orders must be paid upfront via GCash.")
+    if (!args.receiptUrl) throw new Error("Upload your payment receipt to place a pre-order.")
+  }
+
   const productById = new Map(products.map((product) => [product.id, product]))
   const orderItems = args.items.map((item) => {
     const product = productById.get(item.id)!
@@ -72,6 +78,7 @@ export async function submitOrder(args: {
       variant: item.variant ?? null,
       product_name: product.name,
       product_image_url: product.image_url,
+      pre_order: product.badge === "Pre-Order",
     }
   })
 
@@ -79,13 +86,23 @@ export async function submitOrder(args: {
   const byStore = new Map<string, typeof orderItems>()
   for (const item of orderItems) byStore.set(item.seller_id, [...(byStore.get(item.seller_id) ?? []), item])
 
-  const { data: stores } = await supabase.from("seller_profiles").select("id, pickup_location, pickup_notes").in("id", [...byStore.keys()])
-  const storeById = new Map((stores ?? []).map((st) => [st.id as string, st as { id: string; pickup_location: string | null; pickup_notes: string | null }]))
+  type StoreRow = { id: string; pickup_location: string | null; pickup_notes: string | null; claim_window_days?: number | null }
+  const loadStores = async (columns: string) =>
+    (await supabase.from("seller_profiles").select(columns).in("id", [...byStore.keys()])) as unknown as { data: StoreRow[] | null; error: unknown }
+  // claim_window_days arrives with scripts/22_preorder_pickup.sql
+  let { data: stores, error: storesError } = await loadStores("id, pickup_location, pickup_notes, claim_window_days")
+  if (storesError) ({ data: stores } = await loadStores("id, pickup_location, pickup_notes"))
+  const storeById = new Map((stores ?? []).map((st) => [st.id, st]))
 
   const orderIds: string[] = []
   for (const [storeId, storeItems] of byStore) {
     const total = storeItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
     const store = storeById.get(storeId)
+    // Pre-orders must be claimed within the store's claim window, counted from the order date.
+    const claimDays = Math.min(60, Math.max(1, Number(store?.claim_window_days ?? 7)))
+    const pickupDeadline = storeItems.some((item) => item.pre_order)
+      ? new Date(Date.now() + claimDays * 86_400_000).toISOString()
+      : null
     const base = {
       buyer_id: user.id,
       status: "pending",
@@ -93,14 +110,14 @@ export async function submitOrder(args: {
       payment_method: args.paymentMethod,
       receipt_url: args.receiptUrl ?? null,
     }
-    let { data: order, error: orderError } = await supabase
-      .from("orders")
-      .insert({ ...base, seller_id: storeId, pickup_location: store?.pickup_location ?? null, pickup_notes: store?.pickup_notes ?? null })
-      .select("id")
-      .single()
-    if (orderError?.message.includes("column")) {
-      // scripts/13_orders_pickup.sql not run yet
-      ;({ data: order, error: orderError } = await supabase.from("orders").insert(base).select("id").single())
+    const pickup = { seller_id: storeId, pickup_location: store?.pickup_location ?? null, pickup_notes: store?.pickup_notes ?? null }
+    // Older databases lack scripts/22 (pickup_deadline) and/or scripts/13 (pickup columns): retry with fewer columns.
+    const attempts = [{ ...base, ...pickup, pickup_deadline: pickupDeadline }, { ...base, ...pickup }, base]
+    let order: { id: string } | null = null
+    let orderError: { message: string } | null = null
+    for (const row of attempts) {
+      ;({ data: order, error: orderError } = await supabase.from("orders").insert(row).select("id").single())
+      if (!orderError?.message.includes("column")) break
     }
     if (orderError || !order) {
       const msg = orderError?.message ?? "Failed to create order"
@@ -109,7 +126,7 @@ export async function submitOrder(args: {
       throw new Error(msg)
     }
 
-    let rows: Record<string, unknown>[] = storeItems.map((item) => ({ ...item, order_id: order.id }))
+    let rows: Record<string, unknown>[] = storeItems.map(({ pre_order: _p, ...item }) => ({ ...item, order_id: order!.id }))
     let { error: itemsError } = await supabase.from("order_items").insert(rows)
     if (itemsError && /original_price|royalty_amount/.test(itemsError.message)) {
       // Older database without these columns (scripts 13 / 15 not run yet)
@@ -117,7 +134,7 @@ export async function submitOrder(args: {
       ;({ error: itemsError } = await supabase.from("order_items").insert(rows))
     }
     if (itemsError) throw new Error(itemsError.message)
-    orderIds.push(order.id)
+    orderIds.push(order!.id)
   }
 
   return { orderIds }

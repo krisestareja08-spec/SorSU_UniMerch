@@ -4,6 +4,7 @@ import { MarketplaceHeader } from "@/components/marketplace/marketplace-header"
 import { MarketplaceDesktopSidebar } from "@/components/marketplace/marketplace-desktop-sidebar"
 import { MarketplaceBottomTabs } from "@/components/marketplace/marketplace-bottom-tabs"
 import { CartProvider } from "@/lib/cart-context"
+import { LiveAlerts } from "@/components/notifications/live-alerts"
 import { getMemberships } from "@/lib/dashboards"
 import { redirectIfBanned } from "@/lib/auth"
 import type { DashboardSummary } from "@/lib/modules"
@@ -46,13 +47,14 @@ export async function MarketplaceChrome({ children }: { children: React.ReactNod
         <MarketplaceDesktopSidebar dashboards={dashboards} />
 
         {/* Main content */}
-        <main className="flex-1 overflow-x-hidden pb-24 lg:pb-8">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden pb-24 focus:outline-none lg:pb-8">
           {children}
         </main>
       </div>
 
       {/* Mobile bottom tabs */}
       <MarketplaceBottomTabs dashboards={dashboards} />
+      {user && <LiveAlerts />}
     </div>
     </CartProvider>
   )

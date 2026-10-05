@@ -5,7 +5,7 @@ export type OrderStatus = "pending" | "partially_paid" | "paid" | "ready_for_pic
 
 type StatusDef = { label: string; badge: string; description: string; icon: LucideIcon }
 
-export const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
+const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
   pending: {
     label: "Pending",
     badge: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30",

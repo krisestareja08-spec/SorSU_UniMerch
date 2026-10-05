@@ -20,7 +20,6 @@ export const metadata: Metadata = {
   title: 'UniMerch — Sorsogon State University',
   description:
     'UniMerch, the official campus marketplace of Sorsogon State University . Browse and buy campus goods; verify your identity to unlock restricted, role-based items.',
-  generator: 'v0.app',
   icons: {
     icon: [
       {
@@ -40,12 +39,10 @@ export const metadata: Metadata = {
   },
 }
 
+// Light by default regardless of the device setting; dark mode is an in-app choice (lib/theme.ts)
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#7a1f2b' },
-    { media: '(prefers-color-scheme: dark)', color: '#2a1416' },
-  ],
+  colorScheme: 'light',
+  themeColor: '#7a1f2b',
 }
 
 export default function RootLayout({
@@ -59,6 +56,10 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body className="font-sans antialiased">
+        {/* Keyboard / screen-reader users jump past the header and menus */}
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-100 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:outline-2 focus:outline-primary">
+          Skip to content
+        </a>
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

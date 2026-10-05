@@ -10,7 +10,7 @@ export const CASHIER_SCOPE_LABELS: Record<CashierScope, string> = {
 }
 
 /** Short campus name, e.g. "Bulan Campus" → used in branch names. */
-export function campusShort(campus: string | null | undefined) {
+function campusShort(campus: string | null | undefined) {
   return CAMPUS_LABELS[campus as Campus] ?? "Unknown campus"
 }
 

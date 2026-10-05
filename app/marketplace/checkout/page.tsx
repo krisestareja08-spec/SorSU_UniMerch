@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -19,6 +19,7 @@ import {
   Loader2,
   ShoppingBag,
   AlertTriangle,
+  Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -41,12 +42,20 @@ const PAYMENT_METHODS = [
 
 export default function CheckoutPage() {
   const router = useRouter()
-  const { items, clearCart, total } = useCart()
-  const [payment, setPayment] = useState("gcash")
+  const { items: cartItems, loaded, removeItems } = useCart()
+  // Only the items ticked in the cart are checked out
+  const items = useMemo(() => cartItems.filter((i) => i.selected !== false), [cartItems])
+  const hasPreOrder = items.some((i) => i.badge === "Pre-Order")
+  const [paymentChoice, setPayment] = useState("gcash")
+  // Pre-orders are paid upfront, so only the receipt-backed GCash option is allowed
+  const payment = hasPreOrder ? "gcash" : paymentChoice
+  const [preOrderStores, setPreOrderStores] = useState<{ id: string; name: string; storeHours: string | null; claimDays: number; location: string | null }[]>([])
   const [receipt, setReceipt] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [orderError, setOrderError] = useState<string | null>(null)
+  // Set once the order is placed so emptying the cart doesn't flash "Your cart is empty" before the redirect
+  const [placed, setPlaced] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [buyer, setBuyer] = useState<{ full_name: string; student_employee_id: string; course: string; department: string; contact: string; campus: string; account_status: string } | null>(null)
   // Orders need a real name, a contact number and an account in good standing.
@@ -95,7 +104,26 @@ export default function CheckoutPage() {
     })
   }, [items])
 
-  const subtotal = total
+  useEffect(() => {
+    const ids = [...new Set(items.filter((i) => i.badge === "Pre-Order" && i.sellerId).map((i) => i.sellerId as string))]
+    if (ids.length === 0) return
+    const supabase = createClient()
+    type Row = { id: string; org_name: string | null; pickup_location?: string | null; store_hours?: string | null; claim_window_days?: number | null }
+    const load = async (columns: string) => (await supabase.from("seller_profiles").select(columns).in("id", ids)) as unknown as { data: Row[] | null; error: unknown }
+    // store_hours / claim_window_days arrive with scripts/22_preorder_pickup.sql
+    load("id, org_name, pickup_location, store_hours, claim_window_days").then(async ({ data, error }) => {
+      const rows = error ? (await load("id, org_name")).data : data
+      setPreOrderStores((rows ?? []).map((s) => ({
+        id: s.id,
+        name: s.org_name ?? "Campus Seller",
+        storeHours: s.store_hours ?? null,
+        claimDays: s.claim_window_days ?? 7,
+        location: s.pickup_location ?? null,
+      })))
+    })
+  }, [items])
+
+  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0)
 
   function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -116,7 +144,7 @@ export default function CheckoutPage() {
         const { createClient } = await import("@/lib/supabase/client")
         const supabase = createClient()
         const ext = receipt.name.split(".").pop() || "jpg"
-        const path = `receipts/${Date.now()}.${ext}`
+        const path = `receipts/${crypto.randomUUID()}.${ext}`
         const { error: upErr } = await supabase.storage.from("order-receipts").upload(path, receipt)
         if (!upErr) {
           const { data: urlData } = supabase.storage.from("order-receipts").getPublicUrl(path)
@@ -124,21 +152,40 @@ export default function CheckoutPage() {
         }
       }
       const { orderIds } = await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal })
-      clearCart()
-      router.push(`/marketplace/order-success?orders=${orderIds.join(",")}`)
+      setPlaced(true)
+      removeItems(items.map((i) => i.id))
+      router.replace(`/marketplace/order-success?orders=${orderIds.join(",")}`)
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : "Failed to place order. Please try again.")
       setSubmitting(false)
     }
   }
 
+  if (placed) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <Loader2 className="mx-auto size-10 animate-spin text-primary" />
+        <p className="mt-4 text-sm text-muted-foreground">Order placed! Opening your confirmation…</p>
+      </div>
+    )
+  }
+
+  if (!loaded) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-5 px-4 py-6 sm:px-6">
+        <div className="h-8 w-56 animate-pulse rounded-lg bg-muted" />
+        {[1, 2, 3].map((i) => <div key={i} className="h-40 animate-pulse rounded-2xl bg-muted" />)}
+      </div>
+    )
+  }
+
   if (items.length === 0) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <ShoppingBag className="mx-auto size-12 text-muted-foreground/40" />
-        <p className="mt-4 text-sm text-muted-foreground">Your cart is empty.</p>
+        <p className="mt-4 text-sm text-muted-foreground">{cartItems.length === 0 ? "Your cart is empty." : "No items selected for checkout."}</p>
         <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-          <Link href="/marketplace">Browse Marketplace</Link>
+          <Link href={cartItems.length === 0 ? "/marketplace" : "/marketplace/cart"}>{cartItems.length === 0 ? "Browse Marketplace" : "Back to Cart"}</Link>
         </Button>
       </div>
     )
@@ -220,6 +267,36 @@ export default function CheckoutPage() {
             </div>
           </section>
 
+          {/* Walk-in pre-order terms: upfront payment, store hours, claim deadline */}
+          {hasPreOrder && (
+            <section className="rounded-2xl border border-gold/30 bg-gold/8 p-5 shadow-sm">
+              <h2 className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground sm:text-base">
+                <Clock className="size-4 text-gold" />
+                Walk-In Pre-Order Terms
+              </h2>
+              <div className="mt-2 h-px bg-linear-to-r from-gold/40 to-transparent" />
+              <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                <li><span className="font-medium text-foreground">Full payment is required upfront</span> via GCash, with your receipt uploaded before the order is placed.</li>
+                <li>Claim your order in person during the seller&apos;s store hours, before the deadline below. Bring your I.D. and order number.</li>
+                <li>Orders not claimed by the deadline may be cancelled by the seller.</li>
+              </ul>
+              <div className="mt-4 space-y-3">
+                {preOrderStores.map((s) => (
+                  <div key={s.id} className="rounded-xl border border-border bg-card p-3 text-sm">
+                    <p className="font-semibold text-foreground">{s.name}</p>
+                    <dl className="mt-1.5 space-y-1 text-xs">
+                      <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Store hours</dt>
+                        <dd className="whitespace-pre-line text-foreground">{s.storeHours || "Not posted yet. Message the seller before visiting."}</dd></div>
+                      {s.location && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Pickup at</dt><dd className="whitespace-pre-line text-foreground">{s.location}</dd></div>}
+                      <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Claim within</dt>
+                        <dd className="font-medium text-foreground">{s.claimDays} day{s.claimDays === 1 ? "" : "s"} after placing the order</dd></div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Payment method */}
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground sm:text-base">
@@ -233,6 +310,7 @@ export default function CheckoutPage() {
                   key={id}
                   className={cn(
                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-all",
+                    hasPreOrder && id !== "gcash" && "pointer-events-none opacity-50",
                     payment === id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/30 hover:bg-muted/50",
@@ -244,7 +322,7 @@ export default function CheckoutPage() {
                   )}>
                     {payment === id && <div className="size-2 rounded-full bg-gold" />}
                   </div>
-                  <input type="radio" name="payment" value={id} checked={payment === id} onChange={() => setPayment(id)} className="sr-only" />
+                  <input type="radio" name="payment" value={id} checked={payment === id} disabled={hasPreOrder && id !== "gcash"} onChange={() => setPayment(id)} className="sr-only" />
                   <Icon className={cn("size-4 shrink-0", payment === id ? "text-primary" : "text-muted-foreground")} />
                   <span className={cn("flex-1 text-sm font-medium", payment === id ? "text-foreground" : "text-muted-foreground")}>
                     {label}

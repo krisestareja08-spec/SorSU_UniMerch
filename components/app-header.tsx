@@ -4,6 +4,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { LogOut } from "lucide-react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
@@ -20,6 +21,7 @@ export function AppHeader({
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    resetTheme()
     router.push("/auth/login")
     router.refresh()
   }

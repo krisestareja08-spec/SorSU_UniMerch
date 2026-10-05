@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { ManagementShell } from "@/components/management/management-shell"
 import type { DashboardCtx } from "@/lib/modules"
@@ -11,7 +11,8 @@ import { PageHeading } from "@/components/management/dashboard-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { ShoppingCart, Package, Receipt, Calendar, Check, Loader2, AlertTriangle, Bell, BadgeCheck } from "lucide-react"
+import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle } from "lucide-react"
+import { OrderChat } from "@/components/orders/order-chat"
 
 type Order = {
   id: string; status: string; total: number; payment_method: string
@@ -50,6 +51,9 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
   const [updating, setUpdating] = useState<string | null>(null)
   const [refNums, setRefNums] = useState<Record<string, string>>({})
   const [receiptOpen, setReceiptOpen] = useState<string | null>(null)
+  // Order whose buyer chat is open; ?chat=<order id> comes from a message notification
+  const [chatOpen, setChatOpen] = useState<string | null>(null)
+  const chatParamHandled = useRef(false)
   const [, startTransition] = useTransition()
   // Orders with restricted items need the buyer's I.D. checked before they can be confirmed.
   const [restricted, setRestricted] = useState<Set<string>>(new Set())
@@ -80,6 +84,14 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       map.set(o.id, cur)
     }
     setOrders([...map.values()])
+    const chatParam = new URLSearchParams(window.location.search).get("chat")
+    const chatOrder = chatParam && !chatParamHandled.current ? map.get(chatParam) : undefined
+    if (chatOrder) {
+      chatParamHandled.current = true
+      setChatOpen(chatOrder.id)
+      if (chatOrder.status === "completed" || chatOrder.status === "cancelled") { setTab("history"); setHistoryDays(3650) }
+      setTimeout(() => document.getElementById(`order-${chatOrder.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100)
+    }
     const ids = [...map.keys()]
     const [restrictedIds, buyerInfo] = await Promise.all([
       restrictedOrderIds(ctx.module, ids).catch(() => [] as string[]),
@@ -227,7 +239,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
           </div>
         ) : (
           filteredOrders.map((o) => (
-            <div key={o.id} className="rounded-2xl border border-primary/10 bg-card shadow-sm overflow-hidden">
+            <div key={o.id} id={`order-${o.id}`} className="rounded-2xl border border-primary/10 bg-card shadow-sm overflow-hidden">
               {/* Order header */}
               <div className="flex items-start justify-between gap-3 p-4">
                 <div className="flex-1 min-w-0">
@@ -283,6 +295,15 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                   )}
                 </div>
               )}
+
+              {/* Buyer chat */}
+              <div className="border-t border-border px-4 py-2.5">
+                <button onClick={() => setChatOpen(chatOpen === o.id ? null : o.id)} aria-expanded={chatOpen === o.id}
+                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+                  <MessageCircle className="size-3.5" />{chatOpen === o.id ? "Hide chat" : "Chat with Buyer"}
+                </button>
+                {chatOpen === o.id && <OrderChat orderId={o.id} asStore otherParty={buyers[o.id]?.name || "Buyer"} className="mt-2" />}
+              </div>
 
               {/* Reference number */}
               {tab === "active" && ["pending", "paid", "partially_paid"].includes(o.status) && (

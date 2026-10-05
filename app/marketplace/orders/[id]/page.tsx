@@ -1,9 +1,13 @@
 import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import { ArrowLeft, Receipt } from "lucide-react"
+import { ArrowLeft, MessageCircle, Receipt } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getBuyerOrders } from "@/lib/orders"
-import { OrderHeader, OrderProductCard, OrderTimeline, PickupLocationCard } from "@/components/orders/order-parts"
+import { OrderHeader, OrderProductCard, OrderStepper, OrderTimeline, PickupLocationCard } from "@/components/orders/order-parts"
+import { OrderChat } from "@/components/orders/order-chat"
+import { ReorderButton } from "@/components/orders/reorder-button"
+import { ReviewForm } from "@/components/reviews/review-form"
+import { Button } from "@/components/ui/button"
 import { peso } from "@/lib/order-status"
 
 const PAYMENT_LABELS: Record<string, string> = { gcash: "GCash", cash: "Cash (walk-in)", bank: "Bank transfer" }
@@ -19,6 +23,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const originalTotal = order.items.reduce((sum, i) => sum + i.originalPrice * i.quantity, 0)
   const discount = Math.max(0, originalTotal - order.total)
+  const isPast = order.status === "completed" || order.status === "cancelled"
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -26,9 +31,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         <ArrowLeft className="size-4" /> My Orders
       </Link>
 
-      {/* Header: store + status */}
+      {/* Header: store + status, progress stepper, actions */}
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <OrderHeader order={order} />
+        <div className="mt-5 border-t border-border pt-5">
+          <OrderStepper order={order} />
+        </div>
+        <div className="mt-5 flex flex-wrap items-start gap-2 border-t border-border pt-4">
+          <Button asChild size="sm" className="gap-1.5">
+            <a href="#chat"><MessageCircle className="size-3.5" />Chat with Seller</a>
+          </Button>
+          {isPast && <ReorderButton items={order.items} storeName={order.store?.name ?? "Campus Seller"} />}
+        </div>
       </section>
 
       <div className="mt-4 grid gap-4 md:grid-cols-[1fr_1.2fr]">
@@ -39,13 +53,21 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </section>
 
         <div className="space-y-4">
-          <PickupLocationCard location={order.pickupLocation} notes={order.pickupNotes} />
+          <PickupLocationCard location={order.pickupLocation} notes={order.pickupNotes} storeHours={order.storeHours} deadline={order.pickupDeadline} />
 
           {/* Product summary */}
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className="mb-4 font-serif text-base font-semibold">Items</h2>
             <div className="space-y-4 divide-y divide-border [&>*+*]:pt-4">
-              {order.items.map((item) => <OrderProductCard key={item.id} item={item} />)}
+              {order.items.map((item) => (
+                <div key={item.id} className="space-y-3">
+                  <OrderProductCard item={item} />
+                  {/* Verified reviews: only once the order is completed */}
+                  {order.status === "completed" && item.productId && order.store && (
+                    <ReviewForm orderId={order.id} productId={item.productId} sellerId={order.store.id} productName={item.name} />
+                  )}
+                </div>
+              ))}
             </div>
             <dl className="mt-4 space-y-1 border-t border-border pt-3 text-sm">
               <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal (original prices)</dt><dd>{peso(originalTotal)}</dd></div>
@@ -68,6 +90,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </section>
         </div>
       </div>
+
+      {/* Buyer ↔ seller conversation about this order */}
+      <section id="chat" className="mt-4 scroll-mt-24 rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <h2 className="mb-1 flex items-center gap-2 font-serif text-base font-semibold"><MessageCircle className="size-4 text-primary" />Chat with {order.store?.name ?? "the seller"}</h2>
+        <p className="mb-3 text-xs text-muted-foreground">Questions about payment, pickup or your items? The seller is notified of every message.</p>
+        <OrderChat orderId={order.id} otherParty={order.store?.name ?? "Seller"} />
+      </section>
     </div>
   )
 }

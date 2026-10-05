@@ -4,6 +4,7 @@ import type React from "react"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { PhoneVerification } from "@/components/account/phone-verification"
 import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation } from "@/lib/roles"
 import { validateFullName } from "@/lib/profile-rules"
 import { Button } from "@/components/ui/button"
@@ -111,7 +112,7 @@ export function VerifyForm({
       return
     }
     if (!contact.trim()) {
-      setError("Please enter your contact number.")
+      setError("Please add and verify your contact number.")
       return
     }
     if (!idFile) {
@@ -272,14 +273,9 @@ export function VerifyForm({
 
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="contact">Contact number</Label>
-          <input
-            id="contact"
-            value={contact}
-            onChange={(e) => setContact(e.target.value)}
-            placeholder="e.g. 09XX XXX XXXX"
-            className="h-9 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+          <p className="text-sm font-medium">Contact number</p>
+          {/* Numbers are linked or changed only after an SMS code (scripts/25_phone_verification.sql) */}
+          <PhoneVerification compact onVerified={setContact} />
         </div>
         <div className="flex flex-col gap-2">
           <Label htmlFor="birthday">Birthday (optional)</Label>
