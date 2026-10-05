@@ -57,9 +57,9 @@ export default async function VerifyPage() {
 
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
         <Button asChild variant="ghost" size="sm" className="mb-4 -ml-2">
-          <Link href="/marketplace/account">
+          <Link href="/marketplace/settings#verification">
             <ArrowLeft className="size-4" />
-            Back to profile
+            Back to settings
           </Link>
         </Button>
 

@@ -5,6 +5,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -27,7 +28,7 @@ export function LoginForm() {
     setLoading(true)
     const supabase = createClient()
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     })
@@ -47,6 +48,7 @@ export function LoginForm() {
       setLoading(false)
       return
     }
+    resetTheme()
 
     // "/" sends dashboard members (e.g. the Verification Admin) to their dashboard, others to the marketplace.
     router.push("/")

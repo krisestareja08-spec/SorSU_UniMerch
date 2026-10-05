@@ -4,22 +4,24 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
-import { AlertTriangle, BadgeCheck, Clock, Lock, ShieldCheck, X, PackageSearch, Settings, LogOut, ChevronRight, Edit2, Check, Loader2 } from "lucide-react"
+import { AlertTriangle, Lock, PackageSearch, Settings, LogOut, ChevronRight, Edit2, Check, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { cn } from "@/lib/utils"
+import { resetTheme } from "@/lib/theme"
+import { PHONE_OTP_ENABLED } from "@/lib/features"
 import { VerifiedBadge } from "@/components/verified-badge"
-import { VerifyForm } from "@/components/verify/verify-form"
-import { CAMPUS_LABELS, type Affiliation, type Campus } from "@/lib/roles"
+import { PhoneVerification } from "@/components/account/phone-verification"
+import { Bone, LoadingRegion } from "@/components/skeletons"
+import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { STRICT_FIELD_LABELS, validateFullName } from "@/lib/profile-rules"
 import { saveMyProfile } from "./actions"
 
 type Profile = { full_name: string; affiliation: string; student_employee_id: string; course: string; department: string; campus: string; contact: string; birthday: string; email: string; avatar_url: string | null; account_status: string }
-type EditableKey = "full_name" | "student_employee_id" | "course" | "department" | "campus" | "contact" | "birthday"
+type EditableKey = "full_name" | "student_employee_id" | "course" | "department" | "campus" | "birthday"
 type VerifyInfo = { verified: boolean; status: string | null; reason: string | null }
-type VerifyDefaults = { userId: string; campus: string | null }
 
 export default function AccountPage() {
   const router = useRouter()
@@ -27,12 +29,7 @@ export default function AccountPage() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState<Partial<Profile>>({})
-  const [tab, setTab] = useState<"profile" | "security">("profile")
-  const [newPassword, setNewPassword] = useState("")
-  const [pwMsg, setPwMsg] = useState("")
   const [verify, setVerify] = useState<VerifyInfo>({ verified: false, status: null, reason: null })
-  const [verifyDefaults, setVerifyDefaults] = useState<VerifyDefaults | null>(null)
-  const [applyOpen, setApplyOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saveNotice, setSaveNotice] = useState<string | null>(null)
   const [confirmFields, setConfirmFields] = useState<string[] | null>(null)
@@ -45,7 +42,6 @@ export default function AccountPage() {
       // Details typed at sign-up live in auth metadata until the profile is saved once.
       const meta = (user.user_metadata ?? {}) as Record<string, unknown>
       const str = (v: unknown) => (typeof v === "string" ? v : "")
-      setVerifyDefaults({ userId: user.id, campus: data?.campus ?? null })
       const { data: vr } = await supabase.from("verification_requests").select("status, review_reason").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1).maybeSingle()
       setVerify({ verified: !!data?.is_identity_verified, status: vr?.status ?? null, reason: vr?.review_reason ?? null })
       setProfile({
@@ -97,22 +93,26 @@ export default function AccountPage() {
     setEditing(false)
   }
 
-  async function handlePasswordUpdate() {
-    if (newPassword.length < 8) { setPwMsg("Password must be at least 8 characters."); return }
-    const supabase = createClient()
-    const { error } = await supabase.auth.updateUser({ password: newPassword })
-    setPwMsg(error ? error.message : "Password updated successfully.")
-    if (!error) setNewPassword("")
-  }
-
   async function handleSignOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    resetTheme()
     router.push("/auth/login")
     router.refresh()
   }
 
   const initials = (profile?.full_name ?? "U").split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()
+
+  if (!profile) {
+    return (
+      <LoadingRegion label="Loading your account" className="mx-auto max-w-2xl space-y-3 px-4 py-6 sm:px-6">
+        <Bone className="h-28 w-full rounded-2xl" />
+        <Bone className="h-56 w-full rounded-xl" />
+        <Bone className="h-16 w-full rounded-xl" />
+        <Bone className="h-16 w-full rounded-xl" />
+      </LoadingRegion>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6">
@@ -127,22 +127,12 @@ export default function AccountPage() {
           {profile?.department && <p className="mt-1 text-sm text-primary-foreground/70">{profile.department}</p>}
           <p className="mt-0.5 text-xs text-gold/80">{profile?.email}</p>
         </div>
-        <button onClick={() => { setForm(profile ?? {}); setEditing(true); setTab("profile"); setSaveNotice(null) }} className="shrink-0 rounded-lg p-2 text-primary-foreground/70 hover:bg-primary-foreground/10">
+        <button onClick={() => { setForm(profile ?? {}); setEditing(true); setSaveNotice(null) }} className="shrink-0 rounded-lg p-2 text-primary-foreground/70 hover:bg-primary-foreground/10">
           <Edit2 className="size-4" />
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-4 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
-        {(["profile", "security"] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={cn("flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors", tab === t ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}>
-            {t === "profile" ? "Profile" : "Account & Security"}
-          </button>
-        ))}
-      </div>
-
-      {tab === "profile" ? (
-        editing ? (
+      {editing ? (
           <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
             <h2 className="font-serif text-base font-semibold">Edit Profile</h2>
             {verify.verified ? (
@@ -164,7 +154,6 @@ export default function AccountPage() {
               { label: "Student / Employee I.D. number", key: "student_employee_id", placeholder: "e.g. 20210123" },
               { label: "Course / program", key: "course", placeholder: "e.g. BS Information Technology" },
               { label: "Department / college", key: "department", placeholder: "e.g. CICT" },
-              { label: "Contact number", key: "contact", placeholder: "09XX XXX XXXX" },
             ] as { label: string; key: EditableKey; placeholder: string }[]).map(({ label, key, placeholder }) => {
               const strict = key in STRICT_FIELD_LABELS
               return (
@@ -186,6 +175,11 @@ export default function AccountPage() {
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
+              <p className="text-sm font-medium">Contact number</p>
+              {PHONE_OTP_ENABLED && <p className="text-xs text-muted-foreground">Changing your number requires a code sent to it by SMS.</p>}
+              <PhoneVerification compact onVerified={(contact) => { setProfile((p) => (p ? { ...p, contact } : p)); setForm((f) => ({ ...f, contact })) }} />
+            </div>
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="birthday">Birthday</Label>
               <Input id="birthday" type="date" value={form.birthday ?? ""} onChange={(e) => setForm((f) => ({ ...f, birthday: e.target.value }))} />
             </div>
@@ -201,10 +195,9 @@ export default function AccountPage() {
             {saveNotice && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">{saveNotice}</p>}
             {profile && profile.account_status !== "active" && <AccountStatusNotice status={profile.account_status} />}
             {profile && <PersonalInfoCard profile={profile} verified={verify.verified} onEdit={() => { setForm(profile); setEditing(true); setSaveNotice(null) }} />}
-            <VerificationCard info={verify} onApply={() => setApplyOpen(true)} />
             {[
               { label: "My Orders", icon: PackageSearch, href: "/marketplace/orders", desc: "Track and review past orders" },
-              { label: "Settings", icon: Settings, href: "/marketplace/settings", desc: "Preferences and notifications" },
+              { label: "Settings", icon: Settings, href: "/marketplace/settings", desc: "Account & security, verification, notifications and appearance" },
             ].map(({ label, icon: Icon, href, desc }) => (
               <Link key={label} href={href} className="flex items-center gap-4 rounded-xl border border-primary/10 bg-card p-4 shadow-sm transition-all hover:border-primary/25 hover:bg-muted/40 hover:shadow-md active:scale-[0.99]">
                 <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/8"><Icon className="size-4 text-primary" /></div>
@@ -218,17 +211,6 @@ export default function AccountPage() {
               <ChevronRight className="size-4 shrink-0 text-muted-foreground/50" />
             </button>
           </div>
-        )
-      ) : (
-        <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-          <h2 className="font-serif text-base font-semibold">Change Password</h2>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-pw">New Password</Label>
-            <Input id="new-pw" type="password" placeholder="At least 8 characters" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-          </div>
-          {pwMsg && <p className={cn("text-xs", pwMsg.includes("success") ? "text-emerald-600" : "text-destructive")}>{pwMsg}</p>}
-          <Button onClick={handlePasswordUpdate} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">Update Password</Button>
-        </div>
       )}
 
       {confirmFields && (
@@ -247,45 +229,6 @@ export default function AccountPage() {
                 {saving && <Loader2 className="size-4 animate-spin" />}Save &amp; re-verify
               </Button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {applyOpen && profile && verifyDefaults && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4" onClick={() => setApplyOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="apply-title"
-            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-card p-5 shadow-xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between gap-3">
-              <div>
-                <h2 id="apply-title" className="font-serif text-lg font-semibold">Apply for verification</h2>
-                <p className="text-xs text-muted-foreground">
-                  Review your details, then upload your I.D. (and COR if you are a student). The Verification Admin will approve or decline your request.
-                </p>
-              </div>
-              <button onClick={() => setApplyOpen(false)} aria-label="Close" className="rounded-lg p-1 text-muted-foreground hover:bg-muted">
-                <X className="size-4" />
-              </button>
-            </div>
-            <VerifyForm
-              userId={verifyDefaults.userId}
-              defaultAffiliation={(profile.affiliation || "student") as Affiliation}
-              defaultFullName={profile.full_name}
-              defaultStudentId={profile.student_employee_id}
-              defaultDepartment={profile.department}
-              defaultCourse={profile.course}
-              defaultCampus={profile.campus || verifyDefaults.campus}
-              defaultContact={profile.contact}
-              defaultBirthday={profile.birthday}
-              onSubmitted={() => {
-                setApplyOpen(false)
-                setVerify((v) => ({ ...v, status: "pending", reason: null }))
-              }}
-            />
           </div>
         </div>
       )}
@@ -333,34 +276,6 @@ function AccountStatusNotice({ status }: { status: string }) {
   return (
     <div className="flex gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
       <AlertTriangle className="mt-0.5 size-4 shrink-0" />{text[status] ?? `Account status: ${status}`}
-    </div>
-  )
-}
-
-function VerificationCard({ info, onApply }: { info: VerifyInfo; onApply: () => void }) {
-  const pending = info.status === "pending" || info.status === "under_review"
-  const redo = info.status === "rejected" || info.status === "needs_resubmission"
-  const Icon = info.verified ? BadgeCheck : pending ? Clock : ShieldCheck
-  const title = info.verified ? "Verified" : pending ? "Verification under review" : redo ? "Verification not approved" : "Verify your identity"
-  const desc = info.verified
-    ? "Your affiliation is confirmed. Restricted items for your role are unlocked."
-    : pending
-      ? "The Verification Admin is reviewing your documents."
-      : redo
-        ? `You remain a guest. ${info.reason ? `Reviewer note: ${info.reason}` : "You can reapply with updated documents."}`
-        : "Students: upload your I.D. and COR. Faculty & staff: upload your I.D. to unlock restricted items."
-  return (
-    <div className="flex items-center gap-4 rounded-xl border border-primary/20 bg-primary/5 p-4">
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Icon className="size-4 text-primary" /></div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{desc}</p>
-      </div>
-      {!info.verified && !pending && (
-        <Button size="sm" onClick={onApply} className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90">
-          {redo ? "Reapply" : "Apply for verification"}
-        </Button>
-      )}
     </div>
   )
 }

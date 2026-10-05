@@ -43,7 +43,7 @@ export default async function SupplyOfficeOrdersPage() {
             <div key={l as string} className={`rounded-2xl border p-4 ${c}`}><p className="text-xs text-muted-foreground">{l}</p><p className="font-serif text-2xl font-bold mt-0.5">{v}</p></div>
           ))}
         </div>
-        {error && <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"><AlertTriangle className="size-4" />Run scripts/migration.sql first.</div>}
+        {error && <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"><AlertTriangle className="size-4" />Run scripts/setup_all.sql in Supabase first.</div>}
         <Card className="border-primary/10 overflow-hidden">
           <div className="flex items-center gap-2 border-b border-border p-4 font-serif text-base font-semibold"><ShoppingCart className="size-4 text-primary" />Order Queue (FIFO)</div>
           {rows.length === 0 ? <p className="p-8 text-center text-sm text-muted-foreground">No orders yet.</p> : (

@@ -119,40 +119,20 @@
   --sidebar-ring: oklch(0.8 0.13 80);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
-    color-scheme: dark;
-    --background: oklch(0.18 0.02 25);
-    --foreground: oklch(0.96 0.01 80);
-    --card: oklch(0.22 0.025 25);
-    --card-foreground: oklch(0.96 0.01 80);
-    --popover: oklch(0.22 0.025 25);
-    --popover-foreground: oklch(0.96 0.01 80);
-    --primary: oklch(0.58 0.16 22);
-    --primary-foreground: oklch(0.98 0.01 80);
-    --secondary: oklch(0.28 0.03 30);
-    --secondary-foreground: oklch(0.96 0.01 80);
-    --muted: oklch(0.27 0.02 30);
-    --muted-foreground: oklch(0.74 0.03 70);
-    --accent: oklch(0.8 0.13 80);
-    --accent-foreground: oklch(0.25 0.06 40);
-    --destructive: oklch(0.62 0.2 25);
-    --border: oklch(1 0 0 / 12%);
-    --input: oklch(1 0 0 / 16%);
-    --ring: oklch(0.58 0.16 22);
-    --chart-1: oklch(0.58 0.16 22);
-    --chart-2: oklch(0.8 0.13 80);
-    --chart-3: oklch(0.6 0.09 40);
-    --chart-4: oklch(0.68 0.11 60);
-    --chart-5: oklch(0.45 0.07 30);
-    --sidebar: oklch(0.16 0.025 25);
-    --sidebar-foreground: oklch(0.96 0.01 80);
-    --sidebar-primary: oklch(0.8 0.13 80);
-    --sidebar-primary-foreground: oklch(0.25 0.06 40);
-    --sidebar-accent: oklch(0.26 0.03 25);
-    --sidebar-accent-foreground: oklch(0.96 0.01 80);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.8 0.13 80);
+/* Accessibility: gold text on light surfaces is ~2.6:1 contrast (WCAG AA needs 4.5:1), so in light
+   mode it uses a darker gold ink — except on maroon / gradient / photo backgrounds, where bright
+   gold already contrasts well. Unlayered so it wins over the text-gold utility. */
+:root { --gold-ink: oklch(0.5 0.11 70); }
+:root:not(.dark) .text-gold:not(:is(.bg-primary, .bg-primary *, [class*="from-primary"] *, [class*="bg-linear"] *, [class*="bg-black"], [class*="bg-black"] *)) {
+  color: var(--gold-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

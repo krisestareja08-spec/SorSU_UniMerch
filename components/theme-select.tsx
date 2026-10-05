@@ -1,49 +1,36 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { THEME_STORAGE_KEY as STORAGE_KEY, type ThemeChoice } from "@/lib/theme"
+import { useSyncExternalStore } from "react"
+import { Moon, Sun } from "lucide-react"
+import { getTheme, setTheme, subscribeTheme } from "@/lib/theme"
+import { cn } from "@/lib/utils"
 
-/** Applied before paint by THEME_SCRIPT in the root layout, and on every change here. */
-function applyTheme(choice: ThemeChoice) {
-  const dark = choice === "dark" || (choice === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)
-  const root = document.documentElement
-  root.classList.toggle("dark", dark)
-  root.classList.toggle("light", !dark)
+/** Current theme; renders "light" on the server and before hydration (the default). */
+function useTheme() {
+  return useSyncExternalStore(subscribeTheme, getTheme, () => "light" as const)
 }
 
-export function ThemeSelect() {
-  const [choice, setChoice] = useState<ThemeChoice>("system")
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      // localStorage is only readable after mount, so state can't be initialised from it.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (saved === "light" || saved === "dark" || saved === "system") setChoice(saved)
-    } catch {}
-  }, [])
-
-  // Follow the device while on "system".
-  useEffect(() => {
-    if (choice !== "system") return
-    const mq = window.matchMedia("(prefers-color-scheme: dark)")
-    const onChange = () => applyTheme("system")
-    mq.addEventListener("change", onChange)
-    return () => mq.removeEventListener("change", onChange)
-  }, [choice])
-
-  function onSelect(next: ThemeChoice) {
-    setChoice(next)
-    try { localStorage.setItem(STORAGE_KEY, next) } catch {}
-    applyTheme(next)
-  }
-
+/** Sun / moon icon button for headers. */
+export function ThemeToggle({ tone = "light", className }: { tone?: "light" | "dark"; className?: string }) {
+  const dark = useTheme() === "dark"
   return (
-    <select value={choice} onChange={(e) => onSelect(e.target.value as ThemeChoice)} aria-label="Theme"
-      className="h-9 shrink-0 rounded-lg border border-input bg-background px-3 text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20">
-      <option value="system">System</option>
-      <option value="light">Light</option>
-      <option value="dark">Dark</option>
-    </select>
+    <button type="button" onClick={() => setTheme(dark ? "light" : "dark")}
+      aria-label={dark ? "Switch to light mode" : "Switch to dark mode"} aria-pressed={dark} title={dark ? "Light mode" : "Dark mode"}
+      className={cn("rounded-lg p-2 transition-colors active:scale-95",
+        tone === "dark" ? "text-primary-foreground/80 hover:bg-primary-foreground/10" : "text-muted-foreground hover:bg-muted hover:text-foreground", className)}>
+      {dark ? <Sun className="size-5" /> : <Moon className="size-5" />}
+    </button>
+  )
+}
+
+/** On/off switch for the Settings page. */
+export function ThemeSwitch() {
+  const dark = useTheme() === "dark"
+  return (
+    <label className="relative shrink-0 cursor-pointer">
+      <input type="checkbox" role="switch" checked={dark} onChange={(e) => setTheme(e.target.checked ? "dark" : "light")} className="peer sr-only" aria-label="Dark mode" />
+      <div className="h-6 w-11 rounded-full bg-muted transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary/30" />
+      <div className="absolute left-0.5 top-0.5 size-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5" />
+    </label>
   )
 }

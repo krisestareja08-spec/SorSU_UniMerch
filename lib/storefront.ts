@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/components/marketplace/product-card"
-import { ACCENTS, DEFAULT_THEME, storefrontHref, type StorefrontTheme } from "@/lib/storefront-theme"
+import { ACCENTS, DEFAULT_THEME, type StorefrontTheme } from "@/lib/storefront-theme"
 
-export { ACCENTS, DEFAULT_THEME, storefrontHref } from "@/lib/storefront-theme"
+export { ACCENTS, storefrontHref } from "@/lib/storefront-theme"
 export type { StorefrontAccent, StorefrontLayout, StorefrontTheme } from "@/lib/storefront-theme"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -34,7 +34,7 @@ export type Storefront = {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-export function isSellerId(value: string) {
+function isSellerId(value: string) {
   return UUID.test(value)
 }
 

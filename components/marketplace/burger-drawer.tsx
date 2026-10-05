@@ -5,10 +5,12 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useRouter } from "next/navigation"
 import {
-  Home, LayoutGrid, PackageSearch, Settings, HelpCircle, X, ChevronRight, Users, ShieldCheck, LogOut, Building2,
+  Home, LayoutGrid, PackageSearch, MessageCircle, Bell, Moon, Settings, HelpCircle, X, ChevronRight, Users, LogOut, Building2,
 } from "lucide-react"
+import { ThemeSwitch } from "@/components/theme-select"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
 
 type NavItem = { href: string; label: string; icon: React.ElementType }
@@ -17,8 +19,10 @@ const USER_NAV: NavItem[] = [
   { href: "/marketplace",            label: "Marketplace",  icon: Home },
   { href: "/marketplace/categories", label: "Categories",   icon: LayoutGrid },
   { href: "/marketplace/orders",     label: "My Orders",    icon: PackageSearch },
+  { href: "/marketplace/messages",   label: "Messages",     icon: MessageCircle },
+  { href: "/marketplace/notifications", label: "Notifications", icon: Bell },
   { href: "/marketplace/account",    label: "My Account",   icon: Users },
-  { href: "/verify",                 label: "Verification", icon: ShieldCheck },
+  // Account & Security and Verification live under Settings
   { href: "/marketplace/settings",   label: "Settings",     icon: Settings },
   { href: "/marketplace/help",       label: "Help Centre",  icon: HelpCircle },
 ]
@@ -39,6 +43,7 @@ export function BurgerDrawer({
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    resetTheme()
     router.push("/auth/login")
     router.refresh()
   }
@@ -86,6 +91,11 @@ export function BurgerDrawer({
               </Link>
             )
           })}
+          <div className="flex items-center gap-3 px-5 py-3 text-sm text-primary-foreground/80">
+            <Moon className="size-5 shrink-0 text-gold/60" />
+            <span className="flex-1 font-medium">Dark mode</span>
+            <ThemeSwitch />
+          </div>
           {dashboards.length > 0 && (
             <>
               <p className="px-5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/45">My dashboards</p>

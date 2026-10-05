@@ -7,6 +7,9 @@ import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ProductVariantActions } from "@/components/marketplace/product-variant-actions"
 import { SellerVisitBar } from "@/components/storefront/seller-visit-bar"
+import { MessageSellerButton } from "@/components/messages/message-seller-button"
+import { ProductReviews } from "@/components/reviews/product-reviews"
+import { Stars } from "@/components/reviews/stars"
 import { SellerProductCarousel } from "@/components/storefront/seller-product-carousel"
 import { getStorefront, storefrontHref } from "@/lib/storefront"
 
@@ -39,6 +42,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   // Buyers pay the listed price; the logo royalty is deducted from the seller's earnings and goes to BAO.
   const displayPrice = Number(product.price)
   const variations: string[] = Array.isArray(product.variations) ? product.variations : []
+  // rating_avg / rating_count arrive with scripts/26; a separate query so older databases still load the page
+  const { data: rating } = await supabase.from("products").select("rating_avg, rating_count").eq("id", product.id).maybeSingle()
 
   const { data: relatedRows } = await supabase
     .from("products")
@@ -81,6 +86,13 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
               {product.badge}
             </span>
             <h1 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground">{product.name}</h1>
+            {rating && rating.rating_count > 0 && (
+              <a href="#reviews" className="mt-1 inline-flex items-center gap-1.5 text-sm hover:underline">
+                <Stars value={Number(rating.rating_avg)} size="xs" />
+                <span className="font-medium">{Number(rating.rating_avg).toFixed(1)}</span>
+                <span className="text-muted-foreground">({rating.rating_count} review{rating.rating_count === 1 ? "" : "s"})</span>
+              </a>
+            )}
             <Link href={sellerHref} className="mt-1 inline-block text-sm text-muted-foreground hover:text-primary hover:underline">
               Sold by {sellerName}
             </Link>
@@ -119,8 +131,11 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
             product={{ id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id, price: displayPrice, image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out" }}
             variations={variations}
           />
+          <MessageSellerButton productId={product.id} />
         </div>
       </div>
+
+      <ProductReviews productId={product.id} />
 
       {storefront && <SellerVisitBar storefront={storefront} />}
 

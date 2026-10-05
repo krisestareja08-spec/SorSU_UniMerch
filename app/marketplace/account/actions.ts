@@ -41,13 +41,13 @@ export async function saveMyProfile(input: ProfileInput, confirmReverification =
     course: normalizeName(input.course ?? ""),
     department: normalizeName(input.department ?? ""),
     campus: (input.campus ?? "").trim(),
-    contact: (input.contact ?? "").replace(/[\s-]/g, ""),
+    // The number only changes through SMS verification (components/account/phone-verification.tsx)
+    contact: current?.contact ?? "",
     birthday: (input.birthday ?? "").trim(),
   }
   const nameError = validateFullName(next.full_name)
   if (nameError) return { ok: false, error: nameError }
   if (next.campus && !(next.campus in CAMPUS_LABELS)) return { ok: false, error: "Select your campus from the list." }
-  if (next.contact && !/^(\+?63|0)9\d{9}$/.test(next.contact)) return { ok: false, error: "Enter a valid mobile number, e.g. 09XX XXX XXXX." }
   if (next.student_employee_id && !/^[0-9][0-9-]{3,19}$/.test(next.student_employee_id)) return { ok: false, error: "Your I.D. number may only contain digits and hyphens." }
   if (next.birthday && Number.isNaN(Date.parse(next.birthday))) return { ok: false, error: "Enter a valid birthday." }
 

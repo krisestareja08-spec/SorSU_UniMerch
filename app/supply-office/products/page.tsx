@@ -46,7 +46,7 @@ export default async function SupplyOfficeProductsPage({ searchParams }: { searc
           </Card>
         ))}
       </div>
-      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"><AlertTriangle className="size-4 shrink-0" />Run scripts/migration.sql first.</div>}
+      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700"><AlertTriangle className="size-4 shrink-0" />Run scripts/setup_all.sql in Supabase first.</div>}
       <div className="mt-6">
         {!error && items.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/30 py-16 text-center">

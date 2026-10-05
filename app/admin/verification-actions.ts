@@ -138,34 +138,6 @@ export async function updateSellerStatus(formData: FormData) {
   revalidatePath("/admin", "layout")
 }
 
-export async function decideIdentityChangeRequest(formData: FormData) {
-  const requestId = formData.get("request_id") as string
-  const decision = formData.get("decision") as string
-  if (!requestId || !["approved", "rejected"].includes(decision)) {
-    throw new Error("Invalid decision")
-  }
-
-  const { supabase, actorId } = await requireAdminActor("users")
-
-  const { data: request, error: fetchError } = await supabase
-    .from("identity_change_requests")
-    .select("user_id, field, requested_value")
-    .eq("id", requestId)
-    .maybeSingle()
-  if (fetchError || !request) throw new Error(fetchError?.message ?? "Request not found")
-
-  const { error } = await supabase.from("identity_change_requests").update({ status: decision }).eq("id", requestId)
-  if (error) throw new Error(error.message)
-
-  if (decision === "approved") {
-    await supabase.from("profiles").update({ [request.field]: request.requested_value }).eq("id", request.user_id)
-  }
-
-  await logAudit(supabase, actorId, { userId: request.user_id, action: `identity_change_${decision}`, reason: `${request.field} -> ${request.requested_value}` })
-
-  revalidatePath("/admin", "layout")
-}
-
 /** Resolve a seller's report of a (dummy) buyer account: dismiss, suspend or ban. */
 export async function resolveAccountReport(formData: FormData) {
   const reportId = formData.get("report_id") as string

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Script from "next/script"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 
 // Minimal shape of the Google Identity Services API we use.
 type GoogleIdCredentialResponse = { credential: string }
@@ -71,6 +72,7 @@ export function GoogleOneTap() {
             nonce: rawNonce,
           })
           if (!error) {
+            resetTheme()
             router.push("/")
             router.refresh()
           }

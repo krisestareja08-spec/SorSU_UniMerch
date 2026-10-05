@@ -25,6 +25,9 @@ export type BuyerOrder = {
   store: { id: string; name: string; logoUrl: string | null } | null
   pickupLocation: string | null
   pickupNotes: string | null
+  storeHours: string | null
+  /** Claim-by time for pre-orders; null when the order has no deadline. */
+  pickupDeadline: string | null
   items: BuyerOrderItem[]
   history: { status: string; created_at: string }[]
 }
@@ -72,6 +75,12 @@ export async function getBuyerOrders(supabase: Supabase, opts: { ids?: string[];
   }
   const storeById = new Map(((stores ?? []) as { id: string; org_name: string; logo_url?: string | null; pickup_location?: string | null; pickup_notes?: string | null }[]).map((s) => [s.id, s]))
 
+  // store_hours / pickup_deadline arrive with scripts/22_preorder_pickup.sql; errors just leave them empty.
+  const { data: hourRows } = storeIds.length ? await supabase.from("seller_profiles").select("id, store_hours").in("id", storeIds) : { data: null }
+  const hoursByStore = new Map(((hourRows ?? []) as { id: string; store_hours: string | null }[]).map((r) => [r.id, r.store_hours]))
+  const { data: deadlineRows } = await supabase.from("orders").select("id, pickup_deadline").in("id", rows.map((o) => o.id))
+  const deadlineByOrder = new Map(((deadlineRows ?? []) as { id: string; pickup_deadline: string | null }[]).map((r) => [r.id, r.pickup_deadline]))
+
   const { data: historyRows } = await supabase
     .from("order_status_history")
     .select("order_id, status, created_at")
@@ -97,6 +106,8 @@ export async function getBuyerOrders(supabase: Supabase, opts: { ids?: string[];
       // Snapshot taken at checkout; falls back to the store's current pickup location.
       pickupLocation: o.pickup_location ?? store?.pickup_location ?? null,
       pickupNotes: o.pickup_notes ?? store?.pickup_notes ?? null,
+      storeHours: storeId ? hoursByStore.get(storeId) ?? null : null,
+      pickupDeadline: deadlineByOrder.get(o.id) ?? null,
       items: o.order_items.map((i) => {
         const product = Array.isArray(i.products) ? i.products[0] : i.products
         return {

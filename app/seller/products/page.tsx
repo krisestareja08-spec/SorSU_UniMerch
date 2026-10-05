@@ -64,7 +64,7 @@ export default async function SellerProductsPage({ searchParams }: { searchParam
       {error && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
           <AlertTriangle className="size-4 shrink-0" />
-          Could not load products — run the database migration (scripts/migration.sql) first.
+          Could not load products — run scripts/setup_all.sql in Supabase first.
         </div>
       )}
 

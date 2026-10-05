@@ -5,11 +5,13 @@ import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
+import { resetTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Menu, X, LogOut, Store, ChevronsUpDown, Check, Crown } from "lucide-react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
+import { LiveAlerts } from "@/components/notifications/live-alerts"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
   type DashboardCtx, type ModulePage,
@@ -44,6 +46,7 @@ export function ManagementShell({
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
+    resetTheme()
     router.push("/auth/login")
     router.refresh()
   }
@@ -207,10 +210,11 @@ export function ManagementShell({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-24 lg:pb-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-24 lg:pb-8 focus:outline-none">
           {children}
         </main>
       </div>
+      <LiveAlerts />
 
       {/* ── Mobile bottom tab nav ─────────────────────────────────────────────── */}
       <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card shadow-[0_-2px_16px_rgba(0,0,0,0.07)] lg:hidden">

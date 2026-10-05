@@ -3,9 +3,11 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
-import { Search, MessageCircle, ShoppingCart, Menu, LayoutDashboard, BadgeCheck } from "lucide-react"
+import { Search, ShoppingCart, Menu, LayoutDashboard, BadgeCheck } from "lucide-react"
 import { BurgerDrawer } from "./burger-drawer"
 import { NotificationBell } from "@/components/notifications/notification-bell"
+import { MessagesLink } from "@/components/messages/messages-link"
+import { ThemeToggle } from "@/components/theme-select"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
@@ -68,13 +70,14 @@ export function MarketplaceHeader({
           {/* Right icons */}
           <div className="flex shrink-0 items-center gap-1">
 
+            {/* Dark mode — on phones it lives in the menu drawer */}
+            <ThemeToggle tone="dark" className="hidden sm:block" />
+
             {/* Notifications */}
             <NotificationBell tone="dark" />
 
             {/* Messages */}
-            <Link href="/marketplace/messages" className="hidden rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 sm:block" aria-label="Messages">
-              <MessageCircle className="size-5" />
-            </Link>
+            <MessagesLink />
 
             {/* Cart */}
             <Link href="/marketplace/cart" className="relative rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Cart">

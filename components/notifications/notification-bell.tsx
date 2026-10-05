@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Bell, CheckCheck, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { NOTIFICATION_EVENT } from "./live-alerts"
 
 type Notification = { id: string; kind: string; title: string; body: string | null; href: string | null; read_at: string | null; created_at: string }
 
@@ -54,7 +55,8 @@ export function NotificationBell({ tone = "light" }: { tone?: "light" | "dark" }
     const id = setInterval(load, POLL_MS)
     const onFocus = () => load()
     window.addEventListener("focus", onFocus)
-    return () => { clearTimeout(first); clearInterval(id); window.removeEventListener("focus", onFocus) }
+    window.addEventListener(NOTIFICATION_EVENT, onFocus) // LiveAlerts saw a new one arrive
+    return () => { clearTimeout(first); clearInterval(id); window.removeEventListener("focus", onFocus); window.removeEventListener(NOTIFICATION_EVENT, onFocus) }
   }, [load])
 
   useEffect(() => {
@@ -135,6 +137,10 @@ export function NotificationBell({ tone = "light" }: { tone?: "light" | "dark" }
               </li>
             ))}
           </ul>
+          <button type="button" onClick={() => { setOpen(false); router.push("/marketplace/notifications") }}
+            className="block w-full border-t border-border px-4 py-2.5 text-center text-xs font-medium text-primary hover:bg-muted/50">
+            View all notifications
+          </button>
         </div>
       )}
     </div>
