@@ -3,21 +3,22 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Home, Store, ShoppingCart, Tag, Users, LayoutDashboard,
+  Home, Store, ShoppingCart, Package, Users, LayoutDashboard,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { dashboardHref, type DashboardSummary } from "@/lib/modules"
+import { useCart } from "@/lib/cart-context"
 
 type Tab = { label: string; href: string; icon: LucideIcon; highlight?: boolean }
 
 /** Same tabs for every user; a Dashboards tab appears only for people assigned to a dashboard. */
 function buildTabs(dashboards: DashboardSummary[]): Tab[] {
   const tabs: Tab[] = [
-    { label: "Market",   href: "/marketplace",            icon: Home },
-    { label: "Browse",   href: "/marketplace/categories", icon: Tag },
-    { label: "Cart",     href: "/marketplace/cart",       icon: ShoppingCart, highlight: true },
-    { label: "Orders",   href: "/marketplace/orders",     icon: Store },
+    { label: "Stores",   href: "/marketplace/stores",     icon: Store },
+    { label: "Cart",     href: "/marketplace/cart",       icon: ShoppingCart },
+    { label: "Market",   href: "/marketplace",            icon: Home, highlight: true },
+    { label: "Orders",   href: "/marketplace/orders",     icon: Package },
     { label: "Account",  href: "/marketplace/account",    icon: Users },
   ]
   if (dashboards.length > 0) {
@@ -29,6 +30,7 @@ function buildTabs(dashboards: DashboardSummary[]): Tab[] {
 export function MarketplaceBottomTabs({ dashboards = [] }: { dashboards?: DashboardSummary[] }) {
   const pathname = usePathname()
   const tabs = buildTabs(dashboards)
+  const { itemCount } = useCart()
 
   function isActive(href: string) {
     if (href === "/marketplace") return pathname === "/marketplace"
@@ -57,7 +59,14 @@ export function MarketplaceBottomTabs({ dashboards = [] }: { dashboards?: Dashbo
                   <Icon className="size-5 text-primary-foreground" />
                 </span>
               ) : (
-                <Icon className="size-5" />
+                <span className="relative">
+                  <Icon className="size-5" />
+                  {tab.href === "/marketplace/cart" && itemCount > 0 && (
+                    <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-bold text-primary">
+                      {itemCount > 99 ? "99+" : itemCount}
+                    </span>
+                  )}
+                </span>
               )}
               <span className={cn(tab.highlight && "mt-1")}>{tab.label}</span>
             </Link>

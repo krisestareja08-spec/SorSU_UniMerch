@@ -3,29 +3,32 @@ import Image from "next/image"
 import { Package, Star, Store } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { storefrontHref } from "@/lib/storefront-theme"
+import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 
 type StoreRow = {
   id: string
   org_name: string
   category: string | null
+  campus?: string | null
   logo_url?: string | null
   rating?: number | null
   rating_count?: number | null
 }
 
-/** "Browse stores" — every active store as a card; clicking opens that seller's storefront. */
-export async function StoreDirectory({ title = "Browse Stores" }: { title?: string }) {
+/** "Browse stores" — every active store as a card; clicking opens that seller's storefront. Optionally one campus only. */
+export async function StoreDirectory({ title = "Browse Stores", campus }: { title?: string; campus?: Campus }) {
   const supabase = await createClient()
 
-  const full = await supabase
+  let full = supabase
     .from("seller_profiles")
-    .select("id, org_name, category, logo_url, rating, rating_count")
+    .select("id, org_name, category, campus, logo_url, rating, rating_count")
     .eq("status", "active")
-    .order("org_name")
-    .limit(120)
-  const stores = ((full.error
-    ? (await supabase.from("seller_profiles").select("id, org_name, category").eq("status", "active").order("org_name").limit(120)).data
-    : full.data) ?? []) as StoreRow[]
+  if (campus) full = full.eq("campus", campus)
+  const fullResult = await full.order("org_name").limit(120)
+
+  let basic = supabase.from("seller_profiles").select("id, org_name, category, campus").eq("status", "active")
+  if (campus) basic = basic.eq("campus", campus)
+  const stores = ((fullResult.error ? (await basic.order("org_name").limit(120)).data : fullResult.data) ?? []) as StoreRow[]
 
   // Live product count per store
   const counts = new Map<string, number>()
@@ -43,7 +46,9 @@ export async function StoreDirectory({ title = "Browse Stores" }: { title?: stri
       <div className="mb-4 mt-1.5 h-px bg-linear-to-r from-gold/60 via-gold/20 to-transparent" />
 
       {stores.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No stores yet.</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          {campus ? `No stores on ${CAMPUS_LABELS[campus]} yet.` : "No stores yet."}
+        </p>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
           {stores.map((s) => {
@@ -63,6 +68,9 @@ export async function StoreDirectory({ title = "Browse Stores" }: { title?: stri
                 <div className="min-w-0">
                   <p className="line-clamp-2 text-sm font-semibold leading-tight text-foreground group-hover:text-primary">{s.org_name}</p>
                   {s.category && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{s.category}</p>}
+                  {!campus && s.campus && s.campus in CAMPUS_LABELS && (
+                    <p className="mt-0.5 line-clamp-1 text-[10px] text-muted-foreground/80">{CAMPUS_LABELS[s.campus as Campus]}</p>
+                  )}
                 </div>
                 <div className="mt-auto flex items-center gap-3 text-[11px] text-muted-foreground">
                   <span className="flex items-center gap-1"><Package className="size-3" />{products}</span>
