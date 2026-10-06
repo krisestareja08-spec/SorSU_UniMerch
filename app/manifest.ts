@@ -14,10 +14,10 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#fbf8f3",
     theme_color: "#7a1f2b",
     categories: ["shopping", "education"],
+    // Transparent logo only: a "maskable" icon would make Android fill the background
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
     shortcuts: [
       { name: "My Orders", url: "/marketplace/orders", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
