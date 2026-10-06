@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Home, Store, ShoppingCart, Package, Users, LayoutDashboard,
+  Home, Store, ShoppingCart, Package, Tag, Users, LayoutDashboard,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -12,19 +12,27 @@ import { useCart } from "@/lib/cart-context"
 
 type Tab = { label: string; href: string; icon: LucideIcon; highlight?: boolean }
 
-/** Same tabs for every user; a Dashboards tab appears only for people assigned to a dashboard. */
+/**
+ * Buyers: Stores · Cart · Market (centre) · Orders · Account.
+ * Dashboard members (admins/staff) keep their original tabs, with Dashboard in place of Orders.
+ */
 function buildTabs(dashboards: DashboardSummary[]): Tab[] {
-  const tabs: Tab[] = [
+  if (dashboards.length > 0) {
+    return [
+      { label: "Market",    href: "/marketplace",            icon: Home },
+      { label: "Browse",    href: "/marketplace/categories", icon: Tag },
+      { label: "Cart",      href: "/marketplace/cart",       icon: ShoppingCart, highlight: true },
+      { label: "Dashboard", href: dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard", icon: LayoutDashboard },
+      { label: "Account",   href: "/marketplace/account",    icon: Users },
+    ]
+  }
+  return [
     { label: "Stores",   href: "/marketplace/stores",     icon: Store },
     { label: "Cart",     href: "/marketplace/cart",       icon: ShoppingCart },
     { label: "Market",   href: "/marketplace",            icon: Home, highlight: true },
     { label: "Orders",   href: "/marketplace/orders",     icon: Package },
     { label: "Account",  href: "/marketplace/account",    icon: Users },
   ]
-  if (dashboards.length > 0) {
-    tabs[3] = { label: "Dashboard", href: dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard", icon: LayoutDashboard }
-  }
-  return tabs
 }
 
 export function MarketplaceBottomTabs({ dashboards = [] }: { dashboards?: DashboardSummary[] }) {

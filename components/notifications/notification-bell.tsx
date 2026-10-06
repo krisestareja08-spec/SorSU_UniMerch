@@ -26,7 +26,8 @@ function timeAgo(iso: string) {
  * Notifications are created by the database (scripts/17_notifications.sql); this polls every 30s.
  * `tone` adapts the icon to a dark (maroon header) or light background.
  */
-export function NotificationBell({ tone = "light" }: { tone?: "light" | "dark" }) {
+/** `showAll`: link to the full notifications page (a buyer page; off for seller accounts). */
+export function NotificationBell({ tone = "light", showAll = true }: { tone?: "light" | "dark"; showAll?: boolean }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notification[]>([])
@@ -137,10 +138,12 @@ export function NotificationBell({ tone = "light" }: { tone?: "light" | "dark" }
               </li>
             ))}
           </ul>
-          <button type="button" onClick={() => { setOpen(false); router.push("/marketplace/notifications") }}
-            className="block w-full border-t border-border px-4 py-2.5 text-center text-xs font-medium text-primary hover:bg-muted/50">
-            View all notifications
-          </button>
+          {showAll && (
+            <button type="button" onClick={() => { setOpen(false); router.push("/marketplace/notifications") }}
+              className="block w-full border-t border-border px-4 py-2.5 text-center text-xs font-medium text-primary hover:bg-muted/50">
+              View all notifications
+            </button>
+          )}
         </div>
       )}
     </div>

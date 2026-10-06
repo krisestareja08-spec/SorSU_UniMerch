@@ -14,8 +14,13 @@ import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
-  type DashboardCtx, type ModulePage,
+  type DashboardCtx, type ModuleKey, type ModulePage,
 } from "@/lib/modules"
+
+const NO_MARKETPLACE: ModuleKey[] = ["supply_office", "bao", "seller"]
+// Seller bottom tabs, in order; Storefront is the raised, highlighted button. Other pages are in the menu.
+const SELLER_TABS = ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"]
+const HIGHLIGHT_TAB = "/seller/shop"
 
 export function ManagementShell({
   ctx,
@@ -36,11 +41,15 @@ export function ManagementShell({
     ...moduleDef.pages.filter((p) => canUse(ctx, p.perm)),
     ...(ctx.isMain ? [{ label: MEMBERS_PAGE.label, href: membersHref(ctx.module), icon: MEMBERS_PAGE.icon }] : []),
     // Supply Office: internal office, no marketplace shortcut. BAO: its own view-only
-    // marketplace inside the BAO dashboard (see /bao/browse) — never the buyer marketplace.
-    ...(ctx.module === "supply_office" || ctx.module === "bao" ? [] : [{ label: "Marketplace", href: "/marketplace", icon: Store }]),
+    // marketplace inside the BAO dashboard (see /bao/browse). Seller accounts only sell (lib/supabase/proxy.ts).
+    ...(NO_MARKETPLACE.includes(ctx.module) ? [] : [{ label: "Marketplace", href: "/marketplace", icon: Store }]),
   ]
-  const homeHref = ctx.module === "supply_office" || ctx.module === "bao" ? moduleDef.basePath : "/marketplace"
-  const bottomTabs = nav.slice(0, 5)
+  const homeHref = NO_MARKETPLACE.includes(ctx.module) ? moduleDef.basePath : "/marketplace"
+  // Sellers: a fixed set of tabs (pages the member has no permission for are left out)
+  const sellerTabs = ctx.module === "seller"
+    ? SELLER_TABS.map((href) => nav.find((n) => n.href === href)).filter((n): n is (typeof nav)[number] => !!n)
+    : null
+  const bottomTabs = sellerTabs ?? nav.slice(0, 5)
   const roleLabel = ctx.isMain ? "Main Admin" : "Member"
 
   async function signOut() {
@@ -195,7 +204,7 @@ export function ManagementShell({
                 {ctx.dashboardName} · {roleLabel}
               </Badge>
               {/* Notifications */}
-              <NotificationBell />
+              <NotificationBell showAll={ctx.module !== "seller"} />
               {/* Avatar + name */}
               <div className="flex items-center gap-2.5">
                 <span className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -230,8 +239,17 @@ export function ManagementShell({
                 )}
               >
                 {active && <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-gold" />}
-                <Icon className="size-5" />
-                {tab.label}
+                {sellerTabs && tab.href === HIGHLIGHT_TAB ? (
+                  <span className={cn(
+                    "-mt-5 flex size-10 items-center justify-center rounded-2xl shadow-lg transition-all",
+                    active ? "bg-primary" : "bg-primary/90",
+                  )}>
+                    <Icon className="size-5 text-primary-foreground" />
+                  </span>
+                ) : (
+                  <Icon className="size-5" />
+                )}
+                <span className={cn(sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.label}</span>
               </Link>
             )
           })}

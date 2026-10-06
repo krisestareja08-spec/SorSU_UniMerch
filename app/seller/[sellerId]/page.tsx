@@ -4,6 +4,8 @@ import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { MarketplaceChrome } from "@/components/marketplace/marketplace-chrome"
+import { ManagementShell } from "@/components/management/management-shell"
+import { getMemberships, requireDashboard } from "@/lib/dashboards"
 import { SellerHeader } from "@/components/storefront/seller-header"
 import { SellerInfo } from "@/components/storefront/seller-info"
 import { ProductGrid } from "@/components/storefront/product-grid"
@@ -55,6 +57,10 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
   ])
   const productCount = categories.reduce((sum, c) => sum + c.count, 0)
 
+  // Seller accounts only sell: they preview storefronts inside their Seller Dashboard, without buyer actions
+  const isSeller = !!user && (await getMemberships(supabase, user.id)).some((m) => m.module === "seller")
+  const sellerCtx = isSeller ? await requireDashboard("seller") : null
+
   const base = storefrontHref(storefront.id)
   const pageHref = (p: number) => {
     const qs = new URLSearchParams()
@@ -64,14 +70,13 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
     return q ? `${base}?${q}` : base
   }
 
-  return (
-    <MarketplaceChrome>
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <Link href="/marketplace" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> Back to Marketplace
+  const content = (
+      <div className={sellerCtx ? "" : "mx-auto max-w-7xl px-4 py-6 sm:px-6"}>
+        <Link href={sellerCtx ? "/seller" : "/marketplace"} className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="size-4" /> {sellerCtx ? "Back to Dashboard" : "Back to Marketplace"}
         </Link>
 
-        <SellerHeader storefront={storefront} productCount={productCount} isFollowing={!!follow.data} manageHref={manageHref} />
+        <SellerHeader storefront={storefront} productCount={productCount} isFollowing={!!follow.data} manageHref={manageHref} sellerMode={!!sellerCtx} />
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[18rem_1fr]">
           <SellerInfo storefront={storefront} categories={categories} activeCategory={category} followers={followers.count ?? 0} />
@@ -90,10 +95,14 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
               layout={storefront.theme.layout}
               pageHref={pageHref}
               emptyText={category ? `No products in ${category} yet.` : "This seller has no live products yet."}
+              readOnly={!!sellerCtx}
             />
           </section>
         </div>
       </div>
-    </MarketplaceChrome>
   )
+
+  return sellerCtx
+    ? <ManagementShell ctx={sellerCtx}>{content}</ManagementShell>
+    : <MarketplaceChrome>{content}</MarketplaceChrome>
 }

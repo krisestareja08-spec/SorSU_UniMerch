@@ -51,7 +51,7 @@ export function UniMerchWordmark({
           <p className="mt-2 text-[0.7rem] font-semibold uppercase tracking-[0.25em] text-primary">
             Campus Marketplace
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">Sorsogon State University · Bulan Campus</p>
+          <p className="mt-1 text-xs text-muted-foreground">Sorsogon State University </p>
         </>
       )}
     </div>
