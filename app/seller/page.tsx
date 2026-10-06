@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShoppingCart, Tag, TrendingUp, Package } from "lucide-react"
+import { ReceiptText, Tag, TrendingUp, Package } from "lucide-react"
 
 export default async function SellerPage() {
   const ctx = await requireDashboard("seller")
@@ -29,7 +29,7 @@ export default async function SellerPage() {
 
   const stats: Stat[] = [
     { label: "Total Revenue",    value: `₱${totalRevenue.toLocaleString()}`, icon: TrendingUp,   hint: "Completed orders",  accent: "gold" },
-    { label: "Open Orders",      value: openOrders,   icon: ShoppingCart, hint: "Pending/Paid",      accent: "primary" },
+    { label: "Open Orders",      value: openOrders,   icon: ReceiptText, hint: "Pending/Paid",      accent: "primary" },
     { label: "Active Listings",  value: activeListings, icon: Tag,        hint: "Live on marketplace",accent: "primary" },
     { label: "Pending Review",   value: pendingProducts, icon: Package,   hint: "Awaiting BAO",       accent: "red" },
   ]

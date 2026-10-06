@@ -23,7 +23,8 @@ const USER_NAV: NavItem[] = [
 
 export function MarketplaceDesktopSidebar({ dashboards = [] }: { dashboards?: DashboardSummary[] }) {
   const pathname = usePathname()
-  const nav = USER_NAV
+  // The Stores page is part of the buyer navigation only
+  const nav = dashboards.length > 0 ? USER_NAV.filter((n) => n.href !== "/marketplace/stores") : USER_NAV
 
   function isActive(href: string) {
     if (href === "/marketplace") return pathname === "/marketplace"

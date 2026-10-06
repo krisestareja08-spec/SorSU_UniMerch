@@ -71,20 +71,20 @@ function BuyerActions({ product }: { product: Product }) {
   )
 }
 
-export function ProductCard({ product }: { product: Product }) {
-  return (
-    <Link
-      href={`/marketplace/product/${product.id}`}
-      className="group relative flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98]"
-    >
+/** `readOnly`: seller preview — no link to the buyer product page, no cart/buy buttons. */
+export function ProductCard({ product, readOnly = false }: { product: Product; readOnly?: boolean }) {
+  const content = (
+    <>
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         <Image src={product.image} alt={product.name} fill
           className="object-cover transition-transform duration-300 group-hover:scale-105" />
-        <div className="absolute inset-0 hidden items-center justify-center bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 lg:flex">
-          <span className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground shadow">
-            Quick View
-          </span>
-        </div>
+        {!readOnly && (
+          <div className="absolute inset-0 hidden items-center justify-center bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 lg:flex">
+            <span className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground shadow">
+              Quick View
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col gap-1 p-3">
@@ -106,8 +106,19 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
 
         {/* Buttons/divs only, never nested <a> */}
-        <BuyerActions product={product} />
+        {!readOnly && <BuyerActions product={product} />}
       </div>
+    </>
+  )
+
+  const cardClass = "group relative flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm"
+  if (readOnly) return <div className={cardClass}>{content}</div>
+  return (
+    <Link
+      href={`/marketplace/product/${product.id}`}
+      className={cn(cardClass, "transition-all duration-200 hover:-translate-y-1 hover:border-primary/25 hover:shadow-lg hover:shadow-primary/10 active:scale-[0.98]")}
+    >
+      {content}
     </Link>
   )
 }

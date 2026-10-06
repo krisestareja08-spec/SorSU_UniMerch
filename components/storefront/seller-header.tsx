@@ -16,11 +16,14 @@ export function SellerHeader({
   productCount,
   isFollowing,
   manageHref,
+  sellerMode = false,
 }: {
   storefront: Storefront
   productCount: number
   isFollowing: boolean
   manageHref: string | null
+  /** Viewer is a seller account: no buyer actions (follow, contact) */
+  sellerMode?: boolean
 }) {
   const accent = ACCENTS[storefront.theme.accent]
 
@@ -64,10 +67,10 @@ export function SellerHeader({
             <Link href={manageHref} className="flex items-center gap-1.5 rounded-lg border border-border px-3.5 py-1.5 text-sm font-semibold hover:bg-muted">
               <Settings2 className="size-4" /> Customize storefront
             </Link>
-          ) : (
+          ) : !sellerMode && (
             <SellerFollowButton sellerId={storefront.id} initiallyFollowing={isFollowing} />
           )}
-          <ContactSellerButton gcashNumber={storefront.gcashNumber} />
+          {!sellerMode && <ContactSellerButton gcashNumber={storefront.gcashNumber} />}
         </div>
       </div>
     </section>

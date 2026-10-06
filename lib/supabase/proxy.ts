@@ -79,16 +79,32 @@ export async function updateSession(request: NextRequest) {
   // storefronts → Seller Monitoring, anything else in the buyer marketplace → BAO marketplace view.
   const path = request.nextUrl.pathname
   if (user && (path.startsWith('/marketplace') || isPublicStorefront)) {
-    const { data: isBao } = await supabase.rpc('module_access', { p_module: 'bao' })
-    if (isBao === true) {
+    const [{ data: isBao }, { data: isSeller }] = await Promise.all([
+      supabase.rpc('module_access', { p_module: 'bao' }),
+      path.startsWith('/marketplace') ? supabase.rpc('module_access', { p_module: 'seller' }) : Promise.resolve({ data: false }),
+    ])
+    const redirectTo = (pathname: string) => {
       const url = request.nextUrl.clone()
-      const product = path.match(/^\/marketplace\/product\/([^/]+)/)
-      const storefront = path.match(/^\/seller\/([0-9a-f-]{36})/i)
-      url.pathname = product ? `/bao/browse/${product[1]}` : storefront ? `/bao/sellers/${storefront[1]}` : '/bao/browse'
+      url.pathname = pathname
       url.search = ''
       const redirect = NextResponse.redirect(url)
       supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
       return redirect
+    }
+    if (isBao === true) {
+      const product = path.match(/^\/marketplace\/product\/([^/]+)/)
+      const storefront = path.match(/^\/seller\/([0-9a-f-]{36})/i)
+      return redirectTo(product ? `/bao/browse/${product[1]}` : storefront ? `/bao/sellers/${storefront[1]}` : '/bao/browse')
+    }
+    // Seller accounts only sell: no cart, checkout, orders or shopping. Buyer pages → the matching
+    // Seller Dashboard page. (Storefronts stay open so sellers can preview theirs, without buy buttons.)
+    if (isSeller === true) {
+      const target =
+        path.startsWith('/marketplace/messages') ? '/seller/messages'
+        : path.startsWith('/marketplace/settings') || path.startsWith('/marketplace/account') ? '/seller/settings'
+        : path.startsWith('/marketplace/product') ? '/seller/products'
+        : '/seller'
+      return redirectTo(target)
     }
   }
 

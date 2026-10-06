@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, MiniBarChart, DashTable, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { BarChart2, Package, ShoppingCart, TrendingUp, Wallet, Award } from "lucide-react"
+import { BarChart2, Package, ReceiptText, TrendingUp, Wallet, Award } from "lucide-react"
 import { byMonth, groupBy, loadSales, peso, totals } from "@/lib/analytics"
 
 export default async function SellerAnalyticsPage() {
@@ -24,7 +24,7 @@ export default async function SellerAnalyticsPage() {
   const stats: Stat[] = [
     { label: "Total Sales", value: peso(all.gross), icon: Wallet, hint: "All orders except cancelled", accent: "gold" },
     { label: "This Month", value: peso(thisMonth?.gross ?? 0), icon: TrendingUp, hint: trend != null ? `${trend >= 0 ? "+" : ""}${trend}% vs last month` : thisMonth?.label, trend, accent: "primary" },
-    { label: "Orders", value: all.orders, icon: ShoppingCart, hint: "All time", accent: "primary" },
+    { label: "Orders", value: all.orders, icon: ReceiptText, hint: "All time", accent: "primary" },
     { label: "Items Sold", value: all.itemsSold, icon: Package, hint: "All time", accent: "gold" },
   ]
 

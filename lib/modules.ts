@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShieldCheck, Users, AlertOctagon, Store, ClipboardList, Building2,
   CheckSquare, BarChart2, FileText, Settings, Boxes, ShoppingCart, Package,
-  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, type LucideIcon,
+  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, type LucideIcon,
 } from "lucide-react"
 
 /**
@@ -98,7 +98,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "storefront", label: "Storefront",  href: "/seller/shop",      icon: Store },
       { perm: "storefront", label: "Banners",     href: "/seller/banners",   icon: Megaphone },
       { perm: "products",   label: "Products",    href: "/seller/products",  icon: Tag },
-      { perm: "orders",     label: "Orders",      href: "/seller/orders",    icon: ShoppingCart },
+      { perm: "orders",     label: "Orders",      href: "/seller/orders",    icon: ReceiptText },
       { perm: "inventory",  label: "Inventory",   href: "/seller/inventory", icon: Boxes },
       { perm: "analytics",  label: "Analytics",   href: "/seller/analytics", icon: BarChart2 },
       { perm: "reports",    label: "Sales Reports", href: "/seller/reports", icon: FileText },

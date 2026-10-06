@@ -12,6 +12,7 @@ export function ProductGrid({
   layout = "grid",
   pageHref,
   emptyText = "This seller has no live products yet.",
+  readOnly = false,
 }: {
   products: StorefrontProduct[]
   total: number
@@ -19,6 +20,8 @@ export function ProductGrid({
   layout?: StorefrontLayout
   pageHref: (page: number) => string
   emptyText?: string
+  /** Seller preview: products are shown but can't be opened or bought */
+  readOnly?: boolean
 }) {
   const pages = Math.max(1, Math.ceil(total / STOREFRONT_PAGE_SIZE))
 
@@ -30,9 +33,9 @@ export function ProductGrid({
     <div>
       {layout === "list" ? (
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-          {products.map((p) => (
-            <li key={p.id}>
-              <Link href={`/marketplace/product/${p.id}`} className="flex items-center gap-4 p-3 hover:bg-muted/40">
+          {products.map((p) => {
+            const row = (
+              <>
                 <div className="relative size-16 shrink-0 overflow-hidden rounded-xl bg-muted">
                   {p.image ? <Image src={p.image} alt={p.name} fill className="object-cover" sizes="64px" /> : <Package className="m-auto size-6 text-muted-foreground/40" />}
                 </div>
@@ -41,13 +44,20 @@ export function ProductGrid({
                   <p className="text-xs text-muted-foreground">{p.category} · {(p.stock ?? 0) > 0 ? `${p.stock} in stock` : p.badge}</p>
                 </div>
                 <p className="shrink-0 font-bold text-gold">₱{p.price.toLocaleString()}</p>
-              </Link>
-            </li>
-          ))}
+              </>
+            )
+            return (
+              <li key={p.id}>
+                {readOnly
+                  ? <div className="flex items-center gap-4 p-3">{row}</div>
+                  : <Link href={`/marketplace/product/${p.id}`} className="flex items-center gap-4 p-3 hover:bg-muted/40">{row}</Link>}
+              </li>
+            )
+          })}
         </ul>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-          {products.map((p) => <ProductCard key={p.id} product={p} />)}
+          {products.map((p) => <ProductCard key={p.id} product={p} readOnly={readOnly} />)}
         </div>
       )}
 
