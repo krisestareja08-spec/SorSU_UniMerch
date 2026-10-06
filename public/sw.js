@@ -6,7 +6,7 @@
  *  • Handles Web Push messages so notifications can arrive while the app is closed, once push
  *    sending is set up on the server (future work).
  */
-const VERSION = "v1"
+const VERSION = "v2"
 const STATIC_CACHE = `unimerch-static-${VERSION}`
 const PRECACHE = ["/offline.html", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/badge-96.png", "/sorsu-seal.png"]
 

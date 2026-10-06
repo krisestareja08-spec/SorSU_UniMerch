@@ -26,8 +26,9 @@ export const metadata: Metadata = {
   // The web app manifest comes from app/manifest.ts; these cover browser tabs and iOS home screens
   icons: {
     icon: [
-      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
-      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+      // Maroon cart on light browser themes, gold cart on dark ones
+      { url: '/icons/favicon-light-32.png', sizes: '32x32', type: 'image/png', media: '(prefers-color-scheme: light)' },
+      { url: '/icons/favicon-dark-32.png', sizes: '32x32', type: 'image/png', media: '(prefers-color-scheme: dark)' },
     ],
     apple: { url: '/icons/apple-touch-icon.png', sizes: '180x180' },
   },

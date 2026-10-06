@@ -79,8 +79,8 @@ export function MarketplaceHeader({
             {/* Messages */}
             <MessagesLink />
 
-            {/* Cart */}
-            <Link href="/marketplace/cart" className="relative rounded-lg p-2 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Cart">
+            {/* Cart — desktop only; on phones/tablets it lives in the bottom tabs */}
+            <Link href="/marketplace/cart" className="relative hidden rounded-lg p-2 lg:block text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95" aria-label="Cart">
               <ShoppingCart className="size-5" />
               {itemCount > 0 && (
                 <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-gold text-[10px] font-bold text-primary">

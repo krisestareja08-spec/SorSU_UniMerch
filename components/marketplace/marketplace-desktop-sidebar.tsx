@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Tag, ShoppingCart, MessageCircle, Bell, Users, Settings, Building2, type LucideIcon } from "lucide-react"
+import { Home, Store, Tag, ShoppingCart, MessageCircle, Bell, Users, Settings, Building2, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
 
@@ -11,6 +11,7 @@ type NavItem = { label: string; href: string; icon: LucideIcon }
 /** Every signed-in person is a user; the same user navigation for everyone. */
 const USER_NAV: NavItem[] = [
   { label: "Home",         href: "/marketplace",            icon: Home },
+  { label: "Stores",       href: "/marketplace/stores",     icon: Store },
   { label: "Categories",   href: "/marketplace/categories", icon: Tag },
   { label: "My Orders",    href: "/marketplace/orders",     icon: ShoppingCart },
   { label: "Messages",     href: "/marketplace/messages",   icon: MessageCircle },

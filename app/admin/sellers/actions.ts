@@ -8,8 +8,21 @@ import { logAudit } from "@/lib/admin"
 /**
  * Creates a seller ORGANIZATION: its store (storefront), its Seller Dashboard, and appoints the
  * dashboard's Main Admin — either an existing user or a newly created login.
+ *
+ * Problems are RETURNED, not thrown: production builds replace a thrown Server Action message with
+ * "Minified React error #441", so the admin would never see why it failed.
  */
-export async function createOrganization(formData: FormData) {
+export async function createOrganization(formData: FormData): Promise<{ error: string } | undefined> {
+  try {
+    await insertOrganization(formData)
+  } catch (err) {
+    console.error("createOrganization failed:", err)
+    return { error: err instanceof Error ? err.message : "Something went wrong while creating the organization." }
+  }
+  redirect("/admin/sellers?created=1")
+}
+
+async function insertOrganization(formData: FormData) {
   const { supabase, userId: actorId } = await assertDashboard("verification", "organizations")
 
   const orgName = (formData.get("org_name") as string)?.trim()
@@ -25,6 +38,9 @@ export async function createOrganization(formData: FormData) {
 
   // ── Resolve the Main Admin account ───────────────────────────────────────
   let mainAdminId: string
+  // Set only when we created a new login, so a later failure can remove it (otherwise a retry
+  // fails with "email already registered")
+  let removeNewLogin: (() => Promise<unknown>) | null = null
   if (adminMode === "existing") {
     const { data: found } = await supabase.rpc("find_user_by_email", { p_email: email })
     const match = Array.isArray(found) ? found[0] : found
@@ -46,6 +62,8 @@ export async function createOrganization(formData: FormData) {
     })
     if (createError || !created.user) throw new Error(createError?.message ?? "Failed to create the login.")
     mainAdminId = created.user.id
+    const newId = mainAdminId
+    removeNewLogin = () => admin.auth.admin.deleteUser(newId)
     await admin.from("profiles").upsert(
       { id: mainAdminId, full_name: adminName, role: "buyer", affiliation: "external", campus },
       { onConflict: "id" },
@@ -53,30 +71,33 @@ export async function createOrganization(formData: FormData) {
   }
 
   // ── Store (organization) + its Seller Dashboard + Main Admin ─────────────
-  const { data: store, error: storeError } = await supabase
-    .from("seller_profiles")
-    .insert({ org_name: orgName, description, category, campus, created_by: actorId, status: "active" })
-    .select("id")
-    .single()
-  if (storeError || !store) throw new Error(storeError?.message ?? "Failed to create the organization's store.")
+  try {
+    const { data: store, error: storeError } = await supabase
+      .from("seller_profiles")
+      .insert({ org_name: orgName, description, category, campus, created_by: actorId, status: "active" })
+      .select("id")
+      .single()
+    if (storeError || !store) throw new Error(storeError?.message ?? "Failed to create the organization's store.")
 
-  const { data: dashboard, error: dashError } = await supabase
-    .from("dashboards")
-    .insert({ module: "seller", name: orgName, store_id: store.id, created_by: actorId })
-    .select("id")
-    .single()
-  if (dashError || !dashboard) throw new Error(dashError?.message ?? "Failed to create the Seller Dashboard.")
+    const { data: dashboard, error: dashError } = await supabase
+      .from("dashboards")
+      .insert({ module: "seller", name: orgName, store_id: store.id, created_by: actorId })
+      .select("id")
+      .single()
+    if (dashError || !dashboard) throw new Error(dashError?.message ?? "Failed to create the Seller Dashboard.")
 
-  const { error: memberError } = await supabase
-    .from("dashboard_members")
-    .insert({ dashboard_id: dashboard.id, user_id: mainAdminId, is_main: true, added_by: actorId })
-  if (memberError) throw new Error(memberError.message)
+    const { error: memberError } = await supabase
+      .from("dashboard_members")
+      .insert({ dashboard_id: dashboard.id, user_id: mainAdminId, is_main: true, added_by: actorId })
+    if (memberError) throw new Error(memberError.message)
+  } catch (err) {
+    if (removeNewLogin) await removeNewLogin().catch(() => {})
+    throw err
+  }
 
   await logAudit(supabase, actorId, {
     userId: mainAdminId,
     action: "seller_created",
     reason: `${orgName} — Main Admin ${email}${adminMode === "new" ? " (new login)" : ""}`,
   })
-
-  redirect("/admin/sellers?created=1")
 }

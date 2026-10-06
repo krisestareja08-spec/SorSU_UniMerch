@@ -34,10 +34,12 @@ export function CreateSellerForm() {
     fd.set("campus", campus)
     fd.set("admin_mode", adminMode)
     startTransition(async () => {
+      // On success the action redirects; on failure it returns the reason
       try {
-        await createOrganization(fd)
-      } catch (err: unknown) {
-        setError(err instanceof Error ? err.message : "Something went wrong.")
+        const result = await createOrganization(fd)
+        if (result?.error) setError(result.error)
+      } catch {
+        setError("Couldn't reach the server. Check your connection and try again.")
       }
     })
   }
