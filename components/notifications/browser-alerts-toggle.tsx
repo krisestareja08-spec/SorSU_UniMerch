@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { BROWSER_ALERTS_KEY, browserAlertsOn } from "./live-alerts"
+import { showSystemNotification } from "@/lib/pwa"
 
 type State = "unsupported" | "denied" | "on" | "off"
 
@@ -28,7 +29,7 @@ export function BrowserAlertsToggle() {
     if (permission !== "granted") { setState(permission === "denied" ? "denied" : "off"); return }
     try { localStorage.setItem(BROWSER_ALERTS_KEY, "on") } catch {}
     setState("on")
-    new Notification("Browser alerts are on", { body: "You'll see order and message alerts here while UniMerch is open.", icon: "/icon-light-32x32.png" })
+    showSystemNotification("Browser alerts are on", "You'll see order and message alerts here while UniMerch is open.", null)
   }
 
   return (

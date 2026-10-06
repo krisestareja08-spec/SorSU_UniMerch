@@ -20,8 +20,23 @@ const nextConfig = {
   },
   // allow accessing the dev server from other devices on the LAN (e.g. phone testing)
   allowedDevOrigins: ["192.168.56.1"],
+  experimental: {
+    // PWA: detect lost connections, retry navigations / Server Actions when back online (useOffline hook)
+    useOffline: true,
+  },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }]
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        // The service worker must never be cached, or installed apps keep running an old version
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+    ]
   },
 }
 

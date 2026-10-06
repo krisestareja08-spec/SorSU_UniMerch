@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { BadgeCheck, Bell, ChevronRight, Clock, KeyRound, Mail, Moon, Phone, ShieldCheck, UserRound } from "lucide-react"
+import { BadgeCheck, Bell, ChevronRight, Clock, KeyRound, Mail, Moon, Phone, ShieldCheck, Smartphone, UserRound } from "lucide-react"
+import { InstallAppRow } from "@/components/pwa/install-app"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ThemeSwitch } from "@/components/theme-select"
@@ -62,7 +63,7 @@ export default async function SettingsPage() {
       </div>
 
       <nav aria-label="Settings sections" className="mb-4 flex gap-2 overflow-x-auto pb-1 text-xs">
-        {[["#security", "Account & Security"], ["#verification", "Verification"], ["#notifications", "Notifications"], ["#appearance", "Appearance"]].map(([href, label]) => (
+        {[["#security", "Account & Security"], ["#verification", "Verification"], ["#notifications", "Notifications"], ["#appearance", "Appearance"], ["#app", "App"]].map(([href, label]) => (
           <a key={href} href={href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1 font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground">{label}</a>
         ))}
       </nav>
@@ -114,6 +115,10 @@ export default async function SettingsPage() {
           <Row label="Dark mode" desc="UniMerch opens in light mode each time you sign in. Turn this on to switch to dark.">
             <ThemeSwitch />
           </Row>
+        </Section>
+
+        <Section id="app" title="App" icon={Smartphone}>
+          <InstallAppRow />
         </Section>
       </div>
     </div>
