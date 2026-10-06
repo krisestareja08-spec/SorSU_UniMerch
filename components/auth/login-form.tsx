@@ -56,7 +56,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 sm:gap-5" noValidate>
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="size-4" />
