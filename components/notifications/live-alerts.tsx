@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { showSystemNotification } from "@/lib/pwa"
 
 type Alert = { id: string; title: string; body: string | null; href: string | null }
 
@@ -47,8 +48,7 @@ export function LiveAlerts() {
           if (n.href && n.href.split("#")[0] === window.location.pathname + window.location.search) return
 
           if (document.visibilityState !== "visible" && browserAlertsOn()) {
-            const sys = new Notification(n.title, { body: n.body ?? undefined, tag: n.id, icon: "/icon-light-32x32.png" })
-            sys.onclick = () => { window.focus(); if (n.href) router.push(n.href); sys.close() }
+            showSystemNotification(n.title, n.body, n.href, n.id)
           }
           setAlerts((list) => [n, ...list].slice(0, 3))
           pending.set(n.id, setTimeout(() => dismiss(n.id), SHOW_MS))

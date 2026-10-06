@@ -8,6 +8,7 @@ import {
   Home, LayoutGrid, PackageSearch, MessageCircle, Bell, Moon, Settings, HelpCircle, X, ChevronRight, Users, LogOut, Building2,
 } from "lucide-react"
 import { ThemeSwitch } from "@/components/theme-select"
+import { InstallAppMenuItem } from "@/components/pwa/install-app"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { resetTheme } from "@/lib/theme"
@@ -96,6 +97,7 @@ export function BurgerDrawer({
             <span className="flex-1 font-medium">Dark mode</span>
             <ThemeSwitch />
           </div>
+          <InstallAppMenuItem onDone={onClose} />
           {dashboards.length > 0 && (
             <>
               <p className="px-5 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-widest text-primary-foreground/45">My dashboards</p>
