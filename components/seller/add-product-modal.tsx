@@ -13,7 +13,7 @@ import { computeRoyalty } from "@/lib/access"
 import type { PaymentMode } from "@/lib/product-pricing"
 import { cn } from "@/lib/utils"
 import { unwrap } from "@/lib/action-result"
-import { VariantEditor, draftsToInputs, emptyDraft, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
+import { VariantEditor, draftsToInputs, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
 
 const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
 const BADGES = ["Available", "Pre-Order", "Interest Check"]
@@ -48,8 +48,9 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   const [sku, setSku] = useState("")
   const [tags, setTags] = useState("")
   // Sizes: each is its own variant with its own price, stock, SKU and optional image
-  const [hasVariants, setHasVariants] = useState(false)
   const [variantRows, setVariantRows] = useState<VariantDraft[]>([])
+  // Optional: as soon as one size is added, price and stock are set per size
+  const hasVariants = variantRows.length > 0
   const defaultPayment = module === "seller" ? "both" : "walk_in"
   const [payment, setPayment] = useState(defaultPayment)
   const [isRestricted, setIsRestricted] = useState(false)
@@ -67,7 +68,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
 
   function reset() {
     setName(""); setDescription(""); setCategory(""); setPrice(""); setStock(""); setBadge("Available")
-    setSku(""); setTags(""); setHasVariants(false); setVariantRows([]); setPayment(defaultPayment)
+    setSku(""); setTags(""); setVariantRows([]); setPayment(defaultPayment)
     setImageFiles([]); setImagePreviews([]); setError(null)
     setIsRestricted(false); setAllowedRoles([]); setHasLogo(false)
   }
@@ -304,19 +305,11 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
 
           {/* Sizes: each one is a separate variant with its own price, stock, SKU and image */}
           <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <input type="checkbox" checked={hasVariants}
-                onChange={(e) => { setHasVariants(e.target.checked); if (e.target.checked && variantRows.length === 0) setVariantRows([emptyDraft()]) }} />
-              This product comes in different sizes / variants
-            </label>
-            {hasVariants && (
-              <>
-                <p className="text-[11px] text-muted-foreground">
-                  Give each size its own price, stock and SKU, and optionally a photo. Buyers see the price range until they pick a size, then that size&apos;s exact price and stock.
-                </p>
-                <VariantEditor rows={variantRows} onChange={setVariantRows} />
-              </>
-            )}
+            <Label>Sizes / Variants <span className="font-normal text-muted-foreground">(optional)</span></Label>
+            <p className="text-[11px] text-muted-foreground">
+              Add sizes if this product comes in different sizes. Each size gets its own price, stock and SKU, and optionally a photo. Buyers see the price range until they pick a size, then that size&apos;s exact price and stock.
+            </p>
+            <VariantEditor rows={variantRows} onChange={setVariantRows} />
           </div>
 
           {/* Payment modes the buyer can use for this product */}
