@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { ShoppingCart, Check, Zap } from "lucide-react"
 import { useCart } from "@/lib/cart-context"
 import type { CartItem } from "@/lib/cart-context"
+import { BUY_NOW_CHECKOUT, setBuyNowItem } from "@/lib/buy-now"
 import { cn } from "@/lib/utils"
 
 export function ProductVariantActions({
@@ -30,8 +31,9 @@ export function ProductVariantActions({
 
   function handleBuyNow() {
     if (isSoldOut || needsVariant) return
-    addItem({ ...product, quantity: 1, variant: variant || undefined })
-    router.push("/marketplace/checkout")
+    // Check out just this product; the cart (and what's ticked in it) is left alone
+    setBuyNowItem({ ...product, quantity: 1, variant: variant || undefined })
+    router.push(BUY_NOW_CHECKOUT)
   }
 
   return (

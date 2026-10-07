@@ -3,10 +3,11 @@
 import Link from "next/link"
 import Image from "next/image"
 import { use, useEffect, useRef, useState } from "react"
-import { Minus, Plus, Trash2, ShoppingBag, ChevronRight } from "lucide-react"
+import { Minus, Plus, Trash2, ShoppingBag, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useCart } from "@/lib/cart-context"
+import { shopKey } from "@/lib/buy-now"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available": "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -101,7 +102,9 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
     if (window.confirm("Remove every item from your cart?")) clearCart()
   }
 
-  const checkoutDisabled = selectedCount === 0
+  // One shop per checkout, so the buyer pays one seller one amount
+  const selectedShops = new Set(selectedItems.map(shopKey)).size
+  const checkoutDisabled = selectedCount === 0 || selectedShops > 1
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
@@ -130,6 +133,12 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
           {reorderSkipped > 0 && (
             <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
               {reorderSkipped} item{reorderSkipped === 1 ? " from your past order is" : "s from your past order are"} no longer available and {reorderSkipped === 1 ? "was" : "were"} left out.
+            </p>
+          )}
+          {selectedShops > 1 && (
+            <p role="alert" className="flex items-start gap-2 rounded-xl bg-amber-50 px-4 py-2.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+              <span>You selected items from {selectedShops} shops. Each shop is paid separately — select items from <span className="font-semibold">one shop</span> to check out.</span>
             </p>
           )}
           {items.length > 0 && <p className="px-1 text-[11px] text-muted-foreground sm:hidden">Swipe an item left to remove it.</p>}
@@ -227,7 +236,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
             <p className="text-lg font-bold text-gold">₱{subtotal.toLocaleString()}</p>
           </div>
           {checkoutDisabled ? (
-            <Button className="rounded-full px-6 font-semibold" disabled>Checkout (0)</Button>
+            <Button className="rounded-full px-6 font-semibold" disabled>{selectedShops > 1 ? "One shop only" : "Checkout (0)"}</Button>
           ) : (
             <Button asChild className="rounded-full bg-gold px-6 font-semibold text-primary hover:bg-gold/80">
               <Link href="/marketplace/checkout">Checkout ({selectedCount})</Link>

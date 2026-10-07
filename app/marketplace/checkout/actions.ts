@@ -53,6 +53,11 @@ export async function submitOrder(args: {
     throw new Error("One or more products are no longer available.")
   }
 
+  // One shop per checkout: the buyer pays one seller one amount (cart and checkout enforce this too).
+  if (new Set(products.map((product) => product.seller_id)).size > 1) {
+    throw new Error("Check out one shop at a time. Each shop is paid separately.")
+  }
+
   // Pre-orders are paid upfront: GCash with an uploaded receipt, never cash on pickup.
   if (products.some((product) => product.badge === "Pre-Order")) {
     if (args.paymentMethod !== "gcash") throw new Error("Pre-orders must be paid upfront via GCash.")
