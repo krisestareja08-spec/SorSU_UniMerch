@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 import { deleteProduct } from "@/app/seller/products/actions"
 import { ActionForm } from "@/components/ui/action-form"
+import { EditVariantsButton } from "@/components/seller/edit-variants-button"
+import { priceRangeLabel } from "@/lib/variants"
 
 const STATUS_STYLES = {
   pending:  { label: "Pending BAO Review",  icon: Clock,         color: "bg-amber-100/90 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
@@ -96,7 +98,9 @@ export default async function CashierProductsPage({ searchParams }: { searchPara
                   <div className="flex flex-1 flex-col gap-1 p-3">
                     <p className="line-clamp-2 text-xs font-medium leading-tight text-foreground">{product.name}</p>
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
-                    <p className="mt-auto pt-1 text-sm font-bold text-gold">₱{Number(product.price).toLocaleString()}</p>
+                    <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
+                    <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="cashier"
+                      basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     <p className="text-[10px] text-muted-foreground">Stock: {product.stock}</p>
                     {product.status === "rejected" && product.bao_comment && (
                       <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">

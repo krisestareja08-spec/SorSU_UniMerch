@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/components/marketplace/product-card"
+import { withPriceRange } from "@/lib/variants"
 import { ACCENTS, DEFAULT_THEME, type StorefrontTheme } from "@/lib/storefront-theme"
 
 export { ACCENTS, storefrontHref } from "@/lib/storefront-theme"
@@ -126,7 +127,7 @@ export async function getStorefrontProducts(
     stock: p.stock,
     category: p.category,
   }))
-  return { products, total: count ?? products.length }
+  return { products: await withPriceRange(supabase, products), total: count ?? products.length }
 }
 
 /** The seller's own categories (from their approved products) with product counts. */

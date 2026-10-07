@@ -13,11 +13,11 @@ import { computeRoyalty } from "@/lib/access"
 import type { PaymentMode } from "@/lib/product-pricing"
 import { cn } from "@/lib/utils"
 import { unwrap } from "@/lib/action-result"
+import { VariantEditor, draftsToInputs, emptyDraft, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
 
 const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
 const BADGES = ["Available", "Pre-Order", "Interest Check"]
 const MAX_IMAGES = 5
-// Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
 // How buyers may pay. Cashier and Supply Office are walk-in counters first; online is optional.
 const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hint: string }[] = [
   { value: "walk_in", modes: ["walk_in"],           label: "Walk-in only", hint: "Buyer pays at your counter" },
@@ -25,8 +25,7 @@ const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hin
   { value: "both",    modes: ["walk_in", "online"], label: "Both",         hint: "Buyer chooses at checkout" },
 ]
 
-type VariantRow = { name: string; price: string }
-
+// Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
 const RESTRICTABLE: { value: string; label: string }[] = [
   { value: "student", label: "Verified Student" },
   { value: "faculty", label: "Verified Faculty (teaching)" },
@@ -48,10 +47,9 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   const [badge, setBadge] = useState("Available")
   const [sku, setSku] = useState("")
   const [tags, setTags] = useState("")
-  // Sizes / variants are typed in by the seller; each can optionally have its own price
-  const [variants, setVariants] = useState<VariantRow[]>([])
-  const [newVariant, setNewVariant] = useState("")
-  const [priceBySize, setPriceBySize] = useState(false)
+  // Sizes: each is its own variant with its own price, stock, SKU and optional image
+  const [hasVariants, setHasVariants] = useState(false)
+  const [variantRows, setVariantRows] = useState<VariantDraft[]>([])
   const defaultPayment = module === "seller" ? "both" : "walk_in"
   const [payment, setPayment] = useState(defaultPayment)
   const [isRestricted, setIsRestricted] = useState(false)
@@ -69,7 +67,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
 
   function reset() {
     setName(""); setDescription(""); setCategory(""); setPrice(""); setStock(""); setBadge("Available")
-    setSku(""); setTags(""); setVariants([]); setNewVariant(""); setPriceBySize(false); setPayment(defaultPayment)
+    setSku(""); setTags(""); setHasVariants(false); setVariantRows([]); setPayment(defaultPayment)
     setImageFiles([]); setImagePreviews([]); setError(null)
     setIsRestricted(false); setAllowedRoles([]); setHasLogo(false)
   }
@@ -94,17 +92,10 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     setImagePreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
-  function addVariant() {
-    const names = newVariant.split(",").map((v) => v.trim()).filter(Boolean)
-    setVariants((prev) => [...prev, ...names.filter((n) => !prev.some((p) => p.name.toLowerCase() === n.toLowerCase())).map((name) => ({ name, price: "" }))])
-    setNewVariant("")
-  }
-
   // Pre-orders are paid upfront online, so they always allow online payment
   const isPreOrder = badge === "Pre-Order"
   const paymentModes: PaymentMode[] = PAYMENT_CHOICES.find((c) => c.value === payment)!.modes
   const effectiveModes: PaymentMode[] = isPreOrder && !paymentModes.includes("online") ? [...paymentModes, "online"] : paymentModes
-  const usesSizePrices = priceBySize && variants.length > 0
 
   function toggleAllowedRole(role: string) {
     setAllowedRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role])
@@ -115,12 +106,14 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     setError(null)
     if (!name.trim()) { setError("Product name is required."); return }
     if (!category) { setError("Please select a category."); return }
-    // With per-size prices every size needs a price, and the product's base price is the lowest one
-    const sizePrices = usesSizePrices ? variants.map((v) => parseFloat(v.price)) : []
-    if (sizePrices.some((p) => isNaN(p) || p < 0)) { setError("Enter a price for every size."); return }
-    const priceNum = usesSizePrices ? Math.min(...sizePrices) : parseFloat(price)
+    // With sizes, each size carries its own price and stock (the product shows the range and total)
+    if (hasVariants) {
+      const problem = validateDrafts(variantRows)
+      if (problem) { setError(problem); return }
+    }
+    const priceNum = hasVariants ? Math.min(...variantRows.map((r) => parseFloat(r.price))) : parseFloat(price)
     if (isNaN(priceNum) || priceNum < 0) { setError("Enter a valid price."); return }
-    const stockNum = parseInt(stock, 10)
+    const stockNum = hasVariants ? variantRows.reduce((n, r) => n + parseInt(r.stock, 10), 0) : parseInt(stock, 10)
     if (isNaN(stockNum) || stockNum < 0) { setError("Enter a valid stock quantity."); return }
     if (imageFiles.length === 0) { setError("At least one product image is required."); return }
     if (isRestricted && allowedRoles.length === 0) { setError("Select who can buy this restricted product."); return }
@@ -155,8 +148,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
       formData.set("badge", badge)
       if (sku.trim()) formData.set("sku", sku.trim())
       if (tags.trim()) formData.set("tags", tags.trim())
-      if (variants.length > 0) formData.set("variations", JSON.stringify(variants.map((v) => v.name)))
-      if (usesSizePrices) formData.set("variant_prices", JSON.stringify(Object.fromEntries(variants.map((v, i) => [v.name, sizePrices[i]]))))
+      if (hasVariants) formData.set("variants", JSON.stringify(await draftsToInputs(supabase, sellerId, variantRows)))
       formData.set("payment_modes", JSON.stringify(effectiveModes))
       formData.set("images", imageUrls.join(","))
       formData.set("draft", String(draft))
@@ -182,8 +174,8 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     )
   }
 
-  const priceNum = usesSizePrices
-    ? Math.min(...variants.map((v) => parseFloat(v.price) || 0))
+  const priceNum = hasVariants && variantRows.length > 0
+    ? Math.min(...variantRows.map((r) => parseFloat(r.price) || 0))
     : parseFloat(price) || 0
   const royaltyPreview = computeRoyalty(priceNum, hasLogo, royaltyPercentage)
 
@@ -283,7 +275,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="p-price">Price (₱) *</Label>
-              {usesSizePrices ? (
+              {hasVariants ? (
                 <p className="flex h-8 items-center rounded-lg border border-dashed border-border px-2.5 text-xs text-muted-foreground">Set per size below</p>
               ) : (
                 <Input id="p-price" type="number" min="0" step="0.01" placeholder="0.00" value={price} onChange={(e) => setPrice(e.target.value)} required />
@@ -291,7 +283,11 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="p-stock">Stock Quantity *</Label>
-              <Input id="p-stock" type="number" min="0" placeholder="0" value={stock} onChange={(e) => setStock(e.target.value)} required />
+              {hasVariants ? (
+                <p className="flex h-8 items-center rounded-lg border border-dashed border-border px-2.5 text-xs text-muted-foreground">Set per size below</p>
+              ) : (
+                <Input id="p-stock" type="number" min="0" placeholder="0" value={stock} onChange={(e) => setStock(e.target.value)} required />
+              )}
             </div>
           </div>
 
@@ -306,44 +302,19 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
             </div>
           </div>
 
-          {/* Sizes / variants — typed in by the seller, optionally priced per size */}
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="p-variant">Sizes / Variants</Label>
-            <div className="flex gap-2">
-              <Input id="p-variant" placeholder="e.g. Small, Medium, 2XL, Red (comma-separated)" value={newVariant}
-                onChange={(e) => setNewVariant(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addVariant() } }}
-                className="text-xs" />
-              <Button type="button" variant="outline" size="sm" onClick={addVariant} disabled={!newVariant.trim()} className="shrink-0 gap-1">
-                <Plus className="size-3.5" />Add
-              </Button>
-            </div>
-            {variants.length > 0 && (
+          {/* Sizes: each one is a separate variant with its own price, stock, SKU and image */}
+          <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
+            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <input type="checkbox" checked={hasVariants}
+                onChange={(e) => { setHasVariants(e.target.checked); if (e.target.checked && variantRows.length === 0) setVariantRows([emptyDraft()]) }} />
+              This product comes in different sizes / variants
+            </label>
+            {hasVariants && (
               <>
-                <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                  <input type="checkbox" checked={priceBySize} onChange={(e) => setPriceBySize(e.target.checked)} />
-                  Different price per size (optional)
-                </label>
-                <ul className="divide-y divide-border rounded-xl border border-border">
-                  {variants.map((v, i) => (
-                    <li key={v.name} className="flex items-center gap-2 px-3 py-2">
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{v.name}</span>
-                      {priceBySize && (
-                        <div className="relative w-28">
-                          <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₱</span>
-                          <Input type="number" min="0" step="0.01" placeholder="0.00" aria-label={`Price for ${v.name}`} value={v.price}
-                            onChange={(e) => setVariants((prev) => prev.map((p, j) => (j === i ? { ...p, price: e.target.value } : p)))}
-                            className="h-8 pl-6 text-xs" />
-                        </div>
-                      )}
-                      <button type="button" onClick={() => setVariants((prev) => prev.filter((_, j) => j !== i))} aria-label={`Remove ${v.name}`}
-                        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-destructive">
-                        <X className="size-3.5" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {priceBySize && <p className="text-[11px] text-muted-foreground">Buyers see the price change when they pick a size. The lowest price is shown on the product card.</p>}
+                <p className="text-[11px] text-muted-foreground">
+                  Give each size its own price, stock and SKU, and optionally a photo. Buyers see the price range until they pick a size, then that size&apos;s exact price and stock.
+                </p>
+                <VariantEditor rows={variantRows} onChange={setVariantRows} />
               </>
             )}
           </div>

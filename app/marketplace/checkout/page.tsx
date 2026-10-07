@@ -183,7 +183,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
           receiptUrl = urlData.publicUrl
         }
       }
-      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal }))
+      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant, variantId: i.variantId })), paymentMethod: payment, receiptUrl, total: subtotal }))
       setPlaced(true)
       if (buyMode) clearBuyNowItem()
       else removeItems(items.map(lineKey))

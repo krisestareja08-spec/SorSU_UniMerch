@@ -53,7 +53,10 @@ with checks(script, what, applied) as (values
      to_regclass('public.product_reviews') is not null and to_regclass('public.store_banners') is not null and to_regclass('public.user_carts') is not null),
   ('27_variant_prices_payment_modes.sql', 'products.variant_prices + payment_modes',
      exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'variant_prices')
-     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'payment_modes'))
+     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'payment_modes')),
+  ('28_product_variants.sql',       'product_variants table + order_items.variant_id',
+     to_regclass('public.product_variants') is not null
+     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'order_items' and column_name = 'variant_id'))
 )
 select script,
        case when applied then 'ok' else 'MISSING' end as status,

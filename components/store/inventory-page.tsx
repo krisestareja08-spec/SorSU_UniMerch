@@ -9,6 +9,8 @@ import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
 import { ActionForm } from "@/components/ui/action-form"
+import { Fragment } from "react"
+import { loadVariants } from "@/lib/variants"
 
 const LOW_STOCK = 5
 
@@ -17,6 +19,27 @@ const REASON_LABELS: Record<string, string> = {
 }
 
 type ProductRow = { id: string; name: string; category: string; stock: number; status: string; badge: string; image_url: string | null }
+
+const stockTone = (n: number) => (n === 0 ? "text-destructive" : n <= LOW_STOCK ? "text-amber-700" : "")
+const stockNote = (n: number) => (n === 0 ? " · out of stock" : n <= LOW_STOCK ? " · low" : "")
+
+/** Restock (+) or adjustment (±) for a product, or for one size of it. */
+function StockForm({ module, productId, variantId }: { module: string; productId: string; variantId?: string }) {
+  return (
+    <ActionForm action={adjustStock} className="flex flex-wrap items-center gap-1.5">
+      <input type="hidden" name="module" value={module} />
+      <input type="hidden" name="product_id" value={productId} />
+      {variantId && <input type="hidden" name="variant_id" value={variantId} />}
+      <select name="reason" className="h-8 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Type">
+        <option value="restock">Restock (+)</option>
+        <option value="adjustment">Adjustment (±)</option>
+      </select>
+      <input name="change" type="number" required placeholder="Qty" className="h-8 w-20 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Quantity" />
+      <input name="note" placeholder="Note" className="h-8 w-32 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Note" />
+      <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Save</button>
+    </ActionForm>
+  )
+}
 
 /**
  * Inventory management for a store: current stock, low-stock alerts, restock / adjustment,
@@ -29,6 +52,8 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
     supabase.from("inventory_movements").select("product_name, change, reason, note, created_at").eq("store_id", ctx.storeId ?? "").order("created_at", { ascending: false }).limit(50),
   ])
   const products = (productRows ?? []) as ProductRow[]
+  // Products with sizes keep stock per size (scripts/28); restocks and adjustments go to that size
+  const variantsByProduct = (await loadVariants(supabase, products.map((p) => p.id))) ?? new Map()
   const movements = (movementsRes.data ?? []) as { product_name: string | null; change: number; reason: string; note: string | null; created_at: string }[]
   const totalUnits = products.reduce((n, p) => n + p.stock, 0)
   const low = products.filter((p) => p.stock > 0 && p.stock <= LOW_STOCK).length
@@ -56,31 +81,39 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
               <th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">Restock / adjust</th></tr></thead>
             <tbody>
               {products.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No products yet.</td></tr>}
-              {products.map((p) => (
-                <tr key={p.id} className="border-b border-border/60 align-middle last:border-0">
-                  <td className="py-2 pr-3">
-                    <div className="flex items-center gap-2">
-                      <div className="relative size-9 shrink-0 overflow-hidden rounded-lg bg-muted">{p.image_url && <Image src={p.image_url} alt="" fill className="object-cover" sizes="36px" />}</div>
-                      <div><p className="font-medium">{p.name}</p><p className="text-xs text-muted-foreground">{p.category}</p></div>
-                    </div>
-                  </td>
-                  <td className={cn("py-2 pr-3 text-right font-semibold tabular-nums", p.stock === 0 ? "text-destructive" : p.stock <= LOW_STOCK ? "text-amber-700" : "")}>{p.stock}</td>
-                  <td className="py-2 pr-3 text-xs capitalize text-muted-foreground">{p.status}{p.stock === 0 ? " · out of stock" : p.stock <= LOW_STOCK ? " · low" : ""}</td>
-                  <td className="py-2">
-                    <ActionForm action={adjustStock} className="flex flex-wrap items-center gap-1.5">
-                      <input type="hidden" name="module" value={ctx.module} />
-                      <input type="hidden" name="product_id" value={p.id} />
-                      <select name="reason" className="h-8 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Type">
-                        <option value="restock">Restock (+)</option>
-                        <option value="adjustment">Adjustment (±)</option>
-                      </select>
-                      <input name="change" type="number" required placeholder="Qty" className="h-8 w-20 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Quantity" />
-                      <input name="note" placeholder="Note" className="h-8 w-32 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Note" />
-                      <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Save</button>
-                    </ActionForm>
-                  </td>
-                </tr>
-              ))}
+              {products.map((p) => {
+                const variants = variantsByProduct.get(p.id) ?? []
+                return (
+                  <Fragment key={p.id}>
+                    <tr className={cn("align-middle", variants.length ? "" : "border-b border-border/60 last:border-0")}>
+                      <td className="py-2 pr-3">
+                        <div className="flex items-center gap-2">
+                          <div className="relative size-9 shrink-0 overflow-hidden rounded-lg bg-muted">{p.image_url && <Image src={p.image_url} alt="" fill className="object-cover" sizes="36px" />}</div>
+                          <div><p className="font-medium">{p.name}</p><p className="text-xs text-muted-foreground">{p.category}{variants.length ? ` · ${variants.length} sizes` : ""}</p></div>
+                        </div>
+                      </td>
+                      <td className={cn("py-2 pr-3 text-right font-semibold tabular-nums", stockTone(p.stock))}>{p.stock}</td>
+                      <td className="py-2 pr-3 text-xs capitalize text-muted-foreground">{p.status}{stockNote(p.stock)}</td>
+                      <td className="py-2">
+                        {variants.length
+                          ? <span className="text-xs text-muted-foreground">Total of all sizes — adjust each size below</span>
+                          : <StockForm module={ctx.module} productId={p.id} />}
+                      </td>
+                    </tr>
+                    {variants.map((v: { id: string; name: string; stock: number; sku: string | null }, i: number) => (
+                      <tr key={v.id} className={cn("align-middle bg-muted/20", i === variants.length - 1 && "border-b border-border/60")}>
+                        <td className="py-1.5 pl-11 pr-3 text-sm">
+                          <span className="font-medium">{v.name}</span>
+                          {v.sku && <span className="ml-2 text-xs text-muted-foreground">SKU {v.sku}</span>}
+                        </td>
+                        <td className={cn("py-1.5 pr-3 text-right font-semibold tabular-nums", stockTone(v.stock))}>{v.stock}</td>
+                        <td className="py-1.5 pr-3 text-xs text-muted-foreground">{stockNote(v.stock).replace(" · ", "") || "in stock"}</td>
+                        <td className="py-1.5"><StockForm module={ctx.module} productId={p.id} variantId={v.id} /></td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </CardContent>

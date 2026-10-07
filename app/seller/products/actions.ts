@@ -7,7 +7,10 @@ import { MODULES, type ModuleKey } from "@/lib/modules"
 import { revalidatePath } from "next/cache"
 import { computeRoyalty } from "@/lib/access"
 import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
-import { parsePaymentModes, parseVariantPrices } from "@/lib/product-pricing"
+import { parsePaymentModes } from "@/lib/product-pricing"
+import { loadVariants, parseVariantInputs, variantName, variantRow } from "@/lib/variants"
+
+const NEEDS_SCRIPT_28 = "Sizes with their own price and stock need scripts/28_product_variants.sql. Ask the admin to run it in Supabase."
 
 const STORE_MODULES: ModuleKey[] = ["seller", "cashier", "supply_office"]
 
@@ -35,17 +38,15 @@ async function addProductImpl(formData: FormData) {
   const name = formData.get("name") as string
   const description = formData.get("description") as string
   const category = formData.get("category") as string
-  const price = parseFloat(formData.get("price") as string)
-  const stock = parseInt(formData.get("stock") as string, 10)
+  // Sizes: each is its own variant (price, stock, SKU, image); the product shows the range and total
+  const variants = parseVariantInputs(JSON.parse((formData.get("variants") as string | null) ?? "[]"))
+  const price = variants.length ? Math.min(...variants.map((v) => v.price)) : parseFloat(formData.get("price") as string)
+  const stock = variants.length ? variants.reduce((n, v) => n + v.stock, 0) : parseInt(formData.get("stock") as string, 10)
   const badge = formData.get("badge") as string
   const images = (formData.get("images") as string | null)?.split(",").map((u) => u.trim()).filter(Boolean) ?? []
   const sku = formData.get("sku") as string | null
   const tags = (formData.get("tags") as string | null)?.split(",").map((t) => t.trim()).filter(Boolean) ?? []
-  const variationsRaw = formData.get("variations") as string | null
-  const variations: string[] = variationsRaw ? JSON.parse(variationsRaw) : []
-  // Optional price per size; only sizes that exist on the product count
-  const variantPrices = parseVariantPrices(JSON.parse((formData.get("variant_prices") as string | null) ?? "{}"))
-  for (const key of Object.keys(variantPrices)) if (!variations.includes(key)) delete variantPrices[key]
+  const variations = variants.map((v) => variantName(v.size, v.color))
   const paymentModes = parsePaymentModes(JSON.parse((formData.get("payment_modes") as string | null) ?? "[]"))
   const draft = formData.get("draft") === "true"
   const isRestricted = formData.get("is_restricted") === "true"
@@ -81,16 +82,55 @@ async function addProductImpl(formData: FormData) {
     is_royalty_product: isRoyaltyProduct,
     status: draft ? "draft" : "pending",
   }
-  let { error } = await supabase.from("products").insert({ ...row, variant_prices: variantPrices, payment_modes: paymentModes })
-  if (error && /variant_prices|payment_modes/.test(error.message)) {
-    if (Object.keys(variantPrices).length > 0 || paymentModes.length < 2) {
-      throw new Error("Size prices and payment modes need scripts/27_variant_prices_payment_modes.sql. Ask the admin to run it in Supabase.")
-    }
-    ;({ error } = await supabase.from("products").insert(row)) // database without scripts/27 yet
+  let { data: created, error } = await supabase.from("products").insert({ ...row, payment_modes: paymentModes }).select("id").single()
+  if (error && /payment_modes/.test(error.message)) {
+    if (paymentModes.length < 2) throw new Error("Payment modes need scripts/27_variant_prices_payment_modes.sql. Ask the admin to run it in Supabase.")
+    ;({ data: created, error } = await supabase.from("products").insert(row).select("id").single()) // database without scripts/27 yet
   }
+  if (error || !created) throw new Error(error?.message ?? "Couldn't save the product.")
 
-  if (error) throw new Error(error.message)
+  if (variants.length) {
+    const { error: variantError } = await supabase.from("product_variants").insert(variants.map((v, i) => variantRow(created.id, v, i)))
+    if (variantError) {
+      // Don't leave a product without its sizes behind
+      await supabase.from("products").delete().eq("id", created.id)
+      throw new Error(/product_variants/.test(variantError.message) ? NEEDS_SCRIPT_28 : variantError.message)
+    }
+  }
   revalidatePath(path)
+}
+
+/**
+ * Replaces a product's sizes with the seller's edited list: changed sizes are updated, new ones added,
+ * removed ones deleted. The database keeps the product's price range, total stock and size list in sync.
+ */
+async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJson: string) {
+  const { supabase, storeId, path } = await storeContext(module)
+  const variants = parseVariantInputs(JSON.parse(variantsJson || "[]"))
+  if (variants.length === 0) throw new Error("Add at least one size.")
+
+  const { data: product } = await supabase.from("products").select("id, seller_id").eq("id", productId).maybeSingle()
+  if (!product || product.seller_id !== storeId) throw new Error("Product not found in your store.")
+
+  const existing = await loadVariants(supabase, [productId])
+  if (!existing) throw new Error(NEEDS_SCRIPT_28)
+  const current = existing.get(productId) ?? []
+  const keepIds = new Set(variants.map((v) => v.id).filter(Boolean))
+
+  const removed = current.filter((v) => !keepIds.has(v.id)).map((v) => v.id)
+  if (removed.length) {
+    const { error } = await supabase.from("product_variants").delete().in("id", removed)
+    if (error) throw new Error(error.message)
+  }
+  for (const [i, v] of variants.entries()) {
+    const row = variantRow(productId, v, i)
+    const { error } = v.id && current.some((c) => c.id === v.id)
+      ? await supabase.from("product_variants").update(row).eq("id", v.id).eq("product_id", productId)
+      : await supabase.from("product_variants").insert(row)
+    if (error) throw new Error(/duplicate|unique/i.test(error.message) ? `"${row.name}" is listed twice.` : error.message)
+  }
+  revalidatePath(path)
+  revalidatePath(`/marketplace/product/${productId}`)
 }
 
 async function deleteProductImpl(productId: string, module: ModuleKey = "seller") {
@@ -130,4 +170,7 @@ export async function deleteProduct(...args: Parameters<typeof deleteProductImpl
 }
 export async function publishDraft(...args: Parameters<typeof publishDraftImpl>) {
   return attempt(() => publishDraftImpl(...args))
+}
+export async function saveVariants(...args: Parameters<typeof saveVariantsImpl>) {
+  return attempt(() => saveVariantsImpl(...args))
 }

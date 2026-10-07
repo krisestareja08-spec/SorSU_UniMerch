@@ -1,18 +1,17 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
-import Image from "next/image"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Package } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { ProductVariantActions } from "@/components/marketplace/product-variant-actions"
+import { ProductPurchasePanel } from "@/components/marketplace/product-purchase-panel"
 import { SellerVisitBar } from "@/components/storefront/seller-visit-bar"
 import { MessageSellerButton } from "@/components/messages/message-seller-button"
 import { ProductReviews } from "@/components/reviews/product-reviews"
 import { Stars } from "@/components/reviews/stars"
 import { SellerProductCarousel } from "@/components/storefront/seller-product-carousel"
 import { getStorefront, storefrontHref } from "@/lib/storefront"
-import { parseVariantPrices, priceRange } from "@/lib/product-pricing"
+import { loadVariants } from "@/lib/variants"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":      "bg-emerald-100 text-emerald-700 border border-emerald-200",
@@ -43,9 +42,11 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   // Buyers pay the listed price; the logo royalty is deducted from the seller's earnings and goes to BAO.
   const displayPrice = Number(product.price)
   const variations: string[] = Array.isArray(product.variations) ? product.variations : []
-  // Per-size prices arrive with scripts/27; a separate query so older databases still load the page
-  const { data: pricing } = await supabase.from("products").select("variant_prices").eq("id", product.id).maybeSingle()
-  const variantPrices = parseVariantPrices(pricing?.variant_prices)
+  // Each size is its own variant with its own price, stock, SKU and image (scripts/28); before that
+  // script, sizes are names only and share the product's price and stock
+  const variantMap = await loadVariants(supabase, [product.id])
+  const variants = variantMap?.get(product.id) ?? []
+  const { data: range } = await supabase.from("products").select("price_max").eq("id", product.id).maybeSingle()
   // rating_avg / rating_count arrive with scripts/26; a separate query so older databases still load the page
   const { data: rating } = await supabase.from("products").select("rating_avg, rating_count").eq("id", product.id).maybeSingle()
 
@@ -71,20 +72,14 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
         <ArrowLeft className="size-4" /> Back to Marketplace
       </Link>
 
-      <div className="grid gap-8 sm:grid-cols-2">
-        {/* Image */}
-        <div className="relative aspect-square overflow-hidden rounded-2xl bg-muted">
-          {product.image_url ? (
-            <Image src={product.image_url} alt={product.name} fill className="object-cover" sizes="(max-width: 640px) 100vw, 50vw" />
-          ) : (
-            <div className="flex h-full items-center justify-center">
-              <Package className="size-16 text-muted-foreground/30" />
-            </div>
-          )}
-        </div>
-
-        {/* Details */}
-        <div className="flex flex-col gap-4">
+      <ProductPurchasePanel
+        product={{
+          id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id,
+          price: displayPrice, priceMax: range?.price_max != null ? Number(range.price_max) : null,
+          image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out",
+        }}
+        options={{ variants, legacySizes: variants.length ? [] : variations, stock: product.stock }}
+        header={
           <div>
             <span className={cn("inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold", BADGE_STYLES[product.badge] ?? BADGE_STYLES["Available"])}>
               {product.badge}
@@ -97,49 +92,27 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                 <span className="text-muted-foreground">({rating.rating_count} review{rating.rating_count === 1 ? "" : "s"})</span>
               </a>
             )}
-            <Link href={sellerHref} className="mt-1 inline-block text-sm text-muted-foreground hover:text-primary hover:underline">
+            <Link href={sellerHref} className="mt-1 block text-sm text-muted-foreground hover:text-primary hover:underline">
               Sold by {sellerName}
             </Link>
           </div>
-
-          <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-gold">{priceRange(displayPrice, variations, variantPrices)}</p>
+        }
+        details={
+          <>
             {product.is_royalty_product && (
-              <p className="text-xs text-muted-foreground">Official university merch — includes a BAO royalty</p>
+              <p className="-mt-2 text-xs text-muted-foreground">Official university merch — includes a BAO royalty</p>
             )}
-          </div>
-
-          {product.description && (
-            <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
-          )}
-
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Seller:</span>
-            <Link href={sellerHref} className="font-medium text-foreground hover:text-primary hover:underline">
-              {sellerName}
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <span>Category:</span>
-            <Badge variant="secondary">{product.category}</Badge>
-          </div>
-
-          {product.stock > 0 ? (
-            <p className="text-sm text-emerald-600 dark:text-emerald-400">{product.stock} in stock</p>
-          ) : product.badge !== "Pre-Order" ? (
-            <p className="text-sm text-destructive">Out of stock</p>
-          ) : null}
-
-          <ProductVariantActions
-            product={{ id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id, price: displayPrice, image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out" }}
-            variations={variations}
-            variantPrices={variantPrices}
-            stock={product.stock}
-          />
-          <MessageSellerButton productId={product.id} />
-        </div>
-      </div>
+            {product.description && (
+              <p className="text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+            )}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Category:</span>
+              <Badge variant="secondary">{product.category}</Badge>
+            </div>
+          </>
+        }
+        footer={<MessageSellerButton productId={product.id} />}
+      />
 
       <ProductReviews productId={product.id} />
 

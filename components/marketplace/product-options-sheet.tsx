@@ -5,10 +5,9 @@ import { useEffect, useState } from "react"
 import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { Loader2, Minus, Plus, ShoppingCart, X, Zap } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { useCart, type CartItem } from "@/lib/cart-context"
 import { BUY_NOW_CHECKOUT, setBuyNowItem } from "@/lib/buy-now"
-import { parseVariantPrices, unitPrice, type VariantPrices } from "@/lib/product-pricing"
+import { VariantPicker, describeSelection, usePurchaseOptions, type PurchaseOptions, type Selection } from "@/components/marketplace/variant-picker"
 import { cn } from "@/lib/utils"
 
 export type SheetProduct = {
@@ -18,35 +17,46 @@ export type SheetProduct = {
   sellerId?: string
   image: string
   badge: CartItem["badge"]
-  /** Base price (the lowest when sizes are priced differently) */
+  /** Lowest price (products.price) and highest (products.price_max) */
   price: number
-  /** Leave the next three out to load them when the sheet opens (e.g. from a product card) */
-  stock?: number
-  variations?: string[]
-  variantPrices?: VariantPrices
+  priceMax?: number | null
+  /** Leave out to load the sizes when the sheet opens (e.g. from a product card) */
+  options?: PurchaseOptions
 }
 
-type Options = { stock: number; variations: string[]; variantPrices: VariantPrices }
-
-/** The product's sizes, size prices and stock, loaded on demand (variant_prices arrives with scripts/27). */
-async function loadOptions(id: string): Promise<Options | null> {
-  const supabase = createClient()
-  type Row = { stock: number | null; variations: unknown; variant_prices?: unknown }
-  const load = async (columns: string) =>
-    (await supabase.from("products").select(columns).eq("id", id).maybeSingle()) as unknown as { data: Row | null; error: unknown }
-  let { data, error } = await load("stock, variations, variant_prices")
-  if (error) ({ data } = await load("stock, variations"))
-  if (!data) return null
+/** Shared "add this exact variant" line for the cart or Buy Now. */
+export function cartLine(product: SheetProduct, sel: Selection, price: number, quantity: number): CartItem {
   return {
-    stock: Number(data.stock ?? 0),
-    variations: Array.isArray(data.variations) ? data.variations.filter((v): v is string => typeof v === "string") : [],
-    variantPrices: parseVariantPrices(data.variant_prices),
+    id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller,
+    price, image: sel.variant?.imageUrl || product.image, badge: product.badge, quantity,
+    variant: sel.variant?.name ?? sel.legacySize ?? undefined,
+    variantId: sel.variant?.id, sku: sel.variant?.sku ?? undefined,
   }
 }
 
+/** − quantity + (typed or tapped), limited to the selected variant's stock. */
+export function QuantityStepper({ value, max, onChange }: { value: number; max: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center rounded-full border border-border">
+      <button type="button" aria-label="Decrease quantity" disabled={value <= 1} onClick={() => onChange(value - 1)}
+        className="flex size-9 items-center justify-center rounded-l-full text-primary hover:bg-muted disabled:opacity-40">
+        <Minus className="size-4" />
+      </button>
+      <input type="number" inputMode="numeric" min={1} max={max || 1} value={value} aria-label="Quantity"
+        onChange={(e) => onChange(Number.parseInt(e.target.value, 10) || 1)}
+        className="h-9 w-12 border-x border-border bg-transparent text-center text-sm font-semibold [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none" />
+      <button type="button" aria-label="Increase quantity" disabled={value >= max} onClick={() => onChange(value + 1)}
+        className="flex size-9 items-center justify-center rounded-r-full text-primary hover:bg-muted disabled:opacity-40">
+        <Plus className="size-4" />
+      </button>
+    </div>
+  )
+}
+
 /**
- * Shopee-style "Add to Cart" / "Buy Now" sheet: pick a size (the price follows it), set the
- * quantity, then confirm. A bottom sheet on phones, a dialog on larger screens.
+ * Shopee-style "Add to Cart" / "Buy Now" sheet: shows the price range until a size is picked, then
+ * that size's exact price, stock, SKU and image; set the quantity and confirm. Adds the exact
+ * variant. A bottom sheet on phones, a dialog on larger screens.
  */
 export function ProductOptionsSheet({
   product,
@@ -61,24 +71,9 @@ export function ProductOptionsSheet({
 }) {
   const router = useRouter()
   const { addItem } = useCart()
-  const given = product.variations !== undefined
-  const [options, setOptions] = useState<Options | null>(
-    given ? { stock: product.stock ?? 0, variations: product.variations ?? [], variantPrices: product.variantPrices ?? {} } : null,
-  )
-  const [failed, setFailed] = useState(false)
-  const [variant, setVariant] = useState<string | null>(null)
+  const { options, failed } = usePurchaseOptions(product.id, product.options)
+  const [sel, setSel] = useState<Selection>({ variant: null, legacySize: null })
   const [quantity, setQuantity] = useState(1)
-
-  useEffect(() => {
-    if (given) return
-    let cancelled = false
-    loadOptions(product.id).then((o) => {
-      if (cancelled) return
-      if (o) setOptions(o)
-      else setFailed(true)
-    })
-    return () => { cancelled = true }
-  }, [given, product.id])
 
   // Escape closes; the page behind doesn't scroll while the sheet is open
   useEffect(() => {
@@ -92,23 +87,15 @@ export function ProductOptionsSheet({
     }
   }, [onClose])
 
-  const preOrder = product.badge === "Pre-Order"
-  const stock = options?.stock ?? 0
-  // Pre-orders aren't limited by stock on hand
-  const maxQty = preOrder ? 99 : Math.max(0, stock)
-  const soldOut = product.badge === "Sold Out" || (!preOrder && options !== null && stock < 1)
-  const needsVariant = !!options && options.variations.length > 0 && !variant
-  const price = unitPrice(product.price, options?.variantPrices ?? {}, variant)
-  const qty = Math.min(Math.max(1, quantity), Math.max(1, maxQty))
+  const d = describeSelection(product, options, sel)
+  const qty = Math.min(Math.max(1, quantity), Math.max(1, d.maxQty))
+  const blocked = !options || d.soldOut || d.needsChoice
 
   function confirm() {
-    if (!options || soldOut || needsVariant) return
-    const item: CartItem = {
-      id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller,
-      price, image: product.image, badge: product.badge, quantity: qty, variant: variant ?? undefined,
-    }
+    if (blocked) return
+    const item = cartLine(product, sel, d.price, qty)
     if (mode === "buy") {
-      // Check out just this product; the cart (and what's ticked in it) is left alone
+      // Check out just this variant; the cart (and what's ticked in it) is left alone
       setBuyNowItem(item)
       router.push(BUY_NOW_CHECKOUT)
       return
@@ -128,18 +115,15 @@ export function ProductOptionsSheet({
           <X className="size-5" />
         </button>
 
-        {/* Product, live price, stock */}
+        {/* Selected variant: image, exact price (or range), stock, SKU */}
         <div className="flex gap-3 pr-8">
           <div className="relative size-20 shrink-0 overflow-hidden rounded-xl border border-border bg-muted">
-            <Image src={product.image || "/placeholder.jpg"} alt={product.name} fill className="object-cover" sizes="80px" />
+            <Image src={d.image || "/placeholder.jpg"} alt={product.name} fill className="object-cover" sizes="80px" />
           </div>
           <div className="flex min-w-0 flex-col justify-end">
             <p className="line-clamp-2 text-sm font-medium text-foreground">{product.name}</p>
-            <p className="mt-1 text-xl font-bold text-gold">₱{price.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground">
-              {!options ? "Loading…" : preOrder ? "Pre-order" : soldOut ? "Out of stock" : `${stock} in stock`}
-              {variant && <> · {variant}</>}
-            </p>
+            <p className="mt-1 text-xl font-bold text-gold">{d.priceLabel}</p>
+            <p className="text-xs text-muted-foreground">{d.stockLabel}{d.sku && <> · SKU {d.sku}</>}</p>
           </div>
         </div>
 
@@ -148,46 +132,26 @@ export function ProductOptionsSheet({
 
         {options && (
           <>
-            {/* Sizes / variants */}
-            {options.variations.length > 0 && (
+            {(d.hasVariants || options.legacySizes.length > 0) && (
               <div className="mt-4 border-t border-border pt-3">
-                <p className="mb-2 text-xs font-semibold text-muted-foreground">Size / Variant</p>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Size or variant">
-                  {options.variations.map((v) => (
-                    <button key={v} type="button" role="radio" aria-checked={variant === v} onClick={() => setVariant(v)}
-                      className={cn("rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
-                        variant === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-background text-foreground hover:border-primary/40")}>
-                      {v}
-                      {options.variantPrices[v] != null && <span className="ml-1 text-muted-foreground">₱{options.variantPrices[v].toLocaleString()}</span>}
-                    </button>
-                  ))}
-                </div>
+                <p className="mb-2 text-xs font-semibold text-muted-foreground">
+                  Size {sel.variant || sel.legacySize ? <span className="text-foreground">· {sel.variant?.name ?? sel.legacySize}</span> : <span className="text-amber-700 dark:text-amber-300">· choose one</span>}
+                </p>
+                <VariantPicker options={options} selection={sel} preOrder={d.preOrder} onSelect={(s) => { setSel(s); setQuantity(1) }} />
               </div>
             )}
 
-            {/* Quantity */}
             <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
               <p className="text-sm font-medium text-foreground">Quantity</p>
-              <div className="flex items-center rounded-full border border-border">
-                <button type="button" aria-label="Decrease quantity" disabled={qty <= 1} onClick={() => setQuantity(qty - 1)}
-                  className="flex size-9 items-center justify-center rounded-l-full text-primary hover:bg-muted disabled:opacity-40">
-                  <Minus className="size-4" />
-                </button>
-                <input type="number" inputMode="numeric" min={1} max={maxQty || 1} value={qty} aria-label="Quantity"
-                  onChange={(e) => setQuantity(Number.parseInt(e.target.value, 10) || 1)}
-                  className="h-9 w-12 border-x border-border bg-transparent text-center text-sm font-semibold [appearance:textfield] focus:outline-none [&::-webkit-inner-spin-button]:appearance-none" />
-                <button type="button" aria-label="Increase quantity" disabled={qty >= maxQty} onClick={() => setQuantity(qty + 1)}
-                  className="flex size-9 items-center justify-center rounded-r-full text-primary hover:bg-muted disabled:opacity-40">
-                  <Plus className="size-4" />
-                </button>
-              </div>
+              <QuantityStepper value={qty} max={d.maxQty} onChange={setQuantity} />
             </div>
 
-            <button type="button" onClick={confirm} disabled={soldOut || needsVariant}
+            <button type="button" onClick={confirm} disabled={blocked}
               className={cn("mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
                 mode === "buy" ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-gold text-primary hover:bg-gold/85")}>
               {mode === "buy" ? <Zap className="size-4" /> : <ShoppingCart className="size-4" />}
-              {soldOut ? "Out of stock" : needsVariant ? "Select a size" : mode === "buy" ? `Buy Now · ₱${(price * qty).toLocaleString()}` : `Add to Cart · ₱${(price * qty).toLocaleString()}`}
+              {d.soldOut ? "Out of stock" : d.needsChoice ? "Select a size"
+                : `${mode === "buy" ? "Buy Now" : "Add to Cart"} · ₱${(d.price * qty).toLocaleString()}`}
             </button>
           </>
         )}
