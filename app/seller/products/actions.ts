@@ -59,8 +59,6 @@ async function addProductImpl(formData: FormData) {
   if (isNaN(stock) || stock < 0) throw new Error("Enter a valid stock quantity.")
   if (images.length === 0) throw new Error("At least one product image is required.")
   if (isRestricted && allowedRoles.length === 0) throw new Error("Select who can buy this restricted product.")
-  // Pre-orders are paid upfront online
-  if (badge === "Pre-Order" && !paymentModes.includes("online")) paymentModes.push("online")
 
   const royaltyPercentage = hasLogo ? await getGlobalRoyaltyPercentage() : 0
   const { royaltyAmount, finalPrice, isRoyaltyProduct } = computeRoyalty(price, hasLogo, royaltyPercentage)

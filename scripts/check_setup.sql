@@ -56,7 +56,11 @@ with checks(script, what, applied) as (values
      and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'products' and column_name = 'payment_modes')),
   ('28_product_variants.sql',       'product_variants table + order_items.variant_id',
      to_regclass('public.product_variants') is not null
-     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'order_items' and column_name = 'variant_id'))
+     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'order_items' and column_name = 'variant_id')),
+  ('29_preorder_id_penalties.sql',  'buyer_penalties table + orders.pickup_date + preorder-ids bucket',
+     to_regclass('public.buyer_penalties') is not null
+     and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'orders' and column_name = 'pickup_date')
+     and exists (select 1 from storage.buckets where id = 'preorder-ids'))
 )
 select script,
        case when applied then 'ok' else 'MISSING' end as status,

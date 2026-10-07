@@ -18,6 +18,7 @@ import { Bone, LoadingRegion } from "@/components/skeletons"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { STRICT_FIELD_LABELS, validateFullName } from "@/lib/profile-rules"
 import { saveMyProfile } from "./actions"
+import { PenaltyCharges } from "@/components/account/penalty-charges"
 
 type Profile = { full_name: string; affiliation: string; student_employee_id: string; course: string; department: string; campus: string; contact: string; birthday: string; email: string; avatar_url: string | null; account_status: string }
 type EditableKey = "full_name" | "student_employee_id" | "course" | "department" | "campus" | "birthday"
@@ -195,6 +196,7 @@ export default function AccountPage() {
             {saveNotice && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">{saveNotice}</p>}
             {profile && profile.account_status !== "active" && <AccountStatusNotice status={profile.account_status} />}
             {profile && <PersonalInfoCard profile={profile} verified={verify.verified} onEdit={() => { setForm(profile); setEditing(true); setSaveNotice(null) }} />}
+            <PenaltyCharges />
             {[
               { label: "My Orders", icon: PackageSearch, href: "/marketplace/orders", desc: "Track and review past orders" },
               { label: "Settings", icon: Settings, href: "/marketplace/settings", desc: "Account & security, verification, notifications and appearance" },

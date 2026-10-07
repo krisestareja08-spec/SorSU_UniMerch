@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle, Banknote, Search } from "lucide-react"
 import { OrderChat } from "@/components/orders/order-chat"
+import { PreorderIdReview } from "@/components/store/preorder-id-review"
+import { StorePenalties } from "@/components/store/store-penalties"
 import { unwrap } from "@/lib/action-result"
 
 type Order = {
@@ -20,6 +22,8 @@ type Order = {
   created_at: string; receipt_url: string | null; reference_number: string | null
   amount_paid: number | null; buyer_id: string
   items: string
+  /** Pre-orders (scripts/29): buyer's pick-up date, I.D. photo and the shop's I.D. check */
+  pickup_date?: string | null; id_status?: string | null; buyer_id_path?: string | null
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -32,7 +36,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 const STATUS_LABELS: Record<string, string> = {
   pending: "Pending", paid: "Paid", partially_paid: "Partially Paid",
-  ready_for_pickup: "Ready for Pickup", completed: "Completed", cancelled: "Cancelled",
+  ready_for_pickup: "For Pick Up", completed: "Completed", cancelled: "Cancelled",
 }
 
 const PAYMENT_LABELS: Record<string, string> = { cash: "Walk-in (cash)", gcash: "GCash", bank: "Bank transfer" }
@@ -140,6 +144,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     setProfile({ role: "", full_name: ctx.fullName, email: ctx.email })
+    // Discard overdue pre-orders and charge their penalty before listing (no-op before scripts/29)
+    await supabase.rpc("expire_overdue_preorders").then(() => {}, () => {})
 
     const { data, error: err } = await supabase
       .from("order_items")
@@ -158,6 +164,12 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       const line = `${item.product_name}${item.variant ? ` (${item.variant})` : ""} ×${item.quantity}`
       cur.items = cur.items ? `${cur.items}, ${line}` : line
       map.set(o.id, cur)
+    }
+    // Pre-order details in a separate query so older databases still list orders
+    const { data: pre } = await supabase.from("orders").select("id, pickup_date, id_status, buyer_id_path").in("id", [...map.keys()])
+    for (const p of (pre ?? []) as { id: string; pickup_date: string | null; id_status: string | null; buyer_id_path: string | null }[]) {
+      const o = map.get(p.id)
+      if (o) Object.assign(o, { pickup_date: p.pickup_date, id_status: p.id_status, buyer_id_path: p.buyer_id_path })
     }
     setOrders([...map.values()])
     const chatParam = new URLSearchParams(window.location.search).get("chat")
@@ -235,7 +247,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
         {[
           { label: "Pending",          value: countActive("pending"),          color: "text-amber-600" },
           { label: "Paid",             value: countActive("paid") + countActive("partially_paid"), color: "text-emerald-600" },
-          { label: "Ready for Pickup", value: countActive("ready_for_pickup"), color: "text-primary" },
+          { label: "For Pick Up", value: countActive("ready_for_pickup"), color: "text-primary" },
           { label: "Completed",        value: orders.filter((o) => o.status === "completed").length, color: "text-foreground" },
         ].map((s) => (
           <div key={s.label} className="rounded-2xl border border-border bg-card p-4">
@@ -245,7 +257,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
         ))}
       </div>
 
-      {/* Ready for Pickup section */}
+      {/* For Pick Up section */}
       {readyOrders.length > 0 && (
         <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 dark:border-emerald-500/20 dark:bg-emerald-500/5 p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -273,6 +285,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
         </div>
       )}
 
+      {ctx.storeId && <StorePenalties storeId={ctx.storeId} module={ctx.module} />}
+
       {/* Tabs */}
       <div className="mt-6 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
         {(["active", "history"] as const).map((t) => (
@@ -293,7 +307,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       {/* Active filter pills */}
       {tab === "active" && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {[["all", "All"], ["pending", "Pending"], ["paid", "Paid"], ["partially_paid", "Partially Paid"], ["ready_for_pickup", "Ready"]].map(([s, l]) => (
+          {[["all", "All"], ["pending", "Pending"], ["paid", "Paid"], ["partially_paid", "Partially Paid"], ["ready_for_pickup", "For Pick Up"]].map(([s, l]) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", statusFilter === s ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
               {l}
@@ -336,6 +350,13 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                     </span>
                   </div>
                   <p className="mt-0.5 text-sm text-muted-foreground line-clamp-1">{o.items}</p>
+                  {o.pickup_date && (
+                    <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+                      Pre-order · pick up on {new Date(`${o.pickup_date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      {o.id_status === "pending" && " · I.D. not checked yet"}
+                      {o.id_status === "approved" && " · I.D. approved"}
+                    </p>
+                  )}
                   {buyers[o.id] && (
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                       <span className="font-medium text-foreground">
@@ -414,8 +435,12 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                   {needsIdCheck(o.id) && (
                     <p className="w-full text-xs text-amber-700 dark:text-amber-300">This order has restricted items — check the buyer&apos;s I.D. before confirming it.</p>
                   )}
-                  {/* Walk-in: paid in cash at the counter, like a register */}
-                  {o.payment_method === "cash" && (o.status === "pending" || o.status === "partially_paid") && (
+                  {o.pickup_date && o.status === "pending" && (
+                    <PreorderIdReview orderId={o.id} idPath={o.buyer_id_path ?? null} onDone={load} />
+                  )}
+                  {/* Walk-in: paid in cash at the counter, like a register (pre-orders: on pick-up) */}
+                  {o.payment_method === "cash" && ((o.status === "pending" && !o.pickup_date) || o.status === "partially_paid"
+                    || (o.pickup_date && o.status === "ready_for_pickup" && (o.amount_paid ?? 0) < o.total)) && (
                     <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
                       onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
                   )}
@@ -434,10 +459,10 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                   {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
                     <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
                       className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
-                      {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Ready for Pickup
+                      {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark For Pick Up
                     </Button>
                   )}
-                  {o.status === "ready_for_pickup" && (
+                  {o.status === "ready_for_pickup" && !(o.pickup_date && o.payment_method === "cash" && (o.amount_paid ?? 0) < o.total) && (
                     <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
                       className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
                       {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
