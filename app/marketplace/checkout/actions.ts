@@ -1,7 +1,10 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { createClient } from "@/lib/supabase/server"
 import { validateFullName } from "@/lib/profile-rules"
+import { PAYMENT_METHOD_MODE, parsePaymentModes, parseVariantPrices, unitPrice } from "@/lib/product-pricing"
 
 type OrderItem = {
   id: string
@@ -14,7 +17,7 @@ type OrderItem = {
   variant?: string
 }
 
-export async function submitOrder(args: {
+async function submitOrderImpl(args: {
   items: OrderItem[]
   paymentMethod: string
   receiptUrl?: string
@@ -25,9 +28,10 @@ export async function submitOrder(args: {
   if (!user) throw new Error("Not authenticated")
   if (args.items.length === 0) throw new Error("Cart is empty")
 
-  // BAO oversees the marketplace; its members cannot buy.
-  const { data: isBao } = await supabase.rpc("module_access", { p_module: "bao" })
-  if (isBao === true) throw new Error("BAO accounts can view the marketplace but cannot place orders.")
+  // Only plain user accounts buy. Dashboard accounts (Verification Admin, BAO, Supply Office,
+  // Cashier, Seller) manage and sell; they cannot place orders.
+  const { count: dashboards } = await supabase.from("dashboard_members").select("dashboard_id", { count: "exact", head: true }).eq("user_id", user.id)
+  if ((dashboards ?? 0) > 0) throw new Error("Dashboard accounts can't place orders. Use a regular user account to buy.")
 
   // Buyers need a real, complete profile and an account in good standing to order.
   const { data: buyer } = await supabase
@@ -43,11 +47,19 @@ export async function submitOrder(args: {
   if (!buyer?.contact) throw new Error("Add your contact number in your profile before ordering.")
 
   const productIds = args.items.map((item) => item.id)
-  const { data: products, error: productsError } = await supabase
-    .from("products")
-    .select("id, seller_id, name, price, royalty_amount, is_royalty_product, image_url, stock, badge")
-    .in("id", productIds)
-    .eq("status", "approved")
+  type ProductRow = {
+    id: string; seller_id: string; name: string; price: number; royalty_amount: number | null; royalty_percentage?: number | null
+    is_royalty_product: boolean; image_url: string | null; stock: number; badge: string
+    variations?: unknown; variant_prices?: unknown; payment_modes?: unknown
+  }
+  const loadProducts = async (columns: string) =>
+    (await supabase.from("products").select(columns).in("id", productIds).eq("status", "approved")) as unknown as { data: ProductRow[] | null; error: { message: string } | null }
+  const baseColumns = "id, seller_id, name, price, royalty_amount, royalty_percentage, is_royalty_product, image_url, stock, badge, variations"
+  // variant_prices / payment_modes arrive with scripts/27
+  let { data: products, error: productsError } = await loadProducts(`${baseColumns}, variant_prices, payment_modes`)
+  if (productsError && /variant_prices|payment_modes/.test(productsError.message)) {
+    ;({ data: products, error: productsError } = await loadProducts(baseColumns))
+  }
 
   if (productsError || !products || products.length !== new Set(productIds).size) {
     throw new Error("One or more products are no longer available.")
@@ -58,6 +70,14 @@ export async function submitOrder(args: {
     throw new Error("Check out one shop at a time. Each shop is paid separately.")
   }
 
+  // Each product allows walk-in payment, online payment or both; the chosen method must suit every item.
+  const mode = PAYMENT_METHOD_MODE[args.paymentMethod]
+  if (!mode) throw new Error("Choose a payment method.")
+  const notAllowed = products.find((product) => !parsePaymentModes(product.payment_modes).includes(mode))
+  if (notAllowed) {
+    throw new Error(`${notAllowed.name} can only be paid ${mode === "online" ? "at the store (walk-in)" : "online"}.`)
+  }
+
   // Pre-orders are paid upfront: GCash with an uploaded receipt, never cash on pickup.
   if (products.some((product) => product.badge === "Pre-Order")) {
     if (args.paymentMethod !== "gcash") throw new Error("Pre-orders must be paid upfront via GCash.")
@@ -65,21 +85,35 @@ export async function submitOrder(args: {
   }
 
   const productById = new Map(products.map((product) => [product.id, product]))
+  // Stock is per product, so add up every size of the same product in this order
+  const wanted = new Map<string, number>()
+  for (const item of args.items) wanted.set(item.id, (wanted.get(item.id) ?? 0) + item.quantity)
   const orderItems = args.items.map((item) => {
     const product = productById.get(item.id)!
-    if (product.stock < item.quantity && product.badge !== "Pre-Order") {
+    if (!Number.isInteger(item.quantity) || item.quantity < 1) throw new Error(`Choose a quantity for ${product.name}.`)
+    if (product.stock < (wanted.get(item.id) ?? 0) && product.badge !== "Pre-Order") {
       throw new Error(`${product.name} does not have enough stock.`)
     }
-    // The buyer pays the listed price. For official-logo products a royalty (like a tax) is taken
-    // from the seller's earnings and goes to BAO — recorded per unit for BAO's royalty reports.
-    const unitPrice = Number(product.price)
+    const variations = Array.isArray(product.variations) ? (product.variations as string[]) : []
+    if (variations.length > 0 && (!item.variant || !variations.includes(item.variant))) {
+      throw new Error(`Choose a size for ${product.name}.`)
+    }
+    // The buyer pays the listed price of the chosen size (sizes without their own price use the base
+    // price). For official-logo products a royalty (like a tax) is taken from the seller's earnings and
+    // goes to BAO — recorded per unit for BAO's royalty reports, from the price actually paid.
+    const variantPrices = parseVariantPrices(product.variant_prices)
+    const linePrice = unitPrice(Number(product.price), variantPrices, item.variant)
+    const royalty = !product.is_royalty_product ? 0
+      : item.variant && variantPrices[item.variant] != null && product.royalty_percentage != null
+        ? Math.round(linePrice * (Number(product.royalty_percentage) / 100) * 100) / 100
+        : Number(product.royalty_amount ?? 0)
     return {
       product_id: product.id,
       seller_id: product.seller_id as string,
       quantity: item.quantity,
-      unit_price: unitPrice,
-      original_price: Number(product.price),
-      royalty_amount: product.is_royalty_product ? Number(product.royalty_amount ?? 0) : 0,
+      unit_price: linePrice,
+      original_price: linePrice,
+      royalty_amount: royalty,
       variant: item.variant ?? null,
       product_name: product.name,
       product_image_url: product.image_url,
@@ -143,4 +177,9 @@ export async function submitOrder(args: {
   }
 
   return { orderIds }
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function submitOrder(...args: Parameters<typeof submitOrderImpl>) {
+  return attempt(() => submitOrderImpl(...args))
 }

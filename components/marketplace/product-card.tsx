@@ -2,12 +2,10 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
 import { useState } from "react"
 import { ShoppingCart, Zap, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useCart } from "@/lib/cart-context"
-import { BUY_NOW_CHECKOUT, setBuyNowItem } from "@/lib/buy-now"
+import { ProductOptionsSheet } from "@/components/marketplace/product-options-sheet"
 import { RatingSummary } from "@/components/reviews/stars"
 
 export type ProductBadge = "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
@@ -33,19 +31,19 @@ const BADGE_STYLES: Record<ProductBadge, string> = {
   "Sold Out":       "bg-muted text-muted-foreground border border-border",
 }
 
+/** Add to Cart / Buy open the size + quantity sheet (it loads the product's sizes and stock). */
 function BuyerActions({ product }: { product: Product }) {
-  const router = useRouter()
-  const { addItem } = useCart()
+  const [sheet, setSheet] = useState<"cart" | "buy" | null>(null)
   const [added, setAdded] = useState(false)
+  const open = (mode: "cart" | "buy") => (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setSheet(mode)
+  }
   return (
     <div className="mt-2 flex gap-1.5" onClick={(e) => e.preventDefault()}>
       <button
-        onClick={(e) => {
-          e.stopPropagation()
-          addItem({ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge, quantity: 1 })
-          setAdded(true)
-          setTimeout(() => setAdded(false), 1500)
-        }}
+        onClick={open("cart")}
         className={cn(
           "flex flex-1 items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-all active:scale-95",
           added
@@ -57,17 +55,19 @@ function BuyerActions({ product }: { product: Product }) {
         {added ? "Added!" : "Add to Cart"}
       </button>
       <button
-        onClick={(e) => {
-          e.stopPropagation()
-          e.preventDefault()
-          // Check out just this product; the cart (and what's ticked in it) is left alone
-          setBuyNowItem({ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge, quantity: 1 })
-          router.push(BUY_NOW_CHECKOUT)
-        }}
+        onClick={open("buy")}
         className="flex items-center justify-center gap-1 rounded-lg border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-all hover:bg-gold/20 active:scale-95 dark:text-gold"
       >
         <Zap className="size-3" /> Buy
       </button>
+      {sheet && (
+        <ProductOptionsSheet
+          product={{ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge }}
+          mode={sheet}
+          onClose={() => setSheet(null)}
+          onAdded={() => { setAdded(true); setTimeout(() => setAdded(false), 1500) }}
+        />
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { formatDateTime, profilesById } from "@/lib/admin"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { cn } from "@/lib/utils"
 import { storefrontHref } from "@/lib/storefront"
+import { ActionForm } from "@/components/ui/action-form"
 
 type OrgRow = {
   id: string
@@ -86,25 +87,25 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
                 <p className="flex items-center gap-1.5 text-muted-foreground"><Users className="size-3.5" /> {o.dashboard_members.length} member{o.dashboard_members.length === 1 ? "" : "s"} · created {formatDateTime(o.created_at)}</p>
               </div>
 
-              <form action={appointMainAdmin} className="mt-3 flex gap-2">
+              <ActionForm action={appointMainAdmin} className="mt-3 flex gap-2">
                 <input type="hidden" name="dashboard_id" value={o.id} />
                 <input name="email" type="email" required placeholder={main ? "Replace Main Admin (email)" : "Appoint Main Admin (email)"}
                   className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-xs" />
                 <button type="submit" className="h-8 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-muted">Save</button>
-              </form>
+              </ActionForm>
 
               <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
                 <Link href={storefrontHref(o.store_id)} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
                   <ExternalLink className="size-3" /> Storefront
                 </Link>
-                <form action={updateSellerStatus} className="ml-auto">
+                <ActionForm action={updateSellerStatus} className="ml-auto">
                   <input type="hidden" name="seller_id" value={o.store_id} />
                   <input type="hidden" name="status" value={status === "active" ? "suspended" : "active"} />
                   <button type="submit" className={cn("rounded-lg border px-3 py-1 text-xs font-semibold",
                     status === "active" ? "border-destructive/30 text-destructive hover:bg-destructive/10" : "border-emerald-300 text-emerald-700 hover:bg-emerald-50")}>
                     {status === "active" ? "Suspend storefront" : "Activate storefront"}
                   </button>
-                </form>
+                </ActionForm>
               </div>
             </div>
           )

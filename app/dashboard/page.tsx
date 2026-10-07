@@ -127,7 +127,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Card>
         )}
 
-        {/* CTA cards */}
+        {/* CTA cards — buyers only; dashboard accounts don't shop (lib/supabase/proxy.ts) */}
+        {dashboards.length === 0 && (
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Card className="border-primary/10 transition-shadow hover:shadow-md">
             <CardHeader>
@@ -167,6 +168,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             </CardContent>
           </Card>
         </div>
+        )}
       </main>
     </div>
   )

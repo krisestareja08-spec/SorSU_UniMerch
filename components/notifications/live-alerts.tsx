@@ -35,12 +35,16 @@ export function LiveAlerts() {
   useEffect(() => {
     const supabase = createClient()
     let channel: ReturnType<typeof supabase.channel> | null = null
+    let cancelled = false
     const pending = timers.current
 
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) return
+      // Unmounted before the user loaded (e.g. React's dev double-mount): don't subscribe at all
+      if (!user || cancelled) return
       channel = supabase
-        .channel(`live-alerts-${user.id}`)
+        // Unique per mount: supabase.channel() returns an existing channel with the same name, and
+        // adding callbacks to one that is already subscribed throws
+        .channel(`live-alerts-${user.id}-${crypto.randomUUID()}`)
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` }, (payload) => {
           const n = payload.new as Alert
           window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT))
@@ -57,6 +61,7 @@ export function LiveAlerts() {
     })
 
     return () => {
+      cancelled = true
       if (channel) supabase.removeChannel(channel)
       pending.forEach(clearTimeout)
       pending.clear()

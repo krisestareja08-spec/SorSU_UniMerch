@@ -58,6 +58,7 @@ export async function updateSession(request: NextRequest) {
     '/supply-office',
     '/cashier',
     '/admin',
+    '/account',
   ]
   // Seller storefronts (/seller/{uuid}) are public; the rest of /seller is the Seller Dashboard.
   const isPublicStorefront = /^\/seller\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/?$/i.test(request.nextUrl.pathname)
@@ -74,15 +75,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // BAO oversees the marketplace but never shops: BAO members are kept inside the BAO dashboard's
-  // view-only marketplace (no cart, no orders). Product pages → BAO product review,
-  // storefronts → Seller Monitoring, anything else in the buyer marketplace → BAO marketplace view.
+  // Only plain user accounts shop. Dashboard accounts (Verification Admin, BAO, Supply Office,
+  // Cashier, Seller) manage and sell: any buyer page sends them back to their own dashboard.
+  //  • BAO → its view-only marketplace (/bao/browse, /bao/sellers/{id})
+  //  • Seller → the matching Seller Dashboard page
+  //  • others → their dashboard; settings/account → the shared My Account page (/account)
+  // Storefronts (/seller/{id}) stay open to non-BAO dashboards as a read-only preview.
   const path = request.nextUrl.pathname
   if (user && (path.startsWith('/marketplace') || isPublicStorefront)) {
-    const [{ data: isBao }, { data: isSeller }] = await Promise.all([
-      supabase.rpc('module_access', { p_module: 'bao' }),
-      path.startsWith('/marketplace') ? supabase.rpc('module_access', { p_module: 'seller' }) : Promise.resolve({ data: false }),
-    ])
+    const { data: rows } = await supabase.from('dashboard_members').select('dashboards(module)').eq('user_id', user.id)
+    const modules = new Set(
+      (rows ?? []).flatMap((r: { dashboards: { module: string } | { module: string }[] | null }) =>
+        (Array.isArray(r.dashboards) ? r.dashboards : r.dashboards ? [r.dashboards] : []).map((d) => d.module)),
+    )
     const redirectTo = (pathname: string) => {
       const url = request.nextUrl.clone()
       url.pathname = pathname
@@ -91,20 +96,25 @@ export async function updateSession(request: NextRequest) {
       supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
       return redirect
     }
-    if (isBao === true) {
+    // Same order as DASHBOARD_PRIORITY in lib/modules.ts
+    const primary = ['verification', 'bao', 'supply_office', 'cashier', 'seller'].find((m) => modules.has(m))
+
+    if (primary === 'bao') {
       const product = path.match(/^\/marketplace\/product\/([^/]+)/)
       const storefront = path.match(/^\/seller\/([0-9a-f-]{36})/i)
       return redirectTo(product ? `/bao/browse/${product[1]}` : storefront ? `/bao/sellers/${storefront[1]}` : '/bao/browse')
     }
-    // Seller accounts only sell: no cart, checkout, orders or shopping. Buyer pages → the matching
-    // Seller Dashboard page. (Storefronts stay open so sellers can preview theirs, without buy buttons.)
-    if (isSeller === true) {
-      const target =
-        path.startsWith('/marketplace/messages') ? '/seller/messages'
-        : path.startsWith('/marketplace/settings') || path.startsWith('/marketplace/account') ? '/seller/settings'
-        : path.startsWith('/marketplace/product') ? '/seller/products'
-        : '/seller'
-      return redirectTo(target)
+    if (primary && path.startsWith('/marketplace')) {
+      if (path.startsWith('/marketplace/settings') || path.startsWith('/marketplace/account')) return redirectTo('/account')
+      if (primary === 'seller') {
+        return redirectTo(
+          path.startsWith('/marketplace/messages') ? '/seller/messages'
+          : path.startsWith('/marketplace/product') ? '/seller/products'
+          : '/seller',
+        )
+      }
+      const home = { verification: '/admin', supply_office: '/supply-office', cashier: '/cashier' }[primary]
+      return redirectTo(home ?? '/')
     }
   }
 

@@ -6,7 +6,7 @@ import { use, useEffect, useRef, useState } from "react"
 import { Minus, Plus, Trash2, ShoppingBag, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useCart } from "@/lib/cart-context"
+import { lineKey, useCart } from "@/lib/cart-context"
 import { shopKey } from "@/lib/buy-now"
 
 const BADGE_STYLES: Record<string, string> = {
@@ -96,7 +96,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
   }, [selectedCount, allSelected])
 
   function toggleAll() {
-    setSelected(items.map((i) => i.id), !allSelected)
+    setSelected(items.map(lineKey), !allSelected)
   }
   function deleteAll() {
     if (window.confirm("Remove every item from your cart?")) clearCart()
@@ -155,10 +155,10 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
             </div>
           ) : (
             items.map((item) => (
-              <SwipeToDelete key={item.id} onDelete={() => removeItems([item.id])}>
+              <SwipeToDelete key={lineKey(item)} onDelete={() => removeItems([lineKey(item)])}>
                 <div className="flex gap-3 rounded-xl border border-primary/10 bg-card p-3 shadow-sm transition-all hover:border-primary/20 hover:shadow-md hover:shadow-primary/5 sm:gap-4 sm:p-4">
                   <div className="flex items-center pt-1">
-                    <input type="checkbox" checked={item.selected !== false} onChange={(e) => setSelected([item.id], e.target.checked)} className="size-4 rounded accent-primary" aria-label={`Select ${item.name}`} />
+                    <input type="checkbox" checked={item.selected !== false} onChange={(e) => setSelected([lineKey(item)], e.target.checked)} className="size-4 rounded accent-primary" aria-label={`Select ${item.name}`} />
                   </div>
                   <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-24">
                     <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" draggable={false} />
@@ -166,7 +166,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="line-clamp-2 text-sm font-medium leading-tight text-foreground">{item.name}</p>
-                      <button onClick={() => removeItem(item.id)} className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:text-destructive" aria-label="Remove item">
+                      <button onClick={() => removeItem(lineKey(item))} className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:text-destructive" aria-label="Remove item">
                         <Trash2 className="size-4" />
                       </button>
                     </div>
@@ -178,11 +178,11 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
                     <div className="mt-auto flex items-center justify-between pt-2">
                       <span className="text-base font-bold text-gold">₱{(item.price * item.quantity).toLocaleString()}</span>
                       <div className="flex items-center gap-1 rounded-full border border-border bg-background px-1">
-                        <button onClick={() => updateQty(item.id, -1)} className="flex size-7 items-center justify-center rounded-full text-primary transition-colors hover:bg-gold/15">
+                        <button onClick={() => updateQty(lineKey(item), -1)} className="flex size-7 items-center justify-center rounded-full text-primary transition-colors hover:bg-gold/15">
                           <Minus className="size-3.5" />
                         </button>
                         <span className="w-6 text-center text-sm font-semibold">{item.quantity}</span>
-                        <button onClick={() => updateQty(item.id, 1)} className="flex size-7 items-center justify-center rounded-full bg-gold text-primary transition-colors hover:bg-gold/80">
+                        <button onClick={() => updateQty(lineKey(item), 1)} className="flex size-7 items-center justify-center rounded-full bg-gold text-primary transition-colors hover:bg-gold/80">
                           <Plus className="size-3.5" />
                         </button>
                       </div>

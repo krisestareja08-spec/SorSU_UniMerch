@@ -12,6 +12,7 @@ import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { CASHIER_SCOPE_LABELS, type CashierScope } from "@/lib/cashier-branches"
 import { storefrontHref } from "@/lib/storefront-theme"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 type Branch = {
   id: string; name: string; store_id: string | null; campus: string | null; scope: CashierScope | null; department: string | null
@@ -74,12 +75,12 @@ export default async function CashierBranchesPage({ searchParams }: { searchPara
                         {main ? <Link href={`/admin/users/${main.user_id}`} className="font-medium text-primary hover:underline">{people.get(main.user_id)?.full_name ?? "Unnamed"}</Link> : <span className="font-medium text-destructive">Not appointed</span>}
                         <span className="ml-auto flex items-center gap-1 text-muted-foreground"><Users className="size-3.5" />{b.dashboard_members.length}</span>
                       </p>
-                      <form action={appointMainAdmin} className="mt-3 flex gap-2">
+                      <ActionForm action={appointMainAdmin} className="mt-3 flex gap-2">
                         <input type="hidden" name="dashboard_id" value={b.id} />
                         <input name="email" type="email" required placeholder={main ? "Replace Main Admin (email)" : "Appoint Main Admin (email)"}
                           className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-xs" />
                         <button type="submit" className="h-8 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-muted">Save</button>
-                      </form>
+                      </ActionForm>
                       {b.store_id && <Link href={storefrontHref(b.store_id)} className="mt-2 inline-block text-xs font-medium text-primary hover:underline">Storefront →</Link>}
                     </div>
                   )

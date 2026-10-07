@@ -5,6 +5,7 @@ import { BadgeCheck, Download, IdCard, Loader2, ShieldAlert, X } from "lucide-re
 import { getBuyerIdentity, type BuyerIdentity } from "@/app/store-order-actions"
 import type { ModuleKey } from "@/lib/modules"
 import { cn } from "@/lib/utils"
+import { unwrap } from "@/lib/action-result"
 
 /**
  * Orders with restricted items: staff open the buyer's verified I.D. and confirm the identity
@@ -32,7 +33,7 @@ export function BuyerIdCheck({
     setLoading(true)
     setError(null)
     try {
-      setInfo(await getBuyerIdentity(orderId, module))
+      setInfo(unwrap(await getBuyerIdentity(orderId, module)))
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the buyer's I.D.")
     } finally {

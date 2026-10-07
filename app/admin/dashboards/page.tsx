@@ -7,6 +7,7 @@ import { Building2, Crown, Users } from "lucide-react"
 import { appointMainAdmin } from "@/app/dashboard-actions"
 import { MODULES, type ModuleKey } from "@/lib/modules"
 import { profilesById } from "@/lib/admin"
+import { ActionForm } from "@/components/ui/action-form"
 
 /** University management dashboards (modules) and who holds Main Admin of each. */
 export default async function DashboardsPage() {
@@ -50,14 +51,14 @@ export default async function DashboardsPage() {
                   <span className="font-medium text-destructive">Not appointed</span>
                 )}
               </p>
-              <form action={appointMainAdmin} className="mt-3 flex flex-wrap gap-2">
+              <ActionForm action={appointMainAdmin} className="mt-3 flex flex-wrap gap-2">
                 <input type="hidden" name="dashboard_id" value={d.id} />
                 <input name="email" type="email" required placeholder="New Main Admin's email"
                   className="h-8 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-xs" />
                 <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
                   {mainProfile ? "Replace" : "Appoint"}
                 </button>
-              </form>
+              </ActionForm>
               <p className="mt-2 text-[11px] text-muted-foreground">The previous Main Admin stays on as a regular member.</p>
             </div>
           )

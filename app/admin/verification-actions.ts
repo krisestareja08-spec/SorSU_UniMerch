@@ -1,11 +1,13 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { revalidatePath } from "next/cache"
 import { redirect } from "next/navigation"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { requireAdminActor, logAudit } from "@/lib/admin"
 
-export async function decideVerification(formData: FormData) {
+async function decideVerificationImpl(formData: FormData) {
   const requestId = formData.get("request_id") as string
   const decision = formData.get("decision") as string
   const reason = (formData.get("reason") as string) || null
@@ -70,7 +72,7 @@ export async function decideVerification(formData: FormData) {
   if (returnTo) redirect(returnTo)
 }
 
-export async function updateAccountStatus(formData: FormData) {
+async function updateAccountStatusImpl(formData: FormData) {
   const userId = formData.get("user_id") as string
   const status = formData.get("status") as string
   const reason = (formData.get("reason") as string) || null
@@ -89,7 +91,7 @@ export async function updateAccountStatus(formData: FormData) {
 }
 
 /** Permanently deletes an account and everything it owns (see scripts/21_delete_user.sql). */
-export async function deleteUser(formData: FormData) {
+async function deleteUserImpl(formData: FormData) {
   const userId = formData.get("user_id") as string
   const reason = (formData.get("reason") as string) || null
   if (!userId) throw new Error("Missing user")
@@ -123,7 +125,7 @@ export async function deleteUser(formData: FormData) {
   redirect("/admin/users")
 }
 
-export async function updateSellerStatus(formData: FormData) {
+async function updateSellerStatusImpl(formData: FormData) {
   const sellerId = formData.get("seller_id") as string
   const status = formData.get("status") as string
   if (!sellerId || !["active", "suspended"].includes(status)) throw new Error("Invalid storefront status")
@@ -139,7 +141,7 @@ export async function updateSellerStatus(formData: FormData) {
 }
 
 /** Resolve a seller's report of a (dummy) buyer account: dismiss, suspend or ban. */
-export async function resolveAccountReport(formData: FormData) {
+async function resolveAccountReportImpl(formData: FormData) {
   const reportId = formData.get("report_id") as string
   const decision = formData.get("decision") as string
   const note = (formData.get("note") as string) || null
@@ -168,4 +170,21 @@ export async function resolveAccountReport(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath("/admin", "layout")
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function decideVerification(...args: Parameters<typeof decideVerificationImpl>) {
+  return attempt(() => decideVerificationImpl(...args))
+}
+export async function updateAccountStatus(...args: Parameters<typeof updateAccountStatusImpl>) {
+  return attempt(() => updateAccountStatusImpl(...args))
+}
+export async function deleteUser(...args: Parameters<typeof deleteUserImpl>) {
+  return attempt(() => deleteUserImpl(...args))
+}
+export async function updateSellerStatus(...args: Parameters<typeof updateSellerStatusImpl>) {
+  return attempt(() => updateSellerStatusImpl(...args))
+}
+export async function resolveAccountReport(...args: Parameters<typeof resolveAccountReportImpl>) {
+  return attempt(() => resolveAccountReportImpl(...args))
 }

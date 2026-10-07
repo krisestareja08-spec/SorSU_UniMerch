@@ -8,6 +8,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 import { deleteProduct } from "@/app/seller/products/actions"
+import { ActionForm } from "@/components/ui/action-form"
 
 const STATUS_STYLES = {
   pending:  { label: "Pending BAO Review",  icon: Clock,         color: "bg-amber-100/90 text-amber-700" },
@@ -70,9 +71,9 @@ export default async function SupplyOfficeProductsPage({ searchParams }: { searc
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">₱{Number(product.price).toLocaleString()}</p>
                     {product.status === "rejected" && product.bao_comment && <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">BAO: {product.bao_comment}</p>}
                     {product.status === "pending" && (
-                      <form action={deleteProduct.bind(null, product.id, "supply_office")}>
+                      <ActionForm action={deleteProduct.bind(null, product.id, "supply_office")}>
                         <button type="submit" className="mt-1.5 w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">Withdraw</button>
-                      </form>
+                      </ActionForm>
                     )}
                   </div>
                 </div>

@@ -8,6 +8,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle, FilePenLine, Lock, Award } from "lucide-react"
 import { deleteProduct, publishDraft } from "./actions"
+import { ActionForm } from "@/components/ui/action-form"
 
 const STATUS_STYLES = {
   draft:    { label: "Draft",              icon: FilePenLine,   color: "bg-muted text-muted-foreground" },
@@ -120,24 +121,24 @@ export default async function SellerProductsPage({ searchParams }: { searchParam
                     )}
                     {product.status === "draft" && (
                       <div className="mt-1.5 flex gap-1.5">
-                        <form action={publishDraft.bind(null, product.id, "seller")} className="flex-1">
+                        <ActionForm action={publishDraft.bind(null, product.id, "seller")} className="flex-1">
                           <button type="submit" className="w-full rounded-lg border border-primary/20 bg-primary/8 py-1 text-[10px] font-semibold text-primary hover:bg-primary/15 transition-colors">
                             Publish
                           </button>
-                        </form>
-                        <form action={deleteProduct.bind(null, product.id, "seller")} className="flex-1">
+                        </ActionForm>
+                        <ActionForm action={deleteProduct.bind(null, product.id, "seller")} className="flex-1">
                           <button type="submit" className="w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">
                             Delete
                           </button>
-                        </form>
+                        </ActionForm>
                       </div>
                     )}
                     {product.status === "pending" && (
-                      <form action={deleteProduct.bind(null, product.id, "seller")}>
+                      <ActionForm action={deleteProduct.bind(null, product.id, "seller")}>
                         <button type="submit" className="mt-1.5 w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">
                           Withdraw
                         </button>
-                      </form>
+                      </ActionForm>
                     )}
                   </div>
                 </div>

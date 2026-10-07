@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { Flag, Loader2, X } from "lucide-react"
 import { reportBuyer, type ReportReason } from "@/app/store-order-actions"
 import type { ModuleKey } from "@/lib/modules"
+import { unwrap } from "@/lib/action-result"
 
 const REASONS: { value: ReportReason; label: string }[] = [
   { value: "dummy_account", label: "Dummy / fake account" },
@@ -26,7 +27,7 @@ export function ReportBuyerButton({ orderId, module, buyerName }: { orderId: str
     setError(null)
     startTransition(async () => {
       try {
-        await reportBuyer({ orderId, module, reason, details })
+        unwrap(await reportBuyer({ orderId, module, reason, details }))
         setDone(true)
         setOpen(false)
       } catch (err) {

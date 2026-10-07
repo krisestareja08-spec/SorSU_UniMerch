@@ -1,9 +1,11 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
 
-export async function toggleFollowSeller(sellerId: string) {
+async function toggleFollowSellerImpl(sellerId: string) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error("Sign in to follow a seller.")
@@ -22,4 +24,9 @@ export async function toggleFollowSeller(sellerId: string) {
   }
 
   revalidatePath(`/seller/${sellerId}`)
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function toggleFollowSeller(...args: Parameters<typeof toggleFollowSellerImpl>) {
+  return attempt(() => toggleFollowSellerImpl(...args))
 }

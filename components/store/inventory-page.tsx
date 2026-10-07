@@ -8,6 +8,7 @@ import { adjustStock } from "@/app/store-actions"
 import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 const LOW_STOCK = 5
 
@@ -66,7 +67,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                   <td className={cn("py-2 pr-3 text-right font-semibold tabular-nums", p.stock === 0 ? "text-destructive" : p.stock <= LOW_STOCK ? "text-amber-700" : "")}>{p.stock}</td>
                   <td className="py-2 pr-3 text-xs capitalize text-muted-foreground">{p.status}{p.stock === 0 ? " · out of stock" : p.stock <= LOW_STOCK ? " · low" : ""}</td>
                   <td className="py-2">
-                    <form action={adjustStock} className="flex flex-wrap items-center gap-1.5">
+                    <ActionForm action={adjustStock} className="flex flex-wrap items-center gap-1.5">
                       <input type="hidden" name="module" value={ctx.module} />
                       <input type="hidden" name="product_id" value={p.id} />
                       <select name="reason" className="h-8 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Type">
@@ -76,7 +77,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                       <input name="change" type="number" required placeholder="Qty" className="h-8 w-20 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Quantity" />
                       <input name="note" placeholder="Note" className="h-8 w-32 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Note" />
                       <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Save</button>
-                    </form>
+                    </ActionForm>
                   </td>
                 </tr>
               ))}

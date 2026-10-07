@@ -1,11 +1,13 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { revalidatePath } from "next/cache"
 import { assertDashboard } from "@/lib/dashboards"
 import { logAudit } from "@/lib/admin"
 
 /** BAO pulls a product with a violation off the marketplace (hidden from buyers until restored). */
-export async function pullProduct(formData: FormData) {
+async function pullProductImpl(formData: FormData) {
   const productId = formData.get("product_id") as string
   const reason = ((formData.get("reason") as string) ?? "").trim()
   if (!productId) throw new Error("Missing product")
@@ -24,7 +26,7 @@ export async function pullProduct(formData: FormData) {
 }
 
 /** BAO puts a pulled product back on the marketplace. */
-export async function restoreProduct(formData: FormData) {
+async function restoreProductImpl(formData: FormData) {
   const productId = formData.get("product_id") as string
   const { supabase, userId } = await assertDashboard("bao", "marketplace")
   const { data: product } = await supabase.from("products").select("name").eq("id", productId).maybeSingle()
@@ -39,7 +41,7 @@ export async function restoreProduct(formData: FormData) {
 }
 
 /** BAO flags a store for a violation (optionally about one product); the store is notified. */
-export async function flagStoreViolation(formData: FormData) {
+async function flagStoreViolationImpl(formData: FormData) {
   const storeId = formData.get("store_id") as string
   const productId = (formData.get("product_id") as string) || null
   const reason = ((formData.get("reason") as string) ?? "").trim()
@@ -63,7 +65,7 @@ export async function flagStoreViolation(formData: FormData) {
 }
 
 /** BAO acknowledges or flags a sales report submitted by a store. */
-export async function reviewSalesReport(formData: FormData) {
+async function reviewSalesReportImpl(formData: FormData) {
   const reportId = formData.get("report_id") as string
   const decision = formData.get("decision") as string
   const note = ((formData.get("note") as string) ?? "").trim() || null
@@ -78,4 +80,18 @@ export async function reviewSalesReport(formData: FormData) {
 
   await logAudit(supabase, userId, { action: `report_${decision}`, reason: note })
   revalidatePath("/bao/reports")
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function pullProduct(...args: Parameters<typeof pullProductImpl>) {
+  return attempt(() => pullProductImpl(...args))
+}
+export async function restoreProduct(...args: Parameters<typeof restoreProductImpl>) {
+  return attempt(() => restoreProductImpl(...args))
+}
+export async function flagStoreViolation(...args: Parameters<typeof flagStoreViolationImpl>) {
+  return attempt(() => flagStoreViolationImpl(...args))
+}
+export async function reviewSalesReport(...args: Parameters<typeof reviewSalesReportImpl>) {
+  return attempt(() => reviewSalesReportImpl(...args))
 }

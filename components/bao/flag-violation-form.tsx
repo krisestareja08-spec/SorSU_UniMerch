@@ -1,10 +1,11 @@
 import { Flag } from "lucide-react"
 import { flagStoreViolation } from "@/app/bao/actions"
+import { ActionForm } from "@/components/ui/action-form"
 
 /** BAO records a violation against a store (and notifies the store's dashboard members). */
 export function FlagViolationForm({ storeId, productId }: { storeId: string; productId?: string }) {
   return (
-    <form action={flagStoreViolation} className="space-y-2">
+    <ActionForm action={flagStoreViolation} className="space-y-2">
       <input type="hidden" name="store_id" value={storeId} />
       {productId && <input type="hidden" name="product_id" value={productId} />}
       <textarea name="reason" required minLength={5} rows={2} placeholder="What rule was violated? The seller will be notified."
@@ -18,6 +19,6 @@ export function FlagViolationForm({ storeId, productId }: { storeId: string; pro
           <Flag className="size-4" /> Flag &amp; notify seller
         </button>
       </div>
-    </form>
+    </ActionForm>
   )
 }
