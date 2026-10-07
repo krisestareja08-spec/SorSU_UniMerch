@@ -12,14 +12,18 @@ export type CartItem = {
   image: string
   badge: "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
   quantity: number
+  /** Size label shown to the buyer, e.g. "M / Maroon" */
   variant?: string
+  /** The exact variant (scripts/28): its own price, stock and SKU */
+  variantId?: string
+  sku?: string
   // Unchecked items stay in the cart but are skipped at checkout; undefined counts as selected
   selected?: boolean
 }
 
-/** One cart line per product AND size: a shirt in S and the same shirt in L are separate lines. */
-export function lineKey(item: Pick<CartItem, "id" | "variant">) {
-  return item.variant ? `${item.id}::${item.variant}` : item.id
+/** One cart line per product AND variant: a shirt in S and the same shirt in L are separate lines. */
+export function lineKey(item: Pick<CartItem, "id" | "variant" | "variantId">) {
+  return item.variantId ? `${item.id}::${item.variantId}` : item.variant ? `${item.id}::${item.variant}` : item.id
 }
 
 type CartState = { items: CartItem[]; loaded: boolean }

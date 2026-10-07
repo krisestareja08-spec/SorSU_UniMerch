@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { approveProduct, rejectProduct, sendBaoMessage } from "@/app/bao/approvals/actions"
 import { unwrap } from "@/lib/action-result"
+import { priceRangeLabel, type Variant } from "@/lib/variants"
 
 type Product = {
   id: string
@@ -23,7 +24,7 @@ type Product = {
   created_at: string
 }
 
-export function BaoApprovalCard({ product }: { product: Product }) {
+export function BaoApprovalCard({ product, variants = [] }: { product: Product; variants?: Variant[] }) {
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [showChat, setShowChat] = useState(false)
   const [comment, setComment] = useState("")
@@ -75,7 +76,16 @@ export function BaoApprovalCard({ product }: { product: Product }) {
         {/* Details */}
         <div className="flex flex-1 flex-col gap-1 min-w-0">
           <p className="font-medium text-foreground">{product.name}</p>
-          <p className="text-xs text-muted-foreground">{product.category} · ₱{Number(product.price).toLocaleString()} · Stock: {product.stock}</p>
+          <p className="text-xs text-muted-foreground">{product.category} · {priceRangeLabel(Number(product.price), variants)} · Stock: {product.stock}</p>
+          {variants.length > 0 && (
+            <ul className="mt-1 flex flex-wrap gap-1.5" aria-label="Sizes">
+              {variants.map((v) => (
+                <li key={v.id} className="rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{v.name}</span> · ₱{v.price.toLocaleString()} · {v.stock} pcs{v.sku ? ` · ${v.sku}` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
           <p className="text-xs text-muted-foreground">Badge: {product.badge}</p>
           {product.description && (
             <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{product.description}</p>

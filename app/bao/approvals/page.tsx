@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { BaoApprovalCard } from "@/components/bao/approval-card"
+import { loadVariants } from "@/lib/variants"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react"
 
@@ -17,6 +18,8 @@ export default async function BaoApprovalsPage() {
 
   const all = products ?? []
   const pending  = all.filter((p) => p.status === "pending")
+  // Every size BAO is approving: price, stock and SKU per variant (scripts/28)
+  const variantsByProduct = await loadVariants(supabase, pending.map((p) => p.id))
   const approved = all.filter((p) => p.status === "approved")
   const rejected = all.filter((p) => p.status === "rejected")
 
@@ -54,7 +57,7 @@ export default async function BaoApprovalsPage() {
             </CardContent>
           </Card>
         ) : (
-          pending.map((p) => <BaoApprovalCard key={p.id} product={p} />)
+          pending.map((p) => <BaoApprovalCard key={p.id} product={p} variants={variantsByProduct?.get(p.id) ?? []} />)
         )}
       </div>
 

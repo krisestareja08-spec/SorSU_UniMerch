@@ -143,7 +143,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
 
     const { data, error: err } = await supabase
       .from("order_items")
-      .select("order_id, product_name, quantity, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
+      .select("order_id, product_name, variant, quantity, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
       .eq("seller_id", ctx.storeId ?? "")
       .order("order_id", { ascending: false })
 
@@ -154,7 +154,9 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       const o = Array.isArray(item.orders) ? item.orders[0] : item.orders
       if (!o) continue
       const cur: Order = map.get(o.id) ?? { ...o, total: Number(o.total), amount_paid: o.amount_paid ? Number(o.amount_paid) : null, items: "" }
-      cur.items = cur.items ? `${cur.items}, ${item.product_name} ×${item.quantity}` : `${item.product_name} ×${item.quantity}`
+      // The exact size bought, e.g. "Dept Shirt (M) ×2"
+      const line = `${item.product_name}${item.variant ? ` (${item.variant})` : ""} ×${item.quantity}`
+      cur.items = cur.items ? `${cur.items}, ${line}` : line
       map.set(o.id, cur)
     }
     setOrders([...map.values()])

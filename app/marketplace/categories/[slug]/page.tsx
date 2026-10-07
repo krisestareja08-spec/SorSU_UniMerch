@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { ProductCard, type Product } from "@/components/marketplace/product-card"
 import Link from "next/link"
+import { withPriceRange } from "@/lib/variants"
 import { ArrowLeft } from "lucide-react"
 
 const CATEGORY_LABELS: Record<string, string | null> = {
@@ -41,7 +42,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     : { data: [] as { id: string; org_name: string }[] }
   const sellerNames = new Map((sellers ?? []).map((s) => [s.id, s.org_name]))
 
-  const products: Product[] = (data ?? []).map((p) => ({
+  const products: Product[] = await withPriceRange(supabase, (data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
     price: Number(p.price),
@@ -50,7 +51,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     image: p.image_url ?? "/placeholder.jpg",
     badge: p.badge as Product["badge"],
     stock: p.stock,
-  }))
+  })))
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">

@@ -171,7 +171,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
                       </button>
                     </div>
                     <p className="text-xs text-muted-foreground">{item.seller}</p>
-                    {item.variant && <p className="text-xs text-muted-foreground">{item.variant}</p>}
+                    {item.variant && <p className="text-xs text-muted-foreground">Size: <span className="font-medium text-foreground">{item.variant}</span>{item.sku && <> · SKU {item.sku}</>}</p>}
                     <span className={cn("mt-0.5 w-fit rounded-full px-2 py-0.5 text-[10px] font-semibold", BADGE_STYLES[item.badge] ?? BADGE_STYLES["Available"])}>
                       {item.badge}
                     </span>

@@ -4,7 +4,8 @@ import { attempt } from "@/lib/action-result"
 
 import { createClient } from "@/lib/supabase/server"
 import { validateFullName } from "@/lib/profile-rules"
-import { PAYMENT_METHOD_MODE, parsePaymentModes, parseVariantPrices, unitPrice } from "@/lib/product-pricing"
+import { PAYMENT_METHOD_MODE, parsePaymentModes } from "@/lib/product-pricing"
+import { loadVariants } from "@/lib/variants"
 
 type OrderItem = {
   id: string
@@ -15,6 +16,8 @@ type OrderItem = {
   image: string
   quantity: number
   variant?: string
+  /** The exact variant chosen (scripts/28) */
+  variantId?: string
 }
 
 async function submitOrderImpl(args: {
@@ -50,14 +53,14 @@ async function submitOrderImpl(args: {
   type ProductRow = {
     id: string; seller_id: string; name: string; price: number; royalty_amount: number | null; royalty_percentage?: number | null
     is_royalty_product: boolean; image_url: string | null; stock: number; badge: string
-    variations?: unknown; variant_prices?: unknown; payment_modes?: unknown
+    variations?: unknown; payment_modes?: unknown
   }
   const loadProducts = async (columns: string) =>
     (await supabase.from("products").select(columns).in("id", productIds).eq("status", "approved")) as unknown as { data: ProductRow[] | null; error: { message: string } | null }
   const baseColumns = "id, seller_id, name, price, royalty_amount, royalty_percentage, is_royalty_product, image_url, stock, badge, variations"
-  // variant_prices / payment_modes arrive with scripts/27
-  let { data: products, error: productsError } = await loadProducts(`${baseColumns}, variant_prices, payment_modes`)
-  if (productsError && /variant_prices|payment_modes/.test(productsError.message)) {
+  // payment_modes arrives with scripts/27
+  let { data: products, error: productsError } = await loadProducts(`${baseColumns}, payment_modes`)
+  if (productsError && /payment_modes/.test(productsError.message)) {
     ;({ data: products, error: productsError } = await loadProducts(baseColumns))
   }
 
@@ -85,26 +88,35 @@ async function submitOrderImpl(args: {
   }
 
   const productById = new Map(products.map((product) => [product.id, product]))
-  // Stock is per product, so add up every size of the same product in this order
+  // Each size is its own variant with its own price and stock (scripts/28; null before that script)
+  const variantsByProduct = await loadVariants(supabase, productIds)
+  // Stock is checked per variant (or per product when it has none): add up repeated lines first
   const wanted = new Map<string, number>()
-  for (const item of args.items) wanted.set(item.id, (wanted.get(item.id) ?? 0) + item.quantity)
-  const orderItems = args.items.map((item) => {
+  const resolved = args.items.map((item) => {
     const product = productById.get(item.id)!
     if (!Number.isInteger(item.quantity) || item.quantity < 1) throw new Error(`Choose a quantity for ${product.name}.`)
-    if (product.stock < (wanted.get(item.id) ?? 0) && product.badge !== "Pre-Order") {
-      throw new Error(`${product.name} does not have enough stock.`)
+    const variants = variantsByProduct?.get(product.id) ?? []
+    // Older carts may only carry the size name
+    const variant = variants.length
+      ? variants.find((v) => v.id === item.variantId) ?? variants.find((v) => !item.variantId && v.name === item.variant)
+      : undefined
+    if (variants.length && !variant) throw new Error(`Choose a size for ${product.name}. The size you picked may no longer be available.`)
+    const legacySizes = !variants.length && Array.isArray(product.variations) ? (product.variations as string[]) : []
+    if (legacySizes.length && (!item.variant || !legacySizes.includes(item.variant))) throw new Error(`Choose a size for ${product.name}.`)
+    const key = variant?.id ?? product.id
+    wanted.set(key, (wanted.get(key) ?? 0) + item.quantity)
+    return { item, product, variant }
+  })
+  const orderItems = resolved.map(({ item, product, variant }) => {
+    const available = variant ? variant.stock : product.stock
+    if (product.badge !== "Pre-Order" && available < (wanted.get(variant?.id ?? product.id) ?? 0)) {
+      throw new Error(`${product.name}${variant ? ` (${variant.name})` : ""} does not have enough stock.`)
     }
-    const variations = Array.isArray(product.variations) ? (product.variations as string[]) : []
-    if (variations.length > 0 && (!item.variant || !variations.includes(item.variant))) {
-      throw new Error(`Choose a size for ${product.name}.`)
-    }
-    // The buyer pays the listed price of the chosen size (sizes without their own price use the base
-    // price). For official-logo products a royalty (like a tax) is taken from the seller's earnings and
-    // goes to BAO — recorded per unit for BAO's royalty reports, from the price actually paid.
-    const variantPrices = parseVariantPrices(product.variant_prices)
-    const linePrice = unitPrice(Number(product.price), variantPrices, item.variant)
+    // The buyer pays the price of the exact variant chosen. For official-logo products a royalty (like a
+    // tax) is taken from the seller's earnings and goes to BAO — recorded per unit, from the price paid.
+    const linePrice = variant ? variant.price : Number(product.price)
     const royalty = !product.is_royalty_product ? 0
-      : item.variant && variantPrices[item.variant] != null && product.royalty_percentage != null
+      : product.royalty_percentage != null
         ? Math.round(linePrice * (Number(product.royalty_percentage) / 100) * 100) / 100
         : Number(product.royalty_amount ?? 0)
     return {
@@ -114,7 +126,8 @@ async function submitOrderImpl(args: {
       unit_price: linePrice,
       original_price: linePrice,
       royalty_amount: royalty,
-      variant: item.variant ?? null,
+      variant: variant?.name ?? item.variant ?? null,
+      ...(variant ? { variant_id: variant.id } : {}),
       product_name: product.name,
       product_image_url: product.image_url,
       pre_order: product.badge === "Pre-Order",

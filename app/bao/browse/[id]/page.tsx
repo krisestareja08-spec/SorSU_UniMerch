@@ -10,6 +10,7 @@ import { ProductControl } from "@/components/bao/product-control"
 import { FlagViolationForm } from "@/components/bao/flag-violation-form"
 import { ArrowLeft, Package, ShieldAlert, Store } from "lucide-react"
 import { peso } from "@/lib/analytics"
+import { loadVariants } from "@/lib/variants"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 
 type ProductRow = {
@@ -34,6 +35,8 @@ export default async function BaoProductReviewPage({ params }: { params: Promise
   ])
   const images = [product.image_url, ...(Array.isArray(product.images) ? product.images : [])].filter((x, i, a): x is string => !!x && a.indexOf(x) === i)
   const variations = Array.isArray(product.variations) ? (product.variations as string[]) : []
+  // Each size with its own price, stock and SKU (scripts/28)
+  const variants = (await loadVariants(supabase, [product.id]))?.get(product.id) ?? []
 
   return (
     <ManagementShell ctx={ctx}>
@@ -69,7 +72,9 @@ export default async function BaoProductReviewPage({ params }: { params: Promise
           </section>
 
           <dl className="grid grid-cols-2 gap-2 text-sm">
-            <div className="rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Variations</dt><dd>{variations.length ? variations.join(", ") : "None"}</dd></div>
+            <div className="rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Variations</dt><dd>{variants.length
+              ? <ul className="mt-0.5 space-y-0.5">{variants.map((v) => <li key={v.id}>{v.name} · {peso(v.price)} · {v.stock} in stock{v.sku ? ` · SKU ${v.sku}` : ""}</li>)}</ul>
+              : variations.length ? variations.join(", ") : "None"}</dd></div>
             <div className="rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Official logo</dt><dd>{product.is_royalty_product ? `Yes · ${peso(Number(product.royalty_amount ?? 0))} royalty per sale` : "No"}</dd></div>
             <div className="col-span-2 rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Restricted to</dt>
               <dd>{product.is_restricted ? (product.allowed_roles ?? []).map((r) => AFFILIATION_LABELS[r as Affiliation] ?? r).join(", ") || "—" : "Everyone"}</dd></div>

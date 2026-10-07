@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/components/marketplace/product-card"
+import { withPriceRange } from "@/lib/variants"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -75,7 +76,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
     : { data: [] as { id: string; org_name: string }[] }
   const names = new Map((sellers ?? []).map((s) => [s.id, s.org_name]))
 
-  return rows.map((p) => ({
+  return withPriceRange(supabase, rows.map((p) => ({
     id: p.id,
     name: p.name,
     price: Number(p.price),
@@ -87,5 +88,5 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
     rating: Number(p.rating_avg ?? 0),
     ratingCount: p.rating_count ?? 0,
     sold: p.sold_count ?? 0,
-  }))
+  })))
 }

@@ -7,13 +7,16 @@ import { ShoppingCart, Zap, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ProductOptionsSheet } from "@/components/marketplace/product-options-sheet"
 import { RatingSummary } from "@/components/reviews/stars"
+import { priceRangeLabel } from "@/lib/variants"
 
 export type ProductBadge = "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
 
 export type Product = {
   id: string
   name: string
+  /** Lowest price; priceMax is the highest when sizes are priced differently */
   price: number
+  priceMax?: number | null
   seller: string
   sellerId?: string
   image: string
@@ -62,7 +65,7 @@ function BuyerActions({ product }: { product: Product }) {
       </button>
       {sheet && (
         <ProductOptionsSheet
-          product={{ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge }}
+          product={{ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, priceMax: product.priceMax, image: product.image, badge: product.badge }}
           mode={sheet}
           onClose={() => setSheet(null)}
           onAdded={() => { setAdded(true); setTimeout(() => setAdded(false), 1500) }}
@@ -94,7 +97,7 @@ export function ProductCard({ product, readOnly = false }: { product: Product; r
         <RatingSummary avg={product.rating ?? 0} count={product.ratingCount ?? 0} />
 
         <div className="mt-auto pt-1">
-          <span className="text-sm font-bold text-gold sm:text-base">₱{product.price.toLocaleString()}</span>
+          <span className="text-sm font-bold text-gold sm:text-base">{priceRangeLabel(product.price, undefined, product.priceMax)}</span>
         </div>
 
         <div className="flex items-center justify-between">

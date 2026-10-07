@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { lineKey, useCart, type CartItem } from "@/lib/cart-context"
 import { cn } from "@/lib/utils"
-import { parseVariantPrices, unitPrice } from "@/lib/product-pricing"
+import { loadVariants } from "@/lib/variants"
 
 type ReorderItem = { productId: string | null; variant: string | null; quantity: number }
 
@@ -22,25 +22,29 @@ export function ReorderButton({ items, storeName, className }: { items: ReorderI
     setBusy(true)
     setNote(null)
     const ids = [...new Set(items.map((i) => i.productId).filter((id): id is string => !!id))]
-    type Row = { id: string; seller_id: string; name: string; price: number; image_url: string | null; badge: string; stock: number; variant_prices?: unknown }
-    const load = async (columns: string) =>
-      (await createClient().from("products").select(columns).in("id", ids).eq("status", "approved")) as unknown as { data: Row[] | null; error: unknown }
-    const base = "id, seller_id, name, price, image_url, badge, stock"
-    // variant_prices arrives with scripts/27
-    let { data, error } = ids.length ? await load(`${base}, variant_prices`) : { data: [] as Row[], error: null }
-    if (error) ({ data } = await load(base))
+    const supabase = createClient()
+    const { data } = ids.length
+      ? await supabase.from("products").select("id, seller_id, name, price, image_url, badge, stock").in("id", ids).eq("status", "approved")
+      : { data: [] }
     const byId = new Map((data ?? []).map((p) => [p.id, p]))
+    // Today's price and stock of the same size (each size is its own variant — scripts/28)
+    const variantsByProduct = await loadVariants(supabase, ids)
 
     let skipped = 0
     const added: string[] = []
     for (const item of items) {
       const p = item.productId ? byId.get(item.productId) : undefined
-      if (!p || p.badge === "Sold Out" || (p.badge !== "Pre-Order" && p.stock < 1)) { skipped++; continue }
-      const quantity = p.badge === "Pre-Order" ? item.quantity : Math.min(item.quantity, p.stock)
+      const variants = p ? variantsByProduct?.get(p.id) ?? [] : []
+      const variant = variants.find((v) => v.name === item.variant)
+      const stock = variant ? variant.stock : p?.stock ?? 0
+      // Skip what's gone: the product, or the size that was bought
+      if (!p || p.badge === "Sold Out" || (variants.length && !variant) || (p.badge !== "Pre-Order" && stock < 1)) { skipped++; continue }
+      const quantity = p.badge === "Pre-Order" ? item.quantity : Math.min(item.quantity, stock)
       const line: CartItem = {
         id: p.id, sellerId: p.seller_id, name: p.name, seller: storeName,
-        price: unitPrice(Number(p.price), parseVariantPrices(p.variant_prices), item.variant),
-        image: p.image_url ?? "/placeholder.jpg", badge: p.badge as CartItem["badge"], quantity, variant: item.variant ?? undefined,
+        price: variant ? variant.price : Number(p.price),
+        image: variant?.imageUrl || (p.image_url ?? "/placeholder.jpg"), badge: p.badge as CartItem["badge"], quantity,
+        variant: variant?.name ?? item.variant ?? undefined, variantId: variant?.id, sku: variant?.sku ?? undefined,
       }
       addItem(line)
       added.push(lineKey(line))

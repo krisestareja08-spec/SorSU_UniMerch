@@ -59,6 +59,8 @@ async function submitSalesReportImpl(formData: FormData) {
 async function adjustStockImpl(formData: FormData) {
   const mod = storeModule(formData.get("module"))
   const productId = formData.get("product_id") as string
+  // A size of the product (scripts/28): its own stock; the product total follows automatically
+  const variantId = (formData.get("variant_id") as string | null) || null
   const change = Number.parseInt(formData.get("change") as string, 10)
   const reason = formData.get("reason") === "adjustment" ? "adjustment" : "restock"
   const note = ((formData.get("note") as string) ?? "").trim().slice(0, 300) || null
@@ -68,14 +70,25 @@ async function adjustStockImpl(formData: FormData) {
   const { supabase, userId, storeId } = await assertDashboard(mod, "inventory")
   const { data: product } = await supabase.from("products").select("name, stock, seller_id").eq("id", productId).maybeSingle()
   if (!product || product.seller_id !== storeId) throw new Error("Product not found in your store.")
-  const newStock = Math.max(0, Number(product.stock) + change)
+  let before = Number(product.stock)
+  let label = product.name
+  if (variantId) {
+    const { data: variant } = await supabase.from("product_variants").select("name, stock").eq("id", variantId).eq("product_id", productId).maybeSingle()
+    if (!variant) throw new Error("That size was not found.")
+    before = Number(variant.stock)
+    label = `${product.name} (${variant.name})`
+  }
+  const newStock = Math.max(0, before + change)
 
-  const { error } = await supabase.from("products").update({ stock: newStock, updated_at: new Date().toISOString() }).eq("id", productId)
+  const { error } = variantId
+    ? await supabase.from("product_variants").update({ stock: newStock, updated_at: new Date().toISOString() }).eq("id", variantId)
+    : await supabase.from("products").update({ stock: newStock, updated_at: new Date().toISOString() }).eq("id", productId)
   if (error) throw new Error(error.message)
 
   await supabase.from("inventory_movements").insert({
-    store_id: storeId, product_id: productId, product_name: product.name,
-    change: newStock - Number(product.stock), reason, note, created_by: userId,
+    store_id: storeId, product_id: productId, product_name: label,
+    ...(variantId ? { variant_id: variantId } : {}),
+    change: newStock - before, reason, note, created_by: userId,
   }).then(() => {}, () => {}) // table arrives with scripts/15_bao_bi.sql
 
   revalidatePath(`${MODULES[mod].basePath}/inventory`)
