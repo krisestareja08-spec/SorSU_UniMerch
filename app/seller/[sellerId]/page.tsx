@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { MarketplaceChrome } from "@/components/marketplace/marketplace-chrome"
 import { ManagementShell } from "@/components/management/management-shell"
 import { getMemberships, requireDashboard } from "@/lib/dashboards"
+import { MODULES, primaryDashboard } from "@/lib/modules"
 import { SellerHeader } from "@/components/storefront/seller-header"
 import { SellerInfo } from "@/components/storefront/seller-info"
 import { ProductGrid } from "@/components/storefront/product-grid"
@@ -57,9 +58,9 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
   ])
   const productCount = categories.reduce((sum, c) => sum + c.count, 0)
 
-  // Seller accounts only sell: they preview storefronts inside their Seller Dashboard, without buyer actions
-  const isSeller = !!user && (await getMemberships(supabase, user.id)).some((m) => m.module === "seller")
-  const sellerCtx = isSeller ? await requireDashboard("seller") : null
+  // Dashboard accounts never shop: they preview storefronts inside their own dashboard, without buyer actions
+  const primary = user ? primaryDashboard(await getMemberships(supabase, user.id)) : undefined
+  const sellerCtx = primary ? await requireDashboard(primary.module) : null
 
   const base = storefrontHref(storefront.id)
   const pageHref = (p: number) => {
@@ -72,7 +73,7 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
 
   const content = (
       <div className={sellerCtx ? "" : "mx-auto max-w-7xl px-4 py-6 sm:px-6"}>
-        <Link href={sellerCtx ? "/seller" : "/marketplace"} className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+        <Link href={sellerCtx ? MODULES[sellerCtx.module].basePath : "/marketplace"} className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" /> {sellerCtx ? "Back to Dashboard" : "Back to Marketplace"}
         </Link>
 

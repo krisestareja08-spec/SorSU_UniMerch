@@ -23,11 +23,13 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useCart, type CartItem } from "@/lib/cart-context"
+import { lineKey, useCart, type CartItem } from "@/lib/cart-context"
 import { clearBuyNowItem, readBuyNowItem, shopKey } from "@/lib/buy-now"
+import { PAYMENT_METHOD_MODE, PAYMENT_MODES, commonPaymentModes, parsePaymentModes, type PaymentMode } from "@/lib/product-pricing"
 import { submitOrder } from "./actions"
 import { validateFullName } from "@/lib/profile-rules"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { unwrap } from "@/lib/action-result"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":    "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -63,8 +65,22 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
   const shopCount = new Set(items.map(shopKey)).size
   const hasPreOrder = items.some((i) => i.badge === "Pre-Order")
   const [paymentChoice, setPayment] = useState("gcash")
-  // Pre-orders are paid upfront, so only the receipt-backed GCash option is allowed
-  const payment = hasPreOrder ? "gcash" : paymentChoice
+  // Each product says how it may be paid (walk-in at the counter, online, or both — scripts/27);
+  // checkout offers only the methods every item allows. Pre-orders are paid upfront via GCash.
+  const [productModes, setProductModes] = useState<Record<string, PaymentMode[]>>({})
+  const productIdsKey = [...new Set(items.map((i) => i.id))].sort().join(",")
+  useEffect(() => {
+    if (!productIdsKey) return
+    const supabase = createClient()
+    supabase.from("products").select("id, payment_modes").in("id", productIdsKey.split(",")).then(({ data, error }) => {
+      if (error) return // column not created yet: every method stays available
+      setProductModes(Object.fromEntries((data ?? []).map((p) => [p.id, parsePaymentModes(p.payment_modes)])))
+    })
+  }, [productIdsKey])
+  const allowedModes = commonPaymentModes(items.map((i) => productModes[i.id] ?? PAYMENT_MODES))
+  const methodAllowed = (id: string) => allowedModes.includes(PAYMENT_METHOD_MODE[id]) && (!hasPreOrder || id === "gcash")
+  const availableMethods = PAYMENT_METHODS.filter((m) => methodAllowed(m.id))
+  const payment = methodAllowed(paymentChoice) ? paymentChoice : availableMethods[0]?.id ?? "cash"
   const [preOrderStores, setPreOrderStores] = useState<{ id: string; name: string; storeHours: string | null; claimDays: number; location: string | null }[]>([])
   const [receipt, setReceipt] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
@@ -167,10 +183,10 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
           receiptUrl = urlData.publicUrl
         }
       }
-      const { orderIds } = await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal })
+      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal }))
       setPlaced(true)
       if (buyMode) clearBuyNowItem()
-      else removeItems(items.map((i) => i.id))
+      else removeItems(items.map(lineKey))
       router.replace(`/marketplace/order-success?orders=${orderIds.join(",")}`)
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : "Failed to place order. Please try again.")
@@ -206,6 +222,23 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
         </p>
         <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
           <Link href={toMarket ? "/marketplace" : "/marketplace/cart"}>{toMarket ? "Browse Marketplace" : "Back to Cart"}</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (availableMethods.length === 0) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <AlertTriangle className="mx-auto size-12 text-amber-500" />
+        <p className="mt-4 font-medium text-foreground">These items can&apos;t be paid the same way</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {hasPreOrder
+            ? "Pre-orders are paid upfront online, but a selected item is walk-in payment only. Check it out separately."
+            : "Some selected items are walk-in payment only and others are online only. Check them out separately."}
+        </p>
+        <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href={buyMode ? "/marketplace" : "/marketplace/cart"}>{buyMode ? "Back to Marketplace" : "Back to Cart"}</Link>
         </Button>
       </div>
     )
@@ -282,7 +315,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             <div className="mt-4 space-y-4">
               {/* Order items — from cart context */}
             {items.map((item) => (
-                <div key={item.id} className="flex gap-3">
+                <div key={lineKey(item)} className="flex gap-3">
                   <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted">
                     <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" />
                   </div>
@@ -340,12 +373,11 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             </h2>
             <div className="mt-2 h-px bg-linear-to-r from-gold/40 to-transparent" />
             <div className="mt-4 space-y-2.5">
-              {PAYMENT_METHODS.map(({ id, label, icon: Icon, recommended }) => (
+              {availableMethods.map(({ id, label, icon: Icon, recommended }) => (
                 <label
                   key={id}
                   className={cn(
                     "flex cursor-pointer items-center gap-3 rounded-xl border p-3.5 transition-all",
-                    hasPreOrder && id !== "gcash" && "pointer-events-none opacity-50",
                     payment === id
                       ? "border-primary bg-primary/5"
                       : "border-border hover:border-primary/30 hover:bg-muted/50",
@@ -357,17 +389,26 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                   )}>
                     {payment === id && <div className="size-2 rounded-full bg-gold" />}
                   </div>
-                  <input type="radio" name="payment" value={id} checked={payment === id} disabled={hasPreOrder && id !== "gcash"} onChange={() => setPayment(id)} className="sr-only" />
+                  <input type="radio" name="payment" value={id} checked={payment === id} onChange={() => setPayment(id)} className="sr-only" />
                   <Icon className={cn("size-4 shrink-0", payment === id ? "text-primary" : "text-muted-foreground")} />
                   <span className={cn("flex-1 text-sm font-medium", payment === id ? "text-foreground" : "text-muted-foreground")}>
                     {label}
                   </span>
-                  {recommended && (
+                  {recommended && availableMethods.length > 1 && (
                     <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[10px] font-semibold text-gold">Recommended</span>
                   )}
                 </label>
               ))}
             </div>
+            {!allowedModes.includes("online") && (
+              <p className="mt-3 text-xs text-muted-foreground">This store accepts walk-in payment only for these items.</p>
+            )}
+            {payment === "cash" && (
+              <p className="mt-3 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+                <Banknote className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>Your order is reserved. Pay in cash at the store&apos;s counter, and the cashier will mark it paid and hand over your items. Bring your I.D. and order number.</span>
+              </p>
+            )}
           </section>
 
           {/* GCash QR + receipt upload */}

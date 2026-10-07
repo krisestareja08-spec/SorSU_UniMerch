@@ -17,6 +17,11 @@ export type CartItem = {
   selected?: boolean
 }
 
+/** One cart line per product AND size: a shirt in S and the same shirt in L are separate lines. */
+export function lineKey(item: Pick<CartItem, "id" | "variant">) {
+  return item.variant ? `${item.id}::${item.variant}` : item.id
+}
+
 type CartState = { items: CartItem[]; loaded: boolean }
 
 type CartAction =
@@ -33,23 +38,24 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     case "LOAD":
       return { items: action.items, loaded: true }
     case "ADD": {
-      const exists = state.items.find((i) => i.id === action.item.id)
+      const key = lineKey(action.item)
+      const exists = state.items.find((i) => lineKey(i) === key)
       if (exists) {
-        return { ...state, items: state.items.map((i) => i.id === action.item.id ? { ...i, quantity: i.quantity + action.item.quantity, selected: true } : i) }
+        return { ...state, items: state.items.map((i) => lineKey(i) === key ? { ...i, price: action.item.price, quantity: i.quantity + action.item.quantity, selected: true } : i) }
       }
       return { ...state, items: [...state.items, action.item] }
     }
     case "REMOVE":
-      return { ...state, items: state.items.filter((i) => i.id !== action.id) }
+      return { ...state, items: state.items.filter((i) => lineKey(i) !== action.id) }
     case "REMOVE_MANY":
-      return { ...state, items: state.items.filter((i) => !action.ids.includes(i.id)) }
+      return { ...state, items: state.items.filter((i) => !action.ids.includes(lineKey(i))) }
     case "SET_SELECTED":
-      return { ...state, items: state.items.map((i) => (action.ids.includes(i.id) ? { ...i, selected: action.selected } : i)) }
+      return { ...state, items: state.items.map((i) => (action.ids.includes(lineKey(i)) ? { ...i, selected: action.selected } : i)) }
     case "UPDATE_QTY":
       return {
         ...state,
         items: state.items.map((i) =>
-          i.id === action.id ? { ...i, quantity: Math.max(1, i.quantity + action.delta) } : i
+          lineKey(i) === action.id ? { ...i, quantity: Math.max(1, i.quantity + action.delta) } : i
         ),
       }
     case "CLEAR":
@@ -61,10 +67,11 @@ function cartReducer(state: CartState, action: CartAction): CartState {
 
 type CartContextType = CartState & {
   addItem: (item: CartItem) => void
-  removeItem: (id: string) => void
-  removeItems: (ids: string[]) => void
-  setSelected: (ids: string[], selected: boolean) => void
-  updateQty: (id: string, delta: number) => void
+  /** These take cart line keys — lineKey(item) — not product ids */
+  removeItem: (key: string) => void
+  removeItems: (keys: string[]) => void
+  setSelected: (keys: string[], selected: boolean) => void
+  updateQty: (key: string, delta: number) => void
   clearCart: () => void
   itemCount: number
   total: number
@@ -78,10 +85,10 @@ const PUSH_DELAY_MS = 600
 
 /** Same product in both carts: keep the larger quantity. */
 function mergeCarts(a: CartItem[], b: CartItem[]) {
-  const byId = new Map(a.map((i) => [i.id, i]))
+  const byId = new Map(a.map((i) => [lineKey(i), i]))
   for (const item of b) {
-    const mine = byId.get(item.id)
-    byId.set(item.id, mine ? { ...mine, quantity: Math.max(mine.quantity, item.quantity) } : item)
+    const mine = byId.get(lineKey(item))
+    byId.set(lineKey(item), mine ? { ...mine, quantity: Math.max(mine.quantity, item.quantity) } : item)
   }
   return [...byId.values()]
 }

@@ -1,5 +1,7 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { assertDashboard } from "@/lib/dashboards"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
@@ -33,7 +35,7 @@ function serviceClient() {
  * permission of the store that sold the item) see the buyer's verified I.D. before confirming.
  * Verification documents are private, so after authorization the lookup uses the service role.
  */
-export async function getBuyerIdentity(orderId: string, module: ModuleKey): Promise<BuyerIdentity> {
+async function getBuyerIdentityImpl(orderId: string, module: ModuleKey): Promise<BuyerIdentity> {
   if (!STORE_MODULES.includes(module)) throw new Error("Invalid dashboard")
   const { supabase, storeId } = await assertDashboard(module, "orders")
   if (!storeId) throw new Error("This dashboard has no store.")
@@ -90,7 +92,7 @@ export async function getBuyerIdentity(orderId: string, module: ModuleKey): Prom
 }
 
 /** Which of these orders contain restricted items from the current store (for badges / gating). */
-export async function restrictedOrderIds(module: ModuleKey, orderIds: string[]): Promise<string[]> {
+async function restrictedOrderIdsImpl(module: ModuleKey, orderIds: string[]): Promise<string[]> {
   if (!STORE_MODULES.includes(module) || orderIds.length === 0) return []
   const { supabase, storeId } = await assertDashboard(module, "orders")
   const { data } = await supabase
@@ -108,7 +110,7 @@ export type OrderBuyer = { name: string | null; contact: string | null; verified
  * Buyer details for this store's orders, so staff can recognise dummy accounts.
  * Only orders that contain this store's items are returned.
  */
-export async function getOrderBuyers(module: ModuleKey, orderIds: string[]): Promise<Record<string, OrderBuyer>> {
+async function getOrderBuyersImpl(module: ModuleKey, orderIds: string[]): Promise<Record<string, OrderBuyer>> {
   if (!STORE_MODULES.includes(module) || orderIds.length === 0) return {}
   const { supabase, storeId } = await assertDashboard(module, "orders")
   const { data: own } = await supabase.from("order_items").select("order_id").eq("seller_id", storeId ?? "").in("order_id", orderIds)
@@ -137,7 +139,7 @@ export async function getOrderBuyers(module: ModuleKey, orderIds: string[]): Pro
 export type ReportReason = "dummy_account" | "fake_identity" | "no_show" | "abusive" | "other"
 
 /** Store staff report / flag a buyer (e.g. a dummy account). The account is flagged for the Verification Admin. */
-export async function reportBuyer(input: { orderId: string; module: ModuleKey; reason: ReportReason; details: string }) {
+async function reportBuyerImpl(input: { orderId: string; module: ModuleKey; reason: ReportReason; details: string }) {
   if (!STORE_MODULES.includes(input.module)) throw new Error("Invalid dashboard")
   if (!["dummy_account", "fake_identity", "no_show", "abusive", "other"].includes(input.reason)) throw new Error("Choose a reason.")
   const details = input.details.trim().slice(0, 1000)
@@ -160,4 +162,18 @@ export async function reportBuyer(input: { orderId: string; module: ModuleKey; r
     details: details || null,
   })
   if (error) throw new Error(error.message.includes("account_reports") ? "Reporting isn't enabled yet — run scripts/12_profile_rules.sql." : error.message)
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function getBuyerIdentity(...args: Parameters<typeof getBuyerIdentityImpl>) {
+  return attempt(() => getBuyerIdentityImpl(...args))
+}
+export async function restrictedOrderIds(...args: Parameters<typeof restrictedOrderIdsImpl>) {
+  return attempt(() => restrictedOrderIdsImpl(...args))
+}
+export async function getOrderBuyers(...args: Parameters<typeof getOrderBuyersImpl>) {
+  return attempt(() => getOrderBuyersImpl(...args))
+}
+export async function reportBuyer(...args: Parameters<typeof reportBuyerImpl>) {
+  return attempt(() => reportBuyerImpl(...args))
 }

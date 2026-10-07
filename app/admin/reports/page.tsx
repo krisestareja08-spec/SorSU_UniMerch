@@ -8,6 +8,7 @@ import { Ban, CheckCircle2, Flag, PauseCircle } from "lucide-react"
 import { resolveAccountReport } from "../verification-actions"
 import { formatDateTime, profilesById } from "@/lib/admin"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 const REASON_LABELS: Record<string, string> = {
   dummy_account: "Dummy / fake account",
@@ -106,7 +107,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                 </div>
 
                 {r.status === "open" && (
-                  <form action={resolveAccountReport} className="flex flex-wrap items-center gap-2">
+                  <ActionForm action={resolveAccountReport} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="report_id" value={r.id} />
                     <input name="note" placeholder="Note (optional)" className="h-8 w-40 rounded-lg border border-input bg-background px-2 text-xs" />
                     <button name="decision" value="dismiss" className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-3 text-xs font-semibold hover:bg-muted">
@@ -118,7 +119,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                     <button name="decision" value="ban" className="inline-flex h-8 items-center gap-1 rounded-lg bg-destructive px-3 text-xs font-semibold text-destructive-foreground hover:bg-destructive/90">
                       <Ban className="size-3.5" />Ban account
                     </button>
-                  </form>
+                  </ActionForm>
                 )}
               </div>
             </div>

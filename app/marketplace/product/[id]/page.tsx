@@ -12,6 +12,7 @@ import { ProductReviews } from "@/components/reviews/product-reviews"
 import { Stars } from "@/components/reviews/stars"
 import { SellerProductCarousel } from "@/components/storefront/seller-product-carousel"
 import { getStorefront, storefrontHref } from "@/lib/storefront"
+import { parseVariantPrices, priceRange } from "@/lib/product-pricing"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":      "bg-emerald-100 text-emerald-700 border border-emerald-200",
@@ -42,6 +43,9 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   // Buyers pay the listed price; the logo royalty is deducted from the seller's earnings and goes to BAO.
   const displayPrice = Number(product.price)
   const variations: string[] = Array.isArray(product.variations) ? product.variations : []
+  // Per-size prices arrive with scripts/27; a separate query so older databases still load the page
+  const { data: pricing } = await supabase.from("products").select("variant_prices").eq("id", product.id).maybeSingle()
+  const variantPrices = parseVariantPrices(pricing?.variant_prices)
   // rating_avg / rating_count arrive with scripts/26; a separate query so older databases still load the page
   const { data: rating } = await supabase.from("products").select("rating_avg, rating_count").eq("id", product.id).maybeSingle()
 
@@ -99,7 +103,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           </div>
 
           <div className="flex items-baseline gap-2">
-            <p className="text-3xl font-bold text-gold">₱{displayPrice.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-gold">{priceRange(displayPrice, variations, variantPrices)}</p>
             {product.is_royalty_product && (
               <p className="text-xs text-muted-foreground">Official university merch — includes a BAO royalty</p>
             )}
@@ -130,6 +134,8 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
           <ProductVariantActions
             product={{ id: product.id, name: product.name, seller: sellerName, sellerId: product.seller_id, price: displayPrice, image: product.image_url ?? "/placeholder.jpg", badge: product.badge as "Available" | "Pre-Order" | "Interest Check" | "Sold Out" }}
             variations={variations}
+            variantPrices={variantPrices}
+            stock={product.stock}
           />
           <MessageSellerButton productId={product.id} />
         </div>

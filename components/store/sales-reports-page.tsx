@@ -9,6 +9,7 @@ import { byMonth, groupBy, loadSales, parseDay, peso, totals } from "@/lib/analy
 import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 function isoDay(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
@@ -86,7 +87,7 @@ export async function SalesReportsPage({ ctx, from: fromRaw, to: toRaw }: { ctx:
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Send className="size-4 text-primary" />Send to BAO</CardTitle></CardHeader>
           <CardContent>
-            <form action={submitSalesReport} className="space-y-3">
+            <ActionForm action={submitSalesReport} className="space-y-3">
               <input type="hidden" name="module" value={ctx.module} />
               <input type="hidden" name="from" value={fromValue} />
               <input type="hidden" name="to" value={toValue} />
@@ -99,7 +100,7 @@ export async function SalesReportsPage({ ctx, from: fromRaw, to: toRaw }: { ctx:
               <button type="submit" className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-semibold text-primary-foreground hover:bg-primary/90">
                 <Send className="size-4" />Submit report to BAO
               </button>
-            </form>
+            </ActionForm>
           </CardContent>
         </Card>
       </div>

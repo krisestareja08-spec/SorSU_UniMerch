@@ -9,6 +9,7 @@ import { peso, storeNames } from "@/lib/analytics"
 import { formatDateTime, profilesById } from "@/lib/admin"
 import { MODULES, type ModuleKey } from "@/lib/modules"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 const TABS = [
   { key: "submitted", label: "To review" },
@@ -106,7 +107,7 @@ export default async function BaoReportsPage({ searchParams }: { searchParams: P
                 {r.notes && <p className="rounded-lg bg-muted/40 p-3"><span className="text-xs text-muted-foreground">Store notes: </span>{r.notes}</p>}
                 {r.bao_note && <p className="rounded-lg bg-primary/5 p-3"><span className="text-xs text-muted-foreground">BAO note: </span>{r.bao_note}</p>}
                 {r.status === "submitted" && (
-                  <form action={reviewSalesReport} className="space-y-2">
+                  <ActionForm action={reviewSalesReport} className="space-y-2">
                     <input type="hidden" name="report_id" value={r.id} />
                     <input name="note" placeholder="Note to the store (optional)" className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm" />
                     <div className="flex gap-2">
@@ -117,7 +118,7 @@ export default async function BaoReportsPage({ searchParams }: { searchParams: P
                         <Flag className="size-4" />Flag
                       </button>
                     </div>
-                  </form>
+                  </ActionForm>
                 )}
               </div>
             </div>

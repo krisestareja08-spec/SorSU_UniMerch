@@ -11,7 +11,8 @@ import {
  */
 export type ModuleKey = "verification" | "bao" | "supply_office" | "cashier" | "seller"
 
-export type ModulePage = { perm: string | null; label: string; href: string; icon: LucideIcon }
+/** `short`: one-word label for the mobile bottom tabs (defaults to `label`). */
+export type ModulePage = { perm: string | null; label: string; short?: string; href: string; icon: LucideIcon }
 
 export type ModuleDef = {
   key: ModuleKey
@@ -27,14 +28,14 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
     basePath: "/admin",
     pages: [
       { perm: null,            label: "Dashboard",           href: "/admin",            icon: LayoutDashboard },
-      { perm: "queue",         label: "Verification Queue",  href: "/admin/queue",      icon: ShieldCheck },
-      { perm: "users",         label: "User Management",     href: "/admin/users",      icon: Users },
-      { perm: "duplicates",    label: "Duplicate Detection", href: "/admin/duplicates", icon: AlertOctagon },
-      { perm: "reports",       label: "Reported Accounts",   href: "/admin/reports",    icon: Flag },
-      { perm: "organizations", label: "Seller Management",   href: "/admin/sellers",    icon: Store },
-      { perm: "cashiers",      label: "Cashier Branches",    href: "/admin/cashiers",   icon: Wallet },
-      { perm: "logs",          label: "Activity Logs",       href: "/admin/logs",       icon: ClipboardList },
-      { perm: "dashboards",    label: "Dashboard Admins",    href: "/admin/dashboards", icon: Building2 },
+      { perm: "queue",         label: "Verification Queue",  short: "Queue", href: "/admin/queue",      icon: ShieldCheck },
+      { perm: "users",         label: "User Management",     short: "Users", href: "/admin/users",      icon: Users },
+      { perm: "duplicates",    label: "Duplicate Detection", short: "Duplicates", href: "/admin/duplicates", icon: AlertOctagon },
+      { perm: "reports",       label: "Reported Accounts",   short: "Reports", href: "/admin/reports",    icon: Flag },
+      { perm: "organizations", label: "Seller Management",   short: "Sellers", href: "/admin/sellers",    icon: Store },
+      { perm: "cashiers",      label: "Cashier Branches",    short: "Cashiers", href: "/admin/cashiers",   icon: Wallet },
+      { perm: "logs",          label: "Activity Logs",       short: "Logs", href: "/admin/logs",       icon: ClipboardList },
+      { perm: "dashboards",    label: "Dashboard Admins",    short: "Admins", href: "/admin/dashboards", icon: Building2 },
     ],
   },
   bao: {
@@ -156,6 +157,14 @@ export function canUse(ctx: Pick<DashboardCtx, "isMain" | "permissions">, perm: 
 
 /** Modules with many dashboards (one per organization / cashier branch). */
 export const MULTI_INSTANCE: ModuleKey[] = ["seller", "cashier"]
+
+/** Which dashboard opens first when a person manages more than one. */
+export const DASHBOARD_PRIORITY: ModuleKey[] = ["verification", "bao", "supply_office", "cashier", "seller"]
+
+/** The person's first dashboard by DASHBOARD_PRIORITY (undefined for plain buyers). */
+export function primaryDashboard<T extends { module: ModuleKey }>(memberships: T[]): T | undefined {
+  return [...memberships].sort((a, b) => DASHBOARD_PRIORITY.indexOf(a.module) - DASHBOARD_PRIORITY.indexOf(b.module))[0]
+}
 
 export function dashboardHref(d: DashboardSummary) {
   return MULTI_INSTANCE.includes(d.module) ? `/dashboards/switch?id=${d.id}` : MODULES[d.module].basePath

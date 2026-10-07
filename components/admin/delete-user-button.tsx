@@ -4,6 +4,7 @@ import { useFormStatus } from "react-dom"
 import { Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { deleteUser } from "@/app/admin/verification-actions"
+import { ActionForm } from "@/components/ui/action-form"
 
 function SubmitButton({ compact }: { compact?: boolean }) {
   const { pending } = useFormStatus()
@@ -29,7 +30,7 @@ export function DeleteUserButton({ userId, name, compact, withReason }: {
   withReason?: boolean
 }) {
   return (
-    <form action={deleteUser} className={cn(withReason && "flex flex-wrap items-center gap-2")}
+    <ActionForm action={deleteUser} className={cn(withReason && "flex flex-wrap items-center gap-2")}
       onSubmit={(e) => {
         if (!window.confirm(`Permanently delete ${name}?\n\nTheir login, profile, orders, cart, wishlist, messages, verification requests and dashboard memberships will be erased. This cannot be undone.`)) {
           e.preventDefault()
@@ -41,6 +42,6 @@ export function DeleteUserButton({ userId, name, compact, withReason }: {
           className="h-8 w-full rounded-lg border border-input bg-background px-2 text-xs sm:w-auto sm:flex-1" />
       )}
       <SubmitButton compact={compact} />
-    </form>
+    </ActionForm>
   )
 }

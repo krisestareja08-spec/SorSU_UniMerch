@@ -1,5 +1,7 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { revalidatePath } from "next/cache"
 import { assertDashboard } from "@/lib/dashboards"
@@ -11,7 +13,7 @@ import { cashierBranchName, type CashierScope } from "@/lib/cashier-branches"
  * Verification Admin creates a Cashier branch: its dashboard + store (the store is created
  * automatically by the database) and appoints the branch's Main Admin.
  */
-export async function createCashierBranch(formData: FormData) {
+async function createCashierBranchImpl(formData: FormData) {
   const { supabase, userId: actorId } = await assertDashboard("verification", "cashiers")
 
   const campus = formData.get("campus") as Campus
@@ -69,4 +71,9 @@ export async function createCashierBranch(formData: FormData) {
 
   await logAudit(supabase, actorId, { userId: mainAdminId, action: "cashier_branch_created", reason: `${name} — Main Admin ${email}` })
   revalidatePath("/admin/cashiers")
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function createCashierBranch(...args: Parameters<typeof createCashierBranchImpl>) {
+  return attempt(() => createCashierBranchImpl(...args))
 }

@@ -1,10 +1,13 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { assertDashboard } from "@/lib/dashboards"
 import { MODULES, type ModuleKey } from "@/lib/modules"
 import { revalidatePath } from "next/cache"
 import { computeRoyalty } from "@/lib/access"
 import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
+import { parsePaymentModes, parseVariantPrices } from "@/lib/product-pricing"
 
 const STORE_MODULES: ModuleKey[] = ["seller", "cashier", "supply_office"]
 
@@ -16,7 +19,7 @@ async function storeContext(moduleRaw: unknown) {
   return { supabase, storeId, path: `${MODULES[mod].basePath}/products` }
 }
 
-export async function addProduct(formData: FormData) {
+async function addProductImpl(formData: FormData) {
   const { supabase, storeId, path } = await storeContext(formData.get("module"))
 
   // The store must be active before listing products.
@@ -39,7 +42,11 @@ export async function addProduct(formData: FormData) {
   const sku = formData.get("sku") as string | null
   const tags = (formData.get("tags") as string | null)?.split(",").map((t) => t.trim()).filter(Boolean) ?? []
   const variationsRaw = formData.get("variations") as string | null
-  const variations = variationsRaw ? JSON.parse(variationsRaw) : []
+  const variations: string[] = variationsRaw ? JSON.parse(variationsRaw) : []
+  // Optional price per size; only sizes that exist on the product count
+  const variantPrices = parseVariantPrices(JSON.parse((formData.get("variant_prices") as string | null) ?? "{}"))
+  for (const key of Object.keys(variantPrices)) if (!variations.includes(key)) delete variantPrices[key]
+  const paymentModes = parsePaymentModes(JSON.parse((formData.get("payment_modes") as string | null) ?? "[]"))
   const draft = formData.get("draft") === "true"
   const isRestricted = formData.get("is_restricted") === "true"
   const allowedRolesRaw = formData.get("allowed_roles") as string | null
@@ -51,11 +58,13 @@ export async function addProduct(formData: FormData) {
   if (isNaN(stock) || stock < 0) throw new Error("Enter a valid stock quantity.")
   if (images.length === 0) throw new Error("At least one product image is required.")
   if (isRestricted && allowedRoles.length === 0) throw new Error("Select who can buy this restricted product.")
+  // Pre-orders are paid upfront online
+  if (badge === "Pre-Order" && !paymentModes.includes("online")) paymentModes.push("online")
 
   const royaltyPercentage = hasLogo ? await getGlobalRoyaltyPercentage() : 0
   const { royaltyAmount, finalPrice, isRoyaltyProduct } = computeRoyalty(price, hasLogo, royaltyPercentage)
 
-  const { error } = await supabase.from("products").insert({
+  const row = {
     seller_id: storeId,
     name, description, category, price, stock, badge,
     image_url: images[0],
@@ -71,13 +80,20 @@ export async function addProduct(formData: FormData) {
     final_price: finalPrice,
     is_royalty_product: isRoyaltyProduct,
     status: draft ? "draft" : "pending",
-  })
+  }
+  let { error } = await supabase.from("products").insert({ ...row, variant_prices: variantPrices, payment_modes: paymentModes })
+  if (error && /variant_prices|payment_modes/.test(error.message)) {
+    if (Object.keys(variantPrices).length > 0 || paymentModes.length < 2) {
+      throw new Error("Size prices and payment modes need scripts/27_variant_prices_payment_modes.sql. Ask the admin to run it in Supabase.")
+    }
+    ;({ error } = await supabase.from("products").insert(row)) // database without scripts/27 yet
+  }
 
   if (error) throw new Error(error.message)
   revalidatePath(path)
 }
 
-export async function deleteProduct(productId: string, module: ModuleKey = "seller") {
+async function deleteProductImpl(productId: string, module: ModuleKey = "seller") {
   const { supabase, storeId, path } = await storeContext(module)
 
   const { error } = await supabase
@@ -91,7 +107,7 @@ export async function deleteProduct(productId: string, module: ModuleKey = "sell
   revalidatePath(path)
 }
 
-export async function publishDraft(productId: string, module: ModuleKey = "seller") {
+async function publishDraftImpl(productId: string, module: ModuleKey = "seller") {
   const { supabase, storeId, path } = await storeContext(module)
 
   const { error } = await supabase
@@ -103,4 +119,15 @@ export async function publishDraft(productId: string, module: ModuleKey = "selle
 
   if (error) throw new Error(error.message)
   revalidatePath(path)
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function addProduct(...args: Parameters<typeof addProductImpl>) {
+  return attempt(() => addProductImpl(...args))
+}
+export async function deleteProduct(...args: Parameters<typeof deleteProductImpl>) {
+  return attempt(() => deleteProductImpl(...args))
+}
+export async function publishDraft(...args: Parameters<typeof publishDraftImpl>) {
+  return attempt(() => publishDraftImpl(...args))
 }

@@ -11,8 +11,9 @@ import { PageHeading } from "@/components/management/dashboard-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle } from "lucide-react"
+import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle, Banknote, Search } from "lucide-react"
 import { OrderChat } from "@/components/orders/order-chat"
+import { unwrap } from "@/lib/action-result"
 
 type Order = {
   id: string; status: string; total: number; payment_method: string
@@ -34,6 +35,77 @@ const STATUS_LABELS: Record<string, string> = {
   ready_for_pickup: "Ready for Pickup", completed: "Completed", cancelled: "Cancelled",
 }
 
+const PAYMENT_LABELS: Record<string, string> = { cash: "Walk-in (cash)", gcash: "GCash", bank: "Bank transfer" }
+
+const peso = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+
+/**
+ * Walk-in counter, like a cash register: the buyer comes to the counter with their order number,
+ * pays in cash, and the cashier records it — handing the items over right away, or preparing them.
+ */
+function CounterPayment({ order, busy, blocked, onPaid }: {
+  order: Order
+  busy: boolean
+  blocked: boolean
+  onPaid: (status: "completed" | "paid" | "partially_paid", amountPaid: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [cash, setCash] = useState("")
+  const received = Number.parseFloat(cash)
+  const due = order.total - (order.amount_paid ?? 0)
+  const valid = Number.isFinite(received) && received > 0
+  const change = valid ? received - due : 0
+  const paidTotal = (order.amount_paid ?? 0) + Math.min(valid ? received : 0, due)
+
+  if (!open) {
+    return (
+      <Button size="sm" disabled={busy || blocked} onClick={() => setOpen(true)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+        <Banknote className="size-3.5" />Receive Payment
+      </Button>
+    )
+  }
+  return (
+    <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <p className="text-[11px] text-muted-foreground">Amount due</p>
+          <p className="font-serif text-lg font-bold text-foreground">{peso(due)}</p>
+        </div>
+        <label className="block">
+          <span className="text-[11px] text-muted-foreground">Cash received</span>
+          <Input type="number" inputMode="decimal" min="0" step="0.01" autoFocus value={cash} onChange={(e) => setCash(e.target.value)}
+            placeholder={String(due)} className="mt-0.5 h-8 text-sm font-semibold" />
+        </label>
+        <div>
+          <p className="text-[11px] text-muted-foreground">{valid && change < 0 ? "Short by" : "Change"}</p>
+          <p className={cn("font-serif text-lg font-bold", valid && change < 0 ? "text-destructive" : "text-emerald-700 dark:text-emerald-400")}>
+            {valid ? peso(Math.abs(change)) : "—"}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {valid && change >= 0 ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onPaid("completed", order.total)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+              {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Paid &amp; Release Items
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => onPaid("paid", order.total)} className="gap-1">
+              <Package className="size-3" />Paid — Prepare Items
+            </Button>
+          </>
+        ) : valid ? (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onPaid("partially_paid", paidTotal)} className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
+            Record Partial Payment ({peso(paidTotal)} of {peso(order.total)})
+          </Button>
+        ) : (
+          <p className="text-xs text-muted-foreground">Enter the cash the buyer handed over.</p>
+        )}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setCash("") }} className="ml-auto text-xs">Close</Button>
+      </div>
+    </div>
+  )
+}
+
 const DATE_FILTERS = [
   { label: "Today", days: 0 },
   { label: "This Week", days: 7 },
@@ -48,6 +120,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
   const [tab, setTab] = useState<"active" | "history">("active")
   const [statusFilter, setStatusFilter] = useState("all")
   const [historyDays, setHistoryDays] = useState(7)
+  // Counter search: the buyer reads out their order number (or name)
+  const [search, setSearch] = useState("")
   const [updating, setUpdating] = useState<string | null>(null)
   const [refNums, setRefNums] = useState<Record<string, string>>({})
   const [receiptOpen, setReceiptOpen] = useState<string | null>(null)
@@ -94,8 +168,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     }
     const ids = [...map.keys()]
     const [restrictedIds, buyerInfo] = await Promise.all([
-      restrictedOrderIds(ctx.module, ids).catch(() => [] as string[]),
-      getOrderBuyers(ctx.module, ids).catch(() => ({} as Record<string, OrderBuyer>)),
+      restrictedOrderIds(ctx.module, ids).then(unwrap).catch(() => [] as string[]),
+      getOrderBuyers(ctx.module, ids).then(unwrap).catch(() => ({} as Record<string, OrderBuyer>)),
     ])
     setRestricted(new Set(restrictedIds))
     setBuyers(buyerInfo)
@@ -108,11 +182,12 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     })
   }, [])
 
-  async function setStatus(orderId: string, status: string, refNum?: string) {
+  async function setStatus(orderId: string, status: string, refNum?: string, amountPaid?: number) {
     setUpdating(orderId)
     const supabase = createClient()
     const update: Record<string, unknown> = { status }
     if (refNum !== undefined) update.reference_number = refNum || null
+    if (amountPaid !== undefined) update.amount_paid = amountPaid
     const { error: err } = await supabase.from("orders").update(update).eq("id", orderId)
     if (err) alert(err.message)
     else await load()
@@ -125,7 +200,9 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
   const historyStatuses = ["completed", "cancelled"]
   const now = new Date()
 
+  const query = search.trim().toLowerCase().replace(/^#/, "")
   const filteredOrders = orders.filter((o) => {
+    if (query && !o.id.toLowerCase().startsWith(query) && !(buyers[o.id]?.name ?? "").toLowerCase().includes(query)) return false
     if (tab === "active") {
       if (!activeStatuses.includes(o.status)) return false
       if (statusFilter !== "all" && o.status !== statusFilter) return false
@@ -204,6 +281,13 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
         ))}
       </div>
 
+      {/* Counter search */}
+      <div className="relative mt-3">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find an order — order # or buyer name"
+          aria-label="Find an order by number or buyer name" className="h-9 pl-9" />
+      </div>
+
       {/* Active filter pills */}
       {tab === "active" && (
         <div className="mt-3 flex flex-wrap gap-2">
@@ -262,7 +346,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                       <ReportBuyerButton orderId={o.id} module={ctx.module} buyerName={buyers[o.id].name} />
                     </div>
                   )}
-                  <p className="text-xs text-muted-foreground">{o.payment_method} · {new Date(o.created_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-muted-foreground">{PAYMENT_LABELS[o.payment_method] ?? o.payment_method} · {new Date(o.created_at).toLocaleDateString()}</p>
                   {restricted.has(o.id) && (
                     <div className="mt-2">
                       <BuyerIdCheck
@@ -306,7 +390,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
               </div>
 
               {/* Reference number */}
-              {tab === "active" && ["pending", "paid", "partially_paid"].includes(o.status) && (
+              {tab === "active" && o.payment_method !== "cash" && ["pending", "paid", "partially_paid"].includes(o.status) && (
                 <div className="flex items-center gap-2 border-t border-border px-4 py-3">
                   <Input
                     placeholder="Reference # from receipt"
@@ -328,7 +412,12 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                   {needsIdCheck(o.id) && (
                     <p className="w-full text-xs text-amber-700 dark:text-amber-300">This order has restricted items — check the buyer&apos;s I.D. before confirming it.</p>
                   )}
-                  {o.status === "pending" && (
+                  {/* Walk-in: paid in cash at the counter, like a register */}
+                  {o.payment_method === "cash" && (o.status === "pending" || o.status === "partially_paid") && (
+                    <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
+                      onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
+                  )}
+                  {o.status === "pending" && o.payment_method !== "cash" && (
                     <>
                       <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "paid")}
                         className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
@@ -340,7 +429,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                       </Button>
                     </>
                   )}
-                  {(o.status === "paid" || o.status === "partially_paid") && (
+                  {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
                     <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
                       className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
                       {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Ready for Pickup

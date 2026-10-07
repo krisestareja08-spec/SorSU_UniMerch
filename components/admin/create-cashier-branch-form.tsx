@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createCashierBranch } from "@/app/admin/cashiers/actions"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { CASHIER_SCOPE_LABELS, cashierBranchName, type CashierScope } from "@/lib/cashier-branches"
+import { unwrap } from "@/lib/action-result"
 
 /** Verification Admin: create a Cashier branch for a campus (whole campus, one department, or centralized). */
 export function CreateCashierBranchForm() {
@@ -34,7 +35,7 @@ export function CreateCashierBranchForm() {
     fd.set("admin_mode", adminMode)
     startTransition(async () => {
       try {
-        await createCashierBranch(fd)
+        unwrap(await createCashierBranch(fd))
         setDone(`${preview} created. Its Main Admin can now open the Cashier dashboard.`)
         form.reset()
         setCampus("")

@@ -1,10 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getMemberships } from "@/lib/dashboards"
-import { dashboardHref, type ModuleKey } from "@/lib/modules"
-
-// Which dashboard to open first when a person manages more than one.
-const PRIORITY: ModuleKey[] = ["verification", "bao", "supply_office", "cashier", "seller"]
+import { dashboardHref, primaryDashboard } from "@/lib/modules"
 
 /**
  * Landing after sign-in: people assigned to a management dashboard (e.g. the Verification Admin)
@@ -16,6 +13,6 @@ export default async function Page() {
   if (!user) redirect("/auth/login")
 
   const memberships = await getMemberships(supabase, user.id).catch(() => [])
-  const first = [...memberships].sort((a, b) => PRIORITY.indexOf(a.module) - PRIORITY.indexOf(b.module))[0]
+  const first = primaryDashboard(memberships)
   redirect(first ? dashboardHref(first) : "/marketplace")
 }

@@ -1,5 +1,7 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { revalidatePath } from "next/cache"
 import { assertDashboard } from "@/lib/dashboards"
 import { groupBy, loadSales, parseDay, totals } from "@/lib/analytics"
@@ -17,7 +19,7 @@ function storeModule(raw: FormDataEntryValue | null): ModuleKey {
  * A store submits its sales report for a period to BAO. Figures are recomputed on the server from
  * the recorded orders (never trusted from the form), so BAO sees exactly what the data says.
  */
-export async function submitSalesReport(formData: FormData) {
+async function submitSalesReportImpl(formData: FormData) {
   const mod = storeModule(formData.get("module"))
   const from = parseDay(formData.get("from") as string)
   const to = parseDay(formData.get("to") as string, true)
@@ -54,7 +56,7 @@ export async function submitSalesReport(formData: FormData) {
 }
 
 /** Restock or correct a product's stock; every change is recorded as an inventory movement. */
-export async function adjustStock(formData: FormData) {
+async function adjustStockImpl(formData: FormData) {
   const mod = storeModule(formData.get("module"))
   const productId = formData.get("product_id") as string
   const change = Number.parseInt(formData.get("change") as string, 10)
@@ -77,4 +79,12 @@ export async function adjustStock(formData: FormData) {
   }).then(() => {}, () => {}) // table arrives with scripts/15_bao_bi.sql
 
   revalidatePath(`${MODULES[mod].basePath}/inventory`)
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function submitSalesReport(...args: Parameters<typeof submitSalesReportImpl>) {
+  return attempt(() => submitSalesReportImpl(...args))
+}
+export async function adjustStock(...args: Parameters<typeof adjustStockImpl>) {
+  return attempt(() => adjustStockImpl(...args))
 }

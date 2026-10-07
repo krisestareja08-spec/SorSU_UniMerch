@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { approveProduct, rejectProduct, sendBaoMessage } from "@/app/bao/approvals/actions"
+import { unwrap } from "@/lib/action-result"
 
 type Product = {
   id: string
@@ -31,7 +32,7 @@ export function BaoApprovalCard({ product }: { product: Product }) {
 
   function handleApprove() {
     startTransition(async () => {
-      await approveProduct(product.id)
+      unwrap(await approveProduct(product.id))
     })
   }
 
@@ -40,7 +41,7 @@ export function BaoApprovalCard({ product }: { product: Product }) {
     const fd = new FormData(e.currentTarget)
     fd.set("product_id", product.id)
     startTransition(async () => {
-      await rejectProduct(fd)
+      unwrap(await rejectProduct(fd))
       setShowRejectForm(false)
     })
   }
@@ -52,7 +53,7 @@ export function BaoApprovalCard({ product }: { product: Product }) {
     fd.set("product_id", product.id)
     fd.set("message", chatMsg.trim())
     startTransition(async () => {
-      await sendBaoMessage(fd)
+      unwrap(await sendBaoMessage(fd))
       setChatMsg("")
     })
   }

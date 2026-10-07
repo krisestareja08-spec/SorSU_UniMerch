@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { Loader2, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
-import { useCart, type CartItem } from "@/lib/cart-context"
+import { lineKey, useCart, type CartItem } from "@/lib/cart-context"
 import { cn } from "@/lib/utils"
+import { parseVariantPrices, unitPrice } from "@/lib/product-pricing"
 
 type ReorderItem = { productId: string | null; variant: string | null; quantity: number }
 
@@ -21,9 +22,13 @@ export function ReorderButton({ items, storeName, className }: { items: ReorderI
     setBusy(true)
     setNote(null)
     const ids = [...new Set(items.map((i) => i.productId).filter((id): id is string => !!id))]
-    const { data } = ids.length
-      ? await createClient().from("products").select("id, seller_id, name, price, image_url, badge, stock").in("id", ids).eq("status", "approved")
-      : { data: [] }
+    type Row = { id: string; seller_id: string; name: string; price: number; image_url: string | null; badge: string; stock: number; variant_prices?: unknown }
+    const load = async (columns: string) =>
+      (await createClient().from("products").select(columns).in("id", ids).eq("status", "approved")) as unknown as { data: Row[] | null; error: unknown }
+    const base = "id, seller_id, name, price, image_url, badge, stock"
+    // variant_prices arrives with scripts/27
+    let { data, error } = ids.length ? await load(`${base}, variant_prices`) : { data: [] as Row[], error: null }
+    if (error) ({ data } = await load(base))
     const byId = new Map((data ?? []).map((p) => [p.id, p]))
 
     let skipped = 0
@@ -32,11 +37,13 @@ export function ReorderButton({ items, storeName, className }: { items: ReorderI
       const p = item.productId ? byId.get(item.productId) : undefined
       if (!p || p.badge === "Sold Out" || (p.badge !== "Pre-Order" && p.stock < 1)) { skipped++; continue }
       const quantity = p.badge === "Pre-Order" ? item.quantity : Math.min(item.quantity, p.stock)
-      addItem({
-        id: p.id, sellerId: p.seller_id, name: p.name, seller: storeName, price: Number(p.price),
+      const line: CartItem = {
+        id: p.id, sellerId: p.seller_id, name: p.name, seller: storeName,
+        price: unitPrice(Number(p.price), parseVariantPrices(p.variant_prices), item.variant),
         image: p.image_url ?? "/placeholder.jpg", badge: p.badge as CartItem["badge"], quantity, variant: item.variant ?? undefined,
-      })
-      added.push(p.id)
+      }
+      addItem(line)
+      added.push(lineKey(line))
     }
     setBusy(false)
 
@@ -45,7 +52,7 @@ export function ReorderButton({ items, storeName, className }: { items: ReorderI
       return
     }
     // Check out just the reordered items
-    setSelected(cartItems.map((i) => i.id).filter((id) => !added.includes(id)), false)
+    setSelected(cartItems.map(lineKey).filter((key) => !added.includes(key)), false)
     router.push(skipped ? `/marketplace/cart?reorder_skipped=${skipped}` : "/marketplace/cart")
   }
 

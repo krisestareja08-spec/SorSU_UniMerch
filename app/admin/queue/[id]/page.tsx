@@ -10,6 +10,7 @@ import { AlertTriangle, ArrowLeft } from "lucide-react"
 import { decideVerification } from "../../verification-actions"
 import { findDuplicateGroups, formatDateTime, profilesById, signedDocUrl, type AdminProfile } from "@/lib/admin"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
+import { ActionForm } from "@/components/ui/action-form"
 
 export default async function VerificationRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -88,7 +89,7 @@ export default async function VerificationRequestPage({ params }: { params: Prom
       </div>
 
       {isOpen && (
-        <form action={decideVerification} className="sticky bottom-20 mt-6 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4 shadow-lg lg:bottom-4">
+        <ActionForm action={decideVerification} className="sticky bottom-20 mt-6 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card p-4 shadow-lg lg:bottom-4">
           <input type="hidden" name="request_id" value={request.id} />
           <input type="hidden" name="return_to" value="/admin/queue" />
           <input
@@ -106,7 +107,7 @@ export default async function VerificationRequestPage({ params }: { params: Prom
           <button name="decision" value="needs_resubmission" className="h-9 rounded-lg border border-input bg-background px-4 text-sm font-semibold hover:bg-muted">
             Ask to resubmit
           </button>
-        </form>
+        </ActionForm>
       )}
     </ManagementShell>
   )

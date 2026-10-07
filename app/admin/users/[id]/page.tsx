@@ -12,6 +12,7 @@ import { ArrowLeft, Building2, Crown, History, ClipboardList, ShieldCheck, UserX
 import { updateAccountStatus } from "../../verification-actions"
 import { ACTION_LABELS, formatDateTime, profilesById } from "@/lib/admin"
 import { MODULES, type ModuleKey } from "@/lib/modules"
+import { ActionForm } from "@/components/ui/action-form"
 
 const FIELD_LABELS: Record<string, string> = {
   full_name: "Full name", role: "Role", affiliation: "Affiliation", student_employee_id: "I.D. number",
@@ -57,7 +58,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
           <Card>
             <CardHeader><CardTitle className="font-serif text-base">Account controls</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-sm">
-              <form action={updateAccountStatus} className="flex flex-wrap items-center gap-2">
+              <ActionForm action={updateAccountStatus} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="user_id" value={user.id} />
                 <label className="w-28 text-muted-foreground" htmlFor="status">Account</label>
                 <select id="status" name="status" defaultValue={user.account_status ?? "active"} className="h-8 flex-1 rounded-lg border border-input bg-background px-2 text-xs">
@@ -70,7 +71,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                 <button type="submit" className="inline-flex h-8 items-center gap-1 rounded-lg border border-destructive/30 px-3 text-xs font-semibold text-destructive hover:bg-destructive/10">
                   <UserX className="size-3" /> Apply
                 </button>
-              </form>
+              </ActionForm>
               {user.id !== ctx.userId && (
                 <div className="border-t border-border pt-4">
                   <p className="mb-2 text-xs text-muted-foreground">

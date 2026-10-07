@@ -9,15 +9,14 @@ import { resetTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Menu, X, LogOut, Store, ChevronsUpDown, Check, Crown } from "lucide-react"
+import { Menu, X, LogOut, ChevronsUpDown, Check, Crown, UserCog } from "lucide-react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
-  type DashboardCtx, type ModuleKey, type ModulePage,
+  type DashboardCtx, type ModulePage,
 } from "@/lib/modules"
 
-const NO_MARKETPLACE: ModuleKey[] = ["supply_office", "bao", "seller", "verification"]
 // Seller bottom tabs, in order; Storefront is the raised, highlighted button. Other pages are in the menu.
 const SELLER_TABS = ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"]
 const HIGHLIGHT_TAB = "/seller/shop"
@@ -37,14 +36,14 @@ export function ManagementShell({
   const moduleDef = MODULES[ctx.module]
   const fullName = ctx.fullName
   const email = ctx.email
-  const nav: Pick<ModulePage, "label" | "href" | "icon">[] = [
+  const nav: Pick<ModulePage, "label" | "short" | "href" | "icon">[] = [
     ...moduleDef.pages.filter((p) => canUse(ctx, p.perm)),
     ...(ctx.isMain ? [{ label: MEMBERS_PAGE.label, href: membersHref(ctx.module), icon: MEMBERS_PAGE.icon }] : []),
-    // Supply Office and Verification Admin: no marketplace shortcut. BAO: its own view-only
-    // marketplace inside the BAO dashboard (see /bao/browse). Seller accounts only sell (lib/supabase/proxy.ts).
-    ...(NO_MARKETPLACE.includes(ctx.module) ? [] : [{ label: "Marketplace", href: "/marketplace", icon: Store }]),
+    // Dashboard accounts never shop, so there is no marketplace link (lib/supabase/proxy.ts keeps them
+    // out of the buyer pages). Their password lives on the shared My Account page.
+    { label: "My Account", short: "Account", href: "/account", icon: UserCog },
   ]
-  const homeHref = NO_MARKETPLACE.includes(ctx.module) ? moduleDef.basePath : "/marketplace"
+  const homeHref = moduleDef.basePath
   // Sellers: a fixed set of tabs (pages the member has no permission for are left out)
   const sellerTabs = ctx.module === "seller"
     ? SELLER_TABS.map((href) => nav.find((n) => n.href === href)).filter((n): n is (typeof nav)[number] => !!n)
@@ -204,7 +203,7 @@ export function ManagementShell({
                 {ctx.dashboardName} · {roleLabel}
               </Badge>
               {/* Notifications */}
-              <NotificationBell showAll={ctx.module !== "seller"} />
+              <NotificationBell showAll={false} />
               {/* Avatar + name */}
               <div className="flex items-center gap-2.5">
                 <span className="flex size-8 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
@@ -249,7 +248,7 @@ export function ManagementShell({
                 ) : (
                   <Icon className="size-5" />
                 )}
-                <span className={cn(sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.label}</span>
+                <span className={cn("whitespace-nowrap", sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.short ?? tab.label}</span>
               </Link>
             )
           })}

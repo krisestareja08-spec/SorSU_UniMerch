@@ -1,5 +1,7 @@
 "use server"
 
+import { attempt } from "@/lib/action-result"
+
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { getMemberships } from "@/lib/dashboards"
@@ -46,7 +48,7 @@ async function findUser(supabase: Awaited<ReturnType<typeof createClient>>, emai
   return match as { id: string; full_name: string | null }
 }
 
-export async function addMember(formData: FormData) {
+async function addMemberImpl(formData: FormData) {
   const dashboardId = formData.get("dashboard_id") as string
   const email = (formData.get("email") as string) ?? ""
   const { supabase, actorId, dashboard } = await authorize(dashboardId, "main")
@@ -64,7 +66,7 @@ export async function addMember(formData: FormData) {
   revalidate(dashboard.module)
 }
 
-export async function updateMemberPermissions(formData: FormData) {
+async function updateMemberPermissionsImpl(formData: FormData) {
   const dashboardId = formData.get("dashboard_id") as string
   const userId = formData.get("user_id") as string
   const { supabase, actorId, dashboard } = await authorize(dashboardId, "main")
@@ -82,7 +84,7 @@ export async function updateMemberPermissions(formData: FormData) {
   revalidate(dashboard.module)
 }
 
-export async function removeMember(formData: FormData) {
+async function removeMemberImpl(formData: FormData) {
   const dashboardId = formData.get("dashboard_id") as string
   const userId = formData.get("user_id") as string
   const { supabase, actorId, dashboard } = await authorize(dashboardId, "main")
@@ -120,7 +122,7 @@ async function setMainAdmin(
 }
 
 /** Main Admin hands full control to another member of the same dashboard. */
-export async function transferMainAdmin(formData: FormData) {
+async function transferMainAdminImpl(formData: FormData) {
   const dashboardId = formData.get("dashboard_id") as string
   const userId = formData.get("user_id") as string
   const { supabase, actorId, dashboard } = await authorize(dashboardId, "main")
@@ -135,7 +137,7 @@ export async function transferMainAdmin(formData: FormData) {
 }
 
 /** Verification Admin appoints (or replaces) any dashboard's Main Admin by email. */
-export async function appointMainAdmin(formData: FormData) {
+async function appointMainAdminImpl(formData: FormData) {
   const dashboardId = formData.get("dashboard_id") as string
   const email = (formData.get("email") as string) ?? ""
   const { supabase, actorId, dashboard } = await authorize(dashboardId, "appoint")
@@ -145,4 +147,21 @@ export async function appointMainAdmin(formData: FormData) {
   await setMainAdmin(supabase, dashboardId, target.id, actorId)
   await logAudit(supabase, actorId, { userId: target.id, action: "main_admin_changed", reason: `${dashboard.name} → ${email}` })
   revalidate(dashboard.module)
+}
+
+// ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
+export async function addMember(...args: Parameters<typeof addMemberImpl>) {
+  return attempt(() => addMemberImpl(...args))
+}
+export async function updateMemberPermissions(...args: Parameters<typeof updateMemberPermissionsImpl>) {
+  return attempt(() => updateMemberPermissionsImpl(...args))
+}
+export async function removeMember(...args: Parameters<typeof removeMemberImpl>) {
+  return attempt(() => removeMemberImpl(...args))
+}
+export async function transferMainAdmin(...args: Parameters<typeof transferMainAdminImpl>) {
+  return attempt(() => transferMainAdminImpl(...args))
+}
+export async function appointMainAdmin(...args: Parameters<typeof appointMainAdminImpl>) {
+  return attempt(() => appointMainAdminImpl(...args))
 }

@@ -8,6 +8,7 @@ import Image from "next/image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 import { deleteProduct } from "@/app/seller/products/actions"
+import { ActionForm } from "@/components/ui/action-form"
 
 const STATUS_STYLES = {
   pending:  { label: "Pending BAO Review",  icon: Clock,         color: "bg-amber-100/90 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
@@ -103,11 +104,11 @@ export default async function CashierProductsPage({ searchParams }: { searchPara
                       </p>
                     )}
                     {product.status === "pending" && (
-                      <form action={deleteProduct.bind(null, product.id, "cashier")}>
+                      <ActionForm action={deleteProduct.bind(null, product.id, "cashier")}>
                         <button type="submit" className="mt-1.5 w-full rounded-lg border border-destructive/20 py-1 text-[10px] font-semibold text-destructive hover:bg-destructive/10 transition-colors">
                           Withdraw
                         </button>
-                      </form>
+                      </ActionForm>
                     )}
                   </div>
                 </div>

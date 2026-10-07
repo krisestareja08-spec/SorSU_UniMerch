@@ -4,6 +4,7 @@ import { useState, useTransition } from "react"
 import { Heart, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toggleFollowSeller } from "@/app/seller/[sellerId]/actions"
+import { unwrap } from "@/lib/action-result"
 
 export function SellerFollowButton({ sellerId, initiallyFollowing }: { sellerId: string; initiallyFollowing: boolean }) {
   const [following, setFollowing] = useState(initiallyFollowing)
@@ -13,7 +14,7 @@ export function SellerFollowButton({ sellerId, initiallyFollowing }: { sellerId:
     setFollowing((f) => !f)
     startTransition(async () => {
       try {
-        await toggleFollowSeller(sellerId)
+        unwrap(await toggleFollowSeller(sellerId))
       } catch {
         setFollowing((f) => !f)
       }

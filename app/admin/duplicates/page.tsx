@@ -7,6 +7,7 @@ import { AlertOctagon, CheckCircle2, UserX } from "lucide-react"
 import { findDuplicateGroups } from "@/lib/admin"
 import { updateAccountStatus } from "../verification-actions"
 import { cn } from "@/lib/utils"
+import { ActionForm } from "@/components/ui/action-form"
 
 export default async function DuplicatesPage() {
   const ctx = await requireDashboard("verification", "duplicates")
@@ -49,14 +50,14 @@ export default async function DuplicatesPage() {
                       <span className={cn("capitalize", a.verified && "font-semibold text-emerald-600")}>{a.verified ? "verified" : a.status.replace(/_/g, " ")}</span>
                     </p>
                   </div>
-                  <form action={updateAccountStatus} className="flex items-center gap-2">
+                  <ActionForm action={updateAccountStatus} className="flex items-center gap-2">
                     <input type="hidden" name="user_id" value={a.userId} />
                     <input type="hidden" name="status" value="suspended" />
                     <input type="hidden" name="reason" value={`Duplicate I.D. number ${g.idNumber}`} />
                     <button type="submit" className="inline-flex items-center gap-1 rounded-lg border border-destructive/30 px-3 py-1 text-xs font-semibold text-destructive hover:bg-destructive/10">
                       <UserX className="size-3" /> Suspend
                     </button>
-                  </form>
+                  </ActionForm>
                 </li>
               ))}
             </ul>
