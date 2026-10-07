@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useRef, useEffect, useMemo } from "react"
+import { use, useState, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import {
@@ -23,7 +23,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { useCart } from "@/lib/cart-context"
+import { useCart, type CartItem } from "@/lib/cart-context"
+import { clearBuyNowItem, readBuyNowItem, shopKey } from "@/lib/buy-now"
 import { submitOrder } from "./actions"
 import { validateFullName } from "@/lib/profile-rules"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
@@ -40,11 +41,26 @@ const PAYMENT_METHODS = [
   { id: "bank",  label: "Bank Transfer",   icon: Building2 },
 ]
 
-export default function CheckoutPage() {
+export default function CheckoutPage({ searchParams }: { searchParams: Promise<{ buy?: string }> }) {
   const router = useRouter()
-  const { items: cartItems, loaded, removeItems } = useCart()
-  // Only the items ticked in the cart are checked out
-  const items = useMemo(() => cartItems.filter((i) => i.selected !== false), [cartItems])
+  const { items: cartItems, loaded: cartLoaded, removeItems } = useCart()
+  // ?buy=1: "Buy" / "Buy Now" on one product — check out only that item, never the cart's
+  const buyMode = use(searchParams).buy === "1"
+  const [buyItem, setBuyItem] = useState<CartItem | null>(null)
+  const [buyLoaded, setBuyLoaded] = useState(false)
+  useEffect(() => {
+    if (!buyMode) return
+    setBuyItem(readBuyNowItem())
+    setBuyLoaded(true)
+  }, [buyMode])
+  const loaded = buyMode ? buyLoaded : cartLoaded
+  // Otherwise only the items ticked in the cart are checked out
+  const items = useMemo(
+    () => (buyMode ? (buyItem ? [buyItem] : []) : cartItems.filter((i) => i.selected !== false)),
+    [buyMode, buyItem, cartItems],
+  )
+  // One shop per checkout, so the buyer pays one seller one amount
+  const shopCount = new Set(items.map(shopKey)).size
   const hasPreOrder = items.some((i) => i.badge === "Pre-Order")
   const [paymentChoice, setPayment] = useState("gcash")
   // Pre-orders are paid upfront, so only the receipt-backed GCash option is allowed
@@ -134,7 +150,7 @@ export default function CheckoutPage() {
 
   async function handlePlaceOrder() {
     if (payment === "gcash" && !receipt) return
-    if (items.length === 0) return
+    if (items.length === 0 || shopCount > 1) return
     setSubmitting(true)
     setOrderError(null)
     try {
@@ -153,7 +169,8 @@ export default function CheckoutPage() {
       }
       const { orderIds } = await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant })), paymentMethod: payment, receiptUrl, total: subtotal })
       setPlaced(true)
-      removeItems(items.map((i) => i.id))
+      if (buyMode) clearBuyNowItem()
+      else removeItems(items.map((i) => i.id))
       router.replace(`/marketplace/order-success?orders=${orderIds.join(",")}`)
     } catch (err: unknown) {
       setOrderError(err instanceof Error ? err.message : "Failed to place order. Please try again.")
@@ -180,12 +197,30 @@ export default function CheckoutPage() {
   }
 
   if (items.length === 0) {
+    const toMarket = buyMode || cartItems.length === 0
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <ShoppingBag className="mx-auto size-12 text-muted-foreground/40" />
-        <p className="mt-4 text-sm text-muted-foreground">{cartItems.length === 0 ? "Your cart is empty." : "No items selected for checkout."}</p>
+        <p className="mt-4 text-sm text-muted-foreground">
+          {buyMode ? "Nothing to check out. Tap Buy on a product to start." : cartItems.length === 0 ? "Your cart is empty." : "No items selected for checkout."}
+        </p>
         <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-          <Link href={cartItems.length === 0 ? "/marketplace" : "/marketplace/cart"}>{cartItems.length === 0 ? "Browse Marketplace" : "Back to Cart"}</Link>
+          <Link href={toMarket ? "/marketplace" : "/marketplace/cart"}>{toMarket ? "Browse Marketplace" : "Back to Cart"}</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (shopCount > 1) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <AlertTriangle className="mx-auto size-12 text-amber-500" />
+        <p className="mt-4 font-medium text-foreground">Check out one shop at a time</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          You selected items from {shopCount} shops. Each shop is paid separately, so select items from just one shop in your cart.
+        </p>
+        <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href="/marketplace/cart">Back to Cart</Link>
         </Button>
       </div>
     )

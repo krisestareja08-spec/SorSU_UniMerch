@@ -17,7 +17,7 @@ import {
   type DashboardCtx, type ModuleKey, type ModulePage,
 } from "@/lib/modules"
 
-const NO_MARKETPLACE: ModuleKey[] = ["supply_office", "bao", "seller"]
+const NO_MARKETPLACE: ModuleKey[] = ["supply_office", "bao", "seller", "verification"]
 // Seller bottom tabs, in order; Storefront is the raised, highlighted button. Other pages are in the menu.
 const SELLER_TABS = ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"]
 const HIGHLIGHT_TAB = "/seller/shop"
@@ -40,7 +40,7 @@ export function ManagementShell({
   const nav: Pick<ModulePage, "label" | "href" | "icon">[] = [
     ...moduleDef.pages.filter((p) => canUse(ctx, p.perm)),
     ...(ctx.isMain ? [{ label: MEMBERS_PAGE.label, href: membersHref(ctx.module), icon: MEMBERS_PAGE.icon }] : []),
-    // Supply Office: internal office, no marketplace shortcut. BAO: its own view-only
+    // Supply Office and Verification Admin: no marketplace shortcut. BAO: its own view-only
     // marketplace inside the BAO dashboard (see /bao/browse). Seller accounts only sell (lib/supabase/proxy.ts).
     ...(NO_MARKETPLACE.includes(ctx.module) ? [] : [{ label: "Marketplace", href: "/marketplace", icon: Store }]),
   ]

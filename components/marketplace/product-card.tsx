@@ -7,6 +7,7 @@ import { useState } from "react"
 import { ShoppingCart, Zap, CheckCircle2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useCart } from "@/lib/cart-context"
+import { BUY_NOW_CHECKOUT, setBuyNowItem } from "@/lib/buy-now"
 import { RatingSummary } from "@/components/reviews/stars"
 
 export type ProductBadge = "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
@@ -59,9 +60,9 @@ function BuyerActions({ product }: { product: Product }) {
         onClick={(e) => {
           e.stopPropagation()
           e.preventDefault()
-          // Add to cart then navigate directly to checkout
-          addItem({ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge, quantity: 1 })
-          router.push("/marketplace/checkout")
+          // Check out just this product; the cart (and what's ticked in it) is left alone
+          setBuyNowItem({ id: product.id, sellerId: product.sellerId, name: product.name, seller: product.seller, price: product.price, image: product.image, badge: product.badge, quantity: 1 })
+          router.push(BUY_NOW_CHECKOUT)
         }}
         className="flex items-center justify-center gap-1 rounded-lg border border-gold/30 bg-gold/10 px-2.5 py-1.5 text-xs font-semibold text-amber-700 transition-all hover:bg-gold/20 active:scale-95 dark:text-gold"
       >

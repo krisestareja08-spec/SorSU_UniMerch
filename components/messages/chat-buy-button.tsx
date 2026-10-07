@@ -4,7 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useCart, type CartItem } from "@/lib/cart-context"
+import type { CartItem } from "@/lib/cart-context"
+import { BUY_NOW_CHECKOUT, setBuyNowItem } from "@/lib/buy-now"
 import { cn } from "@/lib/utils"
 
 export type BuyableProduct = {
@@ -12,22 +13,20 @@ export type BuyableProduct = {
   stock: number; variations: string[]; available: boolean
 }
 
-/** Buyer-only: pick a variant and go straight to checkout with just this product (needs CartProvider). */
+/** Buyer-only: pick a variant and go straight to checkout with just this product. */
 export function ChatBuyButton({ product, sellerId, storeName, compact = false }: { product: BuyableProduct; sellerId: string; storeName: string; compact?: boolean }) {
   const router = useRouter()
-  const { items, addItem, setSelected } = useCart()
   const [variant, setVariant] = useState(product.variations[0] ?? "")
   const soldOut = !product.available || product.badge === "Sold Out" || (product.badge !== "Pre-Order" && product.stock < 1)
 
   function checkout() {
     if (soldOut) return
-    addItem({
+    // Check out only this product; the cart (and what's ticked in it) is left alone
+    setBuyNowItem({
       id: product.id, sellerId, name: product.name, seller: storeName, price: Number(product.price),
       image: product.image_url ?? "/placeholder.jpg", badge: product.badge as CartItem["badge"], quantity: 1, variant: variant || undefined,
     })
-    // Check out only this product; other cart items stay in the cart, unticked
-    setSelected(items.map((i) => i.id).filter((id) => id !== product.id), false)
-    router.push("/marketplace/checkout")
+    router.push(BUY_NOW_CHECKOUT)
   }
 
   return (
