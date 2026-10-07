@@ -93,10 +93,10 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     setImagePreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Pre-orders are paid upfront online, so they always allow online payment
+  // Pre-orders aren't paid upfront: the buyer pays at the counter on pick-up, after the shop checks their I.D.
   const isPreOrder = badge === "Pre-Order"
   const paymentModes: PaymentMode[] = PAYMENT_CHOICES.find((c) => c.value === payment)!.modes
-  const effectiveModes: PaymentMode[] = isPreOrder && !paymentModes.includes("online") ? [...paymentModes, "online"] : paymentModes
+  const effectiveModes: PaymentMode[] = paymentModes
 
   function toggleAllowedRole(role: string) {
     setAllowedRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role])
@@ -328,8 +328,8 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
                 </button>
               ))}
             </div>
-            {isPreOrder && !paymentModes.includes("online") && (
-              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-orders are paid upfront online, so online payment will also be allowed for this product.</p>
+            {isPreOrder && (
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-orders aren't paid online: the buyer uploads an I.D. and picks a pick-up date, you check the I.D., and they pay at your counter on pick-up.</p>
             )}
           </div>
 

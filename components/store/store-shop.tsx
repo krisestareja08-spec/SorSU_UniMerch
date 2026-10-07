@@ -22,6 +22,8 @@ type ShopProfile = {
   logo_url: string | null; banner_url: string | null
   pickup_location: string | null; pickup_notes: string | null
   store_hours: string | null; claim_window_days: number
+  /** Penalty for an unclaimed pre-order (scripts/29) */
+  preorder_penalty?: number
   theme: StorefrontTheme
 }
 
@@ -36,6 +38,7 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
   const [brandingAvailable, setBrandingAvailable] = useState(true)
   const [pickupAvailable, setPickupAvailable] = useState(true)
   const [hoursAvailable, setHoursAvailable] = useState(true)
+  const [penaltyAvailable, setPenaltyAvailable] = useState(true)
   const logoRef = useRef<HTMLInputElement>(null)
   const bannerRef = useRef<HTMLInputElement>(null)
   const gcashRef = useRef<HTMLInputElement>(null)
@@ -61,7 +64,10 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
       // Store hours + claim window arrive with scripts/22_preorder_pickup.sql
       const { data: hours, error: hoursError } = await supabase.from("seller_profiles").select("store_hours, claim_window_days").eq("id", ctx.storeId ?? "").maybeSingle()
       if (hoursError) setHoursAvailable(false)
-      if (sp) setShop({ ...sp, ...(pickup ?? {}), ...(hours ?? {}), theme: { ...DEFAULT_THEME, ...((sp as { theme?: Partial<StorefrontTheme> }).theme ?? {}) } })
+      // Unclaimed pre-order penalty arrives with scripts/29_preorder_id_penalties.sql
+      const { data: penalty, error: penaltyError } = await supabase.from("seller_profiles").select("preorder_penalty").eq("id", ctx.storeId ?? "").maybeSingle()
+      if (penaltyError) setPenaltyAvailable(false)
+      if (sp) setShop({ ...sp, ...(pickup ?? {}), ...(hours ?? {}), ...(penalty ? { preorder_penalty: Number(penalty.preorder_penalty) } : {}), theme: { ...DEFAULT_THEME, ...((sp as { theme?: Partial<StorefrontTheme> }).theme ?? {}) } })
     })
   }, [])
 
@@ -102,12 +108,13 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
     // Section 8 — QR upload logic: mark the e-wallet QR active once any QR image is on file.
     const qrStatus = shop.gcash_qr_url || shop.bank_qr_url ? "active" : "inactive"
     // Update only this dashboard's store (the store record is created together with the seller).
-    const { logo_url, banner_url, theme: shopTheme, pickup_location, pickup_notes, store_hours, claim_window_days, ...rest } = shop
+    const { logo_url, banner_url, theme: shopTheme, pickup_location, pickup_notes, store_hours, claim_window_days, preorder_penalty, ...rest } = shop
     const payload = {
       ...rest,
       ...(brandingAvailable ? { logo_url, banner_url, theme: shopTheme ?? DEFAULT_THEME } : {}),
       ...(pickupAvailable ? { pickup_location: pickup_location?.trim() || null, pickup_notes: pickup_notes?.trim() || null } : {}),
-      ...(hoursAvailable ? { store_hours: store_hours?.trim() || null, claim_window_days: Math.min(60, Math.max(1, Math.round(Number(claim_window_days) || 7))) } : {}),
+      ...(hoursAvailable ? { store_hours: store_hours?.trim() || null, claim_window_days: Math.min(7, Math.max(3, Math.round(Number(claim_window_days) || 7))) } : {}),
+      ...(penaltyAvailable ? { preorder_penalty: Math.min(10000, Math.max(0, Math.round((Number(preorder_penalty) || 0) * 100) / 100)) } : {}),
       org_name: shop.org_name?.trim() || profile?.full_name || "My Shop",
       qr_status: qrStatus,
       qr_updated_at: new Date().toISOString(),
@@ -178,10 +185,20 @@ export function StoreShop({ ctx }: { ctx: DashboardCtx }) {
               <p className="mt-1 text-xs text-muted-foreground">Shown to buyers at checkout so they know when they can walk in to claim a pre-order.</p>
             </div>
             <div>
-              <Label htmlFor="claim_window_days">Claim deadline (days after ordering)</Label>
-              <Input id="claim_window_days" type="number" min={1} max={60} disabled={!hoursAvailable} className="mt-1 w-28"
+              <Label htmlFor="claim_window_days">Pre-order pick-up window (3–7 days)</Label>
+              <Input id="claim_window_days" type="number" min={3} max={7} disabled={!hoursAvailable} className="mt-1 w-28"
                 value={shop.claim_window_days ?? 7} onChange={(e) => setShop((s) => ({ ...s, claim_window_days: Number(e.target.value) }))} />
-              <p className="mt-1 text-xs text-muted-foreground">Pre-orders not claimed within this many days of being placed may be cancelled.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Buyers choose a pick-up date from tomorrow up to this many days after ordering.</p>
+            </div>
+            <div>
+              <Label htmlFor="preorder_penalty">Penalty for an unclaimed pre-order (₱)</Label>
+              <Input id="preorder_penalty" type="number" min={0} step="0.01" disabled={!penaltyAvailable} className="mt-1 w-28"
+                value={shop.preorder_penalty ?? 10} onChange={(e) => setShop((s) => ({ ...s, preorder_penalty: Number(e.target.value) }))} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {penaltyAvailable
+                  ? "If a buyer doesn't pick up an approved pre-order by their date, it's discarded and this amount is charged to them. They can't order from your shop until it's paid."
+                  : "Run scripts/29_preorder_id_penalties.sql in Supabase to enable pre-order penalties."}
+              </p>
             </div>
             <p className="text-xs text-muted-foreground">Buyers see this on their receipt and order details. New orders keep the location that was set when they were placed.</p>
           </CardContent>

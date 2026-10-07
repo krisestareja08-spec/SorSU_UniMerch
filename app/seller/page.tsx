@@ -54,7 +54,7 @@ export default async function SellerPage() {
             <CardHeader className="pb-2"><CardTitle className="font-serif text-sm">Order Workflow</CardTitle></CardHeader>
             <CardContent>
               <ol className="space-y-2 text-sm text-muted-foreground">
-                {["Buyer places order", "Seller verifies payment receipt", "Mark as Paid / Partially Paid", "Prepare item — Mark Ready for Pickup", "Buyer collects — Mark Completed"].map((step, i) => (
+                {["Buyer places order", "Seller verifies payment receipt", "Mark as Paid / Partially Paid", "Prepare item — Mark For Pick Up", "Buyer collects — Mark Completed"].map((step, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">{i + 1}</span>
                     {step}

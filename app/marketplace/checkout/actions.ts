@@ -25,6 +25,9 @@ async function submitOrderImpl(args: {
   paymentMethod: string
   receiptUrl?: string
   total: number
+  /** Pre-orders: the buyer's pick-up date (YYYY-MM-DD) and their uploaded I.D. (preorder-ids bucket) */
+  pickupDate?: string
+  idPath?: string
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -73,18 +76,41 @@ async function submitOrderImpl(args: {
     throw new Error("Check out one shop at a time. Each shop is paid separately.")
   }
 
-  // Each product allows walk-in payment, online payment or both; the chosen method must suit every item.
-  const mode = PAYMENT_METHOD_MODE[args.paymentMethod]
-  if (!mode) throw new Error("Choose a payment method.")
-  const notAllowed = products.find((product) => !parsePaymentModes(product.payment_modes).includes(mode))
-  if (notAllowed) {
-    throw new Error(`${notAllowed.name} can only be paid ${mode === "online" ? "at the store (walk-in)" : "online"}.`)
+  // An unpaid penalty with a shop (unclaimed pre-order) blocks ordering from that shop — scripts/29
+  const shopIds = [...new Set(products.map((product) => product.seller_id))]
+  const { data: penalties, error: penaltyError } = await supabase.from("buyer_penalties").select("store_id, amount")
+    .eq("buyer_id", user.id).in("status", ["unpaid", "pending_review"]).in("store_id", shopIds)
+  if (!penaltyError && (penalties ?? []).length > 0) {
+    const owed = (penalties ?? []).reduce((n, p) => n + Number(p.amount), 0)
+    throw new Error(`You have an unpaid ₱${owed.toLocaleString()} penalty with this shop. Pay it from your account page to order again.`)
   }
 
-  // Pre-orders are paid upfront: GCash with an uploaded receipt, never cash on pickup.
-  if (products.some((product) => product.badge === "Pre-Order")) {
-    if (args.paymentMethod !== "gcash") throw new Error("Pre-orders must be paid upfront via GCash.")
-    if (!args.receiptUrl) throw new Error("Upload your payment receipt to place a pre-order.")
+  // Pre-orders: checked out on their own, no upfront payment (paid at the counter on pick-up),
+  // the buyer's I.D. for the shop to check, and a pick-up date within the shop's 3–7 day window.
+  const isPreOrder = products.some((product) => product.badge === "Pre-Order")
+  let preOrder: { pickupDate: string; idPath: string } | null = null
+  if (isPreOrder) {
+    if (products.some((product) => product.badge !== "Pre-Order")) throw new Error("Check out pre-order items on their own.")
+    const store = shopIds[0]
+    const { data: shop } = await supabase.from("seller_profiles").select("claim_window_days").eq("id", store).maybeSingle()
+    const windowDays = Math.min(7, Math.max(3, Number(shop?.claim_window_days ?? 7)))
+    // Dates in Philippine time
+    const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
+    const date = (args.pickupDate ?? "").trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < day(1) || date > day(windowDays)) {
+      throw new Error(`Choose a pick-up date from tomorrow up to ${windowDays} days from today.`)
+    }
+    const idPath = (args.idPath ?? "").trim()
+    if (!idPath.startsWith(`${store}/${user.id}/`)) throw new Error("Upload a photo of your I.D. so the shop can check it.")
+    preOrder = { pickupDate: date, idPath }
+  } else {
+    // Each product allows walk-in payment, online payment or both; the chosen method must suit every item.
+    const mode = PAYMENT_METHOD_MODE[args.paymentMethod]
+    if (!mode) throw new Error("Choose a payment method.")
+    const notAllowed = products.find((product) => !parsePaymentModes(product.payment_modes).includes(mode))
+    if (notAllowed) {
+      throw new Error(`${notAllowed.name} can only be paid ${mode === "online" ? "at the store (walk-in)" : "online"}.`)
+    }
   }
 
   const productById = new Map(products.map((product) => [product.id, product]))
@@ -150,21 +176,20 @@ async function submitOrderImpl(args: {
   for (const [storeId, storeItems] of byStore) {
     const total = storeItems.reduce((sum, item) => sum + item.unit_price * item.quantity, 0)
     const store = storeById.get(storeId)
-    // Pre-orders must be claimed within the store's claim window, counted from the order date.
-    const claimDays = Math.min(60, Math.max(1, Number(store?.claim_window_days ?? 7)))
-    const pickupDeadline = storeItems.some((item) => item.pre_order)
-      ? new Date(Date.now() + claimDays * 86_400_000).toISOString()
-      : null
     const base = {
       buyer_id: user.id,
       status: "pending",
       total,
-      payment_method: args.paymentMethod,
-      receipt_url: args.receiptUrl ?? null,
+      // Pre-orders are paid in cash at the counter on pick-up
+      payment_method: preOrder ? "cash" : args.paymentMethod,
+      receipt_url: preOrder ? null : args.receiptUrl ?? null,
     }
     const pickup = { seller_id: storeId, pickup_location: store?.pickup_location ?? null, pickup_notes: store?.pickup_notes ?? null }
-    // Older databases lack scripts/22 (pickup_deadline) and/or scripts/13 (pickup columns): retry with fewer columns.
-    const attempts = [{ ...base, ...pickup, pickup_deadline: pickupDeadline }, { ...base, ...pickup }, base]
+    // Pre-order: picked up by the end of the chosen date (Philippine time); the shop checks the I.D. first
+    const attempts = preOrder
+      ? [{ ...base, ...pickup, pickup_date: preOrder.pickupDate, pickup_deadline: `${preOrder.pickupDate}T23:59:59+08:00`, buyer_id_path: preOrder.idPath, id_status: "pending" }]
+      // Older databases lack scripts/13 (pickup columns): retry with fewer columns.
+      : [{ ...base, ...pickup }, base]
     let order: { id: string } | null = null
     let orderError: { message: string } | null = null
     for (const row of attempts) {
@@ -172,6 +197,9 @@ async function submitOrderImpl(args: {
       if (!orderError?.message.includes("column")) break
     }
     if (orderError || !order) {
+      if (preOrder && orderError?.message.includes("column")) {
+        throw new Error("Pre-orders need scripts/29_preorder_id_penalties.sql. Ask the admin to run it in Supabase.")
+      }
       const msg = orderError?.message ?? "Failed to create order"
       if (msg.includes("schema cache") || msg.includes("does not exist"))
         throw new Error("Database not set up yet. Run scripts/1_tables.sql in Supabase SQL Editor first.")

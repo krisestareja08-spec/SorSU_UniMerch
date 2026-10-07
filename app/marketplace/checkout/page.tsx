@@ -22,6 +22,7 @@ import {
   Clock,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { lineKey, useCart, type CartItem } from "@/lib/cart-context"
 import { clearBuyNowItem, readBuyNowItem, shopKey } from "@/lib/buy-now"
@@ -64,9 +65,11 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
   // One shop per checkout, so the buyer pays one seller one amount
   const shopCount = new Set(items.map(shopKey)).size
   const hasPreOrder = items.some((i) => i.badge === "Pre-Order")
+  // Pre-orders are checked out on their own: no upfront payment, an I.D. check and a pick-up date
+  const mixedPreOrder = hasPreOrder && items.some((i) => i.badge !== "Pre-Order")
   const [paymentChoice, setPayment] = useState("gcash")
   // Each product says how it may be paid (walk-in at the counter, online, or both — scripts/27);
-  // checkout offers only the methods every item allows. Pre-orders are paid upfront via GCash.
+  // checkout offers only the methods every item allows. Pre-orders are paid at the counter on pick-up.
   const [productModes, setProductModes] = useState<Record<string, PaymentMode[]>>({})
   const productIdsKey = [...new Set(items.map((i) => i.id))].sort().join(",")
   useEffect(() => {
@@ -78,10 +81,17 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
     })
   }, [productIdsKey])
   const allowedModes = commonPaymentModes(items.map((i) => productModes[i.id] ?? PAYMENT_MODES))
-  const methodAllowed = (id: string) => allowedModes.includes(PAYMENT_METHOD_MODE[id]) && (!hasPreOrder || id === "gcash")
+  const methodAllowed = (id: string) => (hasPreOrder ? id === "cash" : allowedModes.includes(PAYMENT_METHOD_MODE[id]))
   const availableMethods = PAYMENT_METHODS.filter((m) => methodAllowed(m.id))
   const payment = methodAllowed(paymentChoice) ? paymentChoice : availableMethods[0]?.id ?? "cash"
-  const [preOrderStores, setPreOrderStores] = useState<{ id: string; name: string; storeHours: string | null; claimDays: number; location: string | null }[]>([])
+  const [preOrderStores, setPreOrderStores] = useState<{ id: string; name: string; storeHours: string | null; claimDays: number; location: string | null; penalty: number }[]>([])
+  // Pre-order: the date the buyer will pick it up, and a photo of their I.D. for the shop to check
+  const [pickupDate, setPickupDate] = useState("")
+  const [idFile, setIdFile] = useState<File | null>(null)
+  const [idPreview, setIdPreview] = useState<string | null>(null)
+  const idRef = useRef<HTMLInputElement>(null)
+  // Unpaid penalties with this checkout's shop block ordering from it (scripts/29)
+  const [penaltyShops, setPenaltyShops] = useState<{ name: string; amount: number }[]>([])
   const [receipt, setReceipt] = useState<File | null>(null)
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -140,20 +150,50 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
     const ids = [...new Set(items.filter((i) => i.badge === "Pre-Order" && i.sellerId).map((i) => i.sellerId as string))]
     if (ids.length === 0) return
     const supabase = createClient()
-    type Row = { id: string; org_name: string | null; pickup_location?: string | null; store_hours?: string | null; claim_window_days?: number | null }
+    type Row = { id: string; org_name: string | null; pickup_location?: string | null; store_hours?: string | null; claim_window_days?: number | null; preorder_penalty?: number | null }
     const load = async (columns: string) => (await supabase.from("seller_profiles").select(columns).in("id", ids)) as unknown as { data: Row[] | null; error: unknown }
-    // store_hours / claim_window_days arrive with scripts/22_preorder_pickup.sql
-    load("id, org_name, pickup_location, store_hours, claim_window_days").then(async ({ data, error }) => {
-      const rows = error ? (await load("id, org_name")).data : data
+    // store_hours / claim_window_days arrive with scripts/22, preorder_penalty with scripts/29
+    load("id, org_name, pickup_location, store_hours, claim_window_days, preorder_penalty").then(async ({ data, error }) => {
+      const rows = error ? (await load("id, org_name, pickup_location, store_hours, claim_window_days")).data ?? (await load("id, org_name")).data : data
       setPreOrderStores((rows ?? []).map((s) => ({
         id: s.id,
         name: s.org_name ?? "Campus Seller",
         storeHours: s.store_hours ?? null,
-        claimDays: s.claim_window_days ?? 7,
+        claimDays: Math.min(7, Math.max(3, s.claim_window_days ?? 7)),
         location: s.pickup_location ?? null,
+        penalty: Number(s.preorder_penalty ?? 10),
       })))
     })
   }, [items])
+
+  useEffect(() => {
+    const ids = [...new Set(items.map((i) => i.sellerId).filter((id): id is string => !!id))]
+    if (ids.length === 0) return
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return
+      const { data, error } = await supabase.from("buyer_penalties").select("store_id, amount, seller_profiles(org_name)")
+        .eq("buyer_id", user.id).in("status", ["unpaid", "pending_review"]).in("store_id", ids)
+      if (error) return // table arrives with scripts/29
+      setPenaltyShops((data ?? []).map((p) => {
+        const shop = Array.isArray(p.seller_profiles) ? p.seller_profiles[0] : p.seller_profiles
+        return { name: (shop as { org_name?: string } | null)?.org_name ?? "this shop", amount: Number(p.amount) }
+      }))
+    })
+  }, [items])
+
+  // Pick-up date: from tomorrow up to the shop's window (3–7 days after ordering)
+  const preOrderShop = preOrderStores[0]
+  const localDate = (offsetDays: number) => {
+    const d = new Date()
+    d.setDate(d.getDate() + offsetDays)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+  }
+  const minPickup = localDate(1)
+  const maxPickup = localDate(preOrderShop?.claimDays ?? 7)
+  const pickupValid = !hasPreOrder || (!!pickupDate && pickupDate >= minPickup && pickupDate <= maxPickup)
+  const preOrderReady = !hasPreOrder || (pickupValid && !!idFile)
+  const prettyPickup = pickupDate ? new Date(`${pickupDate}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric" }) : null
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0)
 
@@ -166,10 +206,22 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
 
   async function handlePlaceOrder() {
     if (payment === "gcash" && !receipt) return
-    if (items.length === 0 || shopCount > 1) return
+    if (items.length === 0 || shopCount > 1 || !preOrderReady || penaltyShops.length > 0) return
     setSubmitting(true)
     setOrderError(null)
     try {
+      // Pre-order: the I.D. photo goes to private storage only this shop's staff can open
+      let idPath: string | undefined
+      if (hasPreOrder && idFile) {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const storeId = items[0].sellerId
+        if (!user || !storeId) throw new Error("Please sign in again.")
+        const ext = idFile.name.split(".").pop() || "jpg"
+        idPath = `${storeId}/${user.id}/${crypto.randomUUID()}.${ext}`
+        const { error: idErr } = await supabase.storage.from("preorder-ids").upload(idPath, idFile, { contentType: idFile.type })
+        if (idErr) throw new Error("Your I.D. couldn't be uploaded. Please try again with a JPG or PNG under 5 MB.")
+      }
       let receiptUrl: string | undefined
       if (receipt) {
         // Upload receipt to Supabase Storage
@@ -183,7 +235,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
           receiptUrl = urlData.publicUrl
         }
       }
-      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant, variantId: i.variantId })), paymentMethod: payment, receiptUrl, total: subtotal }))
+      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant, variantId: i.variantId })), paymentMethod: payment, receiptUrl, total: subtotal, ...(hasPreOrder ? { pickupDate, idPath } : {}) }))
       setPlaced(true)
       if (buyMode) clearBuyNowItem()
       else removeItems(items.map(lineKey))
@@ -227,15 +279,44 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
     )
   }
 
+  if (mixedPreOrder) {
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <AlertTriangle className="mx-auto size-12 text-amber-500" />
+        <p className="mt-4 font-medium text-foreground">Pre-orders are checked out on their own</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A pre-order needs an I.D. check and a pick-up date. Select only the pre-order items in your cart, or only the regular items.
+        </p>
+        <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href={buyMode ? "/marketplace" : "/marketplace/cart"}>{buyMode ? "Back to Marketplace" : "Back to Cart"}</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (penaltyShops.length > 0) {
+    const total = penaltyShops.reduce((n, p) => n + p.amount, 0)
+    return (
+      <div className="mx-auto max-w-md px-4 py-16 text-center">
+        <AlertTriangle className="mx-auto size-12 text-destructive" />
+        <p className="mt-4 font-medium text-foreground">You have an unpaid penalty with {penaltyShops[0].name}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          A pre-order wasn&apos;t picked up on time, so a ₱{total.toLocaleString()} penalty was added to your account. You can order from this shop again once it&apos;s paid.
+        </p>
+        <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Link href="/marketplace/account#penalties">View and pay penalty</Link>
+        </Button>
+      </div>
+    )
+  }
+
   if (availableMethods.length === 0) {
     return (
       <div className="mx-auto max-w-md px-4 py-16 text-center">
         <AlertTriangle className="mx-auto size-12 text-amber-500" />
         <p className="mt-4 font-medium text-foreground">These items can&apos;t be paid the same way</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          {hasPreOrder
-            ? "Pre-orders are paid upfront online, but a selected item is walk-in payment only. Check it out separately."
-            : "Some selected items are walk-in payment only and others are online only. Check them out separately."}
+          Some selected items are walk-in payment only and others are online only. Check them out separately.
         </p>
         <Button asChild className="mt-4 gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
           <Link href={buyMode ? "/marketplace" : "/marketplace/cart"}>{buyMode ? "Back to Marketplace" : "Back to Cart"}</Link>
@@ -335,37 +416,79 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             </div>
           </section>
 
-          {/* Walk-in pre-order terms: upfront payment, store hours, claim deadline */}
+          {/* Pre-order: pick-up date, I.D. for the shop to check, pay at pick-up, penalty warning */}
           {hasPreOrder && (
             <section className="rounded-2xl border border-gold/30 bg-gold/8 p-5 shadow-sm">
               <h2 className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground sm:text-base">
                 <Clock className="size-4 text-gold" />
-                Walk-In Pre-Order Terms
+                Pre-Order Details
               </h2>
               <div className="mt-2 h-px bg-linear-to-r from-gold/40 to-transparent" />
-              <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
-                <li><span className="font-medium text-foreground">Full payment is required upfront</span> via GCash, with your receipt uploaded before the order is placed.</li>
-                <li>Claim your order in person during the seller&apos;s store hours, before the deadline below. Bring your I.D. and order number.</li>
-                <li>Orders not claimed by the deadline may be cancelled by the seller.</li>
-              </ul>
-              <div className="mt-4 space-y-3">
-                {preOrderStores.map((s) => (
-                  <div key={s.id} className="rounded-xl border border-border bg-card p-3 text-sm">
-                    <p className="font-semibold text-foreground">{s.name}</p>
-                    <dl className="mt-1.5 space-y-1 text-xs">
-                      <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Store hours</dt>
-                        <dd className="whitespace-pre-line text-foreground">{s.storeHours || "Not posted yet. Message the seller before visiting."}</dd></div>
-                      {s.location && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Pickup at</dt><dd className="whitespace-pre-line text-foreground">{s.location}</dd></div>}
-                      <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Claim within</dt>
-                        <dd className="font-medium text-foreground">{s.claimDays} day{s.claimDays === 1 ? "" : "s"} after placing the order</dd></div>
-                    </dl>
-                  </div>
-                ))}
+
+              {preOrderShop && (
+                <dl className="mt-4 space-y-1 rounded-xl border border-border bg-card p-3 text-xs">
+                  <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Shop</dt><dd className="font-semibold text-foreground">{preOrderShop.name}</dd></div>
+                  <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Store hours</dt>
+                    <dd className="whitespace-pre-line text-foreground">{preOrderShop.storeHours || "Not posted yet. Message the seller before visiting."}</dd></div>
+                  {preOrderShop.location && <div className="flex gap-2"><dt className="w-24 shrink-0 text-muted-foreground">Pick up at</dt><dd className="whitespace-pre-line text-foreground">{preOrderShop.location}</dd></div>}
+                </dl>
+              )}
+
+              {/* 1. Pick-up date */}
+              <div className="mt-4">
+                <label htmlFor="pickup-date" className="text-sm font-medium text-foreground">Pick-up date *</label>
+                <p className="text-xs text-muted-foreground">Any day from tomorrow up to {preOrderShop?.claimDays ?? 7} days from today.</p>
+                <Input id="pickup-date" type="date" min={minPickup} max={maxPickup} value={pickupDate}
+                  onChange={(e) => setPickupDate(e.target.value)} className="mt-1.5 w-48" aria-invalid={!!pickupDate && !pickupValid} />
+                {pickupDate && !pickupValid && <p className="mt-1 text-xs text-destructive">Choose a date between {minPickup} and {maxPickup}.</p>}
               </div>
+
+              {/* 2. I.D. */}
+              <div className="mt-4">
+                <p className="text-sm font-medium text-foreground">Your I.D. *</p>
+                <p className="text-xs text-muted-foreground">A clear photo of your School ID or any valid I.D. The shop checks it before confirming your pre-order. Only this shop can see it.</p>
+                <input ref={idRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    if (file.size > 5 * 1024 * 1024) { setOrderError("Your I.D. photo must be under 5 MB."); return }
+                    setIdFile(file)
+                    setIdPreview(URL.createObjectURL(file))
+                  }} />
+                {idPreview ? (
+                  <div className="mt-2 flex items-center gap-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={idPreview} alt="Your I.D." className="h-20 w-32 rounded-lg border border-border object-cover" />
+                    <button type="button" onClick={() => idRef.current?.click()} className="text-xs font-medium text-primary hover:underline">Replace photo</button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => idRef.current?.click()}
+                    className="mt-2 flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-gold/40 py-5 transition-colors hover:border-gold/70 hover:bg-gold/5">
+                    <Upload className="size-6 text-gold/60" />
+                    <span className="text-sm font-medium text-foreground">Upload a photo of your I.D.</span>
+                    <span className="text-xs text-muted-foreground">JPG, PNG or WEBP, up to 5 MB</span>
+                  </button>
+                )}
+              </div>
+
+              {/* 3. How it works + penalty warning */}
+              <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
+                <li><span className="font-medium text-foreground">No payment now.</span> Pay in cash at the shop&apos;s counter when you pick it up.</li>
+                <li>The shop checks your I.D. When it&apos;s approved, your pre-order is marked <span className="font-medium text-foreground">For Pick Up</span>.</li>
+                <li>Bring the same I.D. and your order number on your pick-up date.</li>
+              </ul>
+              <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                <span>
+                  If you don&apos;t pick it up by the end of {prettyPickup ?? "your pick-up date"}, the pre-order is <span className="font-semibold">discarded</span> and a{" "}
+                  <span className="font-semibold">₱{(preOrderShop?.penalty ?? 10).toLocaleString()} penalty</span> is added to your account. You won&apos;t be able to buy from {preOrderShop?.name ?? "this shop"} until it&apos;s paid.
+                </span>
+              </p>
             </section>
           )}
 
-          {/* Payment method */}
+          {/* Payment method (pre-orders: paid at the counter on pick-up — no online payment) */}
+          {!hasPreOrder && (
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground sm:text-base">
               <CreditCard className="size-4 text-primary" />
@@ -410,6 +533,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
               </p>
             )}
           </section>
+          )}
 
           {/* GCash QR + receipt upload */}
           {payment === "gcash" && (
@@ -541,13 +665,13 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                 onClick={handlePlaceOrder}
                 size="lg"
                 className="mt-5 w-full gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt)}
+                disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt) || !preOrderReady}
               >
-                {submitting ? <><Loader2 className="size-4 animate-spin" /> Placing Order...</> : <>{payment === "gcash" ? "Mark as Paid & Place Order" : "Place Order"}<ChevronRight className="size-4" /></>}
+                {submitting ? <><Loader2 className="size-4 animate-spin" /> Placing Order...</> : <>{hasPreOrder ? "Pre-Order" : payment === "gcash" ? "Mark as Paid & Place Order" : "Place Order"}<ChevronRight className="size-4" /></>}
               </Button>
 
               <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                Your order will be reviewed by the seller.
+                {hasPreOrder ? "The shop checks your I.D., then marks your pre-order For Pick Up." : "Your order will be reviewed by the seller."}
               </p>
             </div>
           </div>
@@ -563,10 +687,10 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
           </div>
           <Button
             onClick={handlePlaceOrder}
-            disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt)}
+            disabled={submitting || !!profileProblem || (payment === "gcash" && !receipt) || !preOrderReady}
             className="rounded-full bg-gold px-6 font-semibold text-primary hover:bg-gold/80"
           >
-            {submitting ? <Loader2 className="size-4 animate-spin" /> : payment === "gcash" ? "Pay & Order" : "Place Order"}
+            {submitting ? <Loader2 className="size-4 animate-spin" /> : hasPreOrder ? "Pre-Order" : payment === "gcash" ? "Pay & Order" : "Place Order"}
           </Button>
         </div>
       </div>

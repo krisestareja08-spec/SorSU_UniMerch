@@ -25,9 +25,9 @@ const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
     icon: Package,
   },
   ready_for_pickup: {
-    label: "For Pickup",
+    label: "For Pick Up",
     badge: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
-    description: "Your items are ready. Claim them at the pickup location with your I.D.",
+    description: "Ready for you. Claim it at the pickup location with your I.D. (pre-orders: pay at the counter by your pick-up date).",
     icon: MapPin,
   },
   completed: {
