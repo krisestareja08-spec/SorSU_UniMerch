@@ -60,7 +60,9 @@ with checks(script, what, applied) as (values
   ('29_preorder_id_penalties.sql',  'buyer_penalties table + orders.pickup_date + preorder-ids bucket',
      to_regclass('public.buyer_penalties') is not null
      and exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'orders' and column_name = 'pickup_date')
-     and exists (select 1 from storage.buckets where id = 'preorder-ids'))
+     and exists (select 1 from storage.buckets where id = 'preorder-ids')),
+  ('30_guest_restriction.sql',      'restricted products can allow guests',
+     coalesce(pg_get_functiondef(to_regprocedure('public.viewer_role_allowed(text[])')) like '%guest%', false))
 )
 select script,
        case when applied then 'ok' else 'MISSING' end as status,

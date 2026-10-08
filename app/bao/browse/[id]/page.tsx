@@ -77,7 +77,7 @@ export default async function BaoProductReviewPage({ params }: { params: Promise
               : variations.length ? variations.join(", ") : "None"}</dd></div>
             <div className="rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Official logo</dt><dd>{product.is_royalty_product ? `Yes · ${peso(Number(product.royalty_amount ?? 0))} royalty per sale` : "No"}</dd></div>
             <div className="col-span-2 rounded-lg bg-muted/40 px-3 py-2"><dt className="text-xs text-muted-foreground">Restricted to</dt>
-              <dd>{product.is_restricted ? (product.allowed_roles ?? []).map((r) => AFFILIATION_LABELS[r as Affiliation] ?? r).join(", ") || "—" : "Everyone"}</dd></div>
+              <dd>{product.is_restricted ? (product.allowed_roles ?? []).map((r) => (r === "guest" ? "Guest" : AFFILIATION_LABELS[r as Affiliation] ?? r)).join(", ") || "—" : "Everyone"}</dd></div>
           </dl>
 
           <Link href={`/bao/sellers/${product.seller_id}`} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 hover:border-primary/30">

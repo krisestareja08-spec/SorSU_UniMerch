@@ -1,7 +1,5 @@
 -- ============================================================
--- UniMerch — SMS (OTP) verification for phone numbers
--- Run in Supabase SQL Editor AFTER 24_product_chat.sql. Paste and run the WHOLE file. Safe to re-run.
---
+
 -- Users change or link their number from Settings → Account & Security: Supabase Auth texts a
 -- 6-digit code to the new number (auth.users.phone / phone_confirmed_at). This script makes the
 -- database refuse any self-made change to profiles.contact that doesn't match a confirmed phone.

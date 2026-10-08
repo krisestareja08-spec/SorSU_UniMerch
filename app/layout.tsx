@@ -4,6 +4,7 @@ import { Source_Sans_3, Fraunces } from 'next/font/google'
 import { THEME_SCRIPT } from '@/lib/theme'
 import { PwaRegister } from '@/components/pwa/pwa-register'
 import { OfflineBanner } from '@/components/pwa/offline-banner'
+import { NavigationProgress } from '@/components/navigation-progress'
 import './globals.css'
 
 const sourceSans = Source_Sans_3({
@@ -61,6 +62,7 @@ export default function RootLayout({
         <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-100 focus:rounded-lg focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground focus:shadow-lg focus:outline-2 focus:outline-primary">
           Skip to content
         </a>
+        <NavigationProgress />
         <OfflineBanner />
         {children}
         <PwaRegister />
