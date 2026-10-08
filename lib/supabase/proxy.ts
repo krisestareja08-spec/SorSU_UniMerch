@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { hasAcceptedTerms } from '@/lib/legal'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -73,6 +74,19 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
+  }
+
+  // Signed in but hasn't agreed to the current Terms and Conditions / Privacy Policy (Google
+  // sign-ins, older accounts, or the terms changed): ask once before using the app. The user
+  // record is already loaded above, so this costs no extra request.
+  if (user && (isProtected || request.nextUrl.pathname === '/') && !hasAcceptedTerms(user.user_metadata)) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/accept-terms'
+    url.search = ''
+    url.searchParams.set('next', request.nextUrl.pathname + request.nextUrl.search)
+    const redirect = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
+    return redirect
   }
 
   // Only plain user accounts shop. Dashboard accounts (Verification Admin, BAO, Supply Office,

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { UniMerchWordmark } from "@/components/brand/unimerch-wordmark"
 import { LoginForm } from "@/components/auth/login-form"
+import Link from "next/link"
 
 export default async function LoginPage() {
   const supabase = await createClient()
@@ -50,7 +51,11 @@ export default async function LoginPage() {
           Browsing and buying are open to everyone. Verification only unlocks restricted, role-based items.
         </p>
 
-        <p className="mt-auto pt-3 text-center sm:pt-6 [@media(max-height:700px)]:hidden text-xs text-muted-foreground/60">Est. 2026 · Bulan, Sorsogon</p>
+        <p className="mt-auto pt-3 text-center sm:pt-6 [@media(max-height:700px)]:hidden text-xs text-muted-foreground/60">
+          <Link href="/terms" className="hover:text-foreground hover:underline">Terms</Link>{" · "}
+          <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy</Link>{" · "}
+          Est. 2026 · Bulan, Sorsogon
+        </p>
       </div>
     </main>
   )

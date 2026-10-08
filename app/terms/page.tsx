@@ -1,79 +1,79 @@
 import type { Metadata } from "next"
-import Image from "next/image"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { LegalPage, type LegalSection } from "@/components/legal-page"
 
 export const metadata: Metadata = {
-  title: "Terms of Use · UniMerch",
+  title: "Terms and Conditions · UniMerch",
   description: "The rules for buying and selling on UniMerch, the Sorsogon State University campus marketplace.",
 }
 
-const SECTIONS: { title: string; points: string[] }[] = [
+const SECTIONS: LegalSection[] = [
+  {
+    title: "Accepting these terms",
+    points: [
+      "By creating an account, or signing in with Google, you agree to these Terms and Conditions and to our Privacy Policy.",
+      "If we change them in a way you need to agree to again, we'll ask you the next time you sign in. If you don't agree, you can't keep using your account.",
+    ],
+  },
   {
     title: "Your account",
     points: [
       "Use your real full name and a working contact number. Sellers use them to confirm and hand over your orders.",
-      "Keep your password private. You are responsible for orders placed with your account.",
-      "University members may verify their identity with a School ID or COR. Verification only unlocks restricted, role-based items; browsing and regular purchases are open to everyone.",
+      "One account per person. Keep your password private; you are responsible for orders placed with your account.",
+      "University members may verify their identity with a School ID or COR. Verification unlocks restricted, role-based items; browsing and regular purchases are open to everyone.",
       "Accounts assigned to a management dashboard (Verification Admin, BAO, Supply Office, Cashier and seller organizations) are for managing and selling. They cannot place orders.",
     ],
   },
   {
     title: "Buying",
     points: [
-      "Each checkout is for items from one store, so you pay one seller one amount.",
-      "Pay only through the methods shown at checkout for that product: walk-in (cash at the store's counter) and/or online (GCash or bank transfer).",
-      "For online payment, upload a clear receipt of the exact amount. The seller verifies it before preparing your order.",
-      "Pre-orders are paid in full upfront and must be claimed during the store's hours before the claim deadline shown at checkout. Unclaimed orders may be cancelled by the seller.",
+      "Each checkout is for items from one shop, so you pay one seller one amount.",
+      "Pay only through the methods shown at checkout for that product: walk-in (cash at the shop's counter) and/or online (GCash or bank transfer). For online payment, upload a clear receipt of the exact amount.",
+      "Prices and stock are per size where a product comes in sizes. The price you see after choosing a size is the price you pay.",
       "Bring your I.D. and order number when you claim an order. Restricted items are only released after the seller checks your I.D.",
+    ],
+  },
+  {
+    title: "Pre-orders and penalties",
+    points: [
+      "Pre-orders aren't paid upfront. You upload a photo of your I.D. and choose a pick-up date within the shop's window (3 to 7 days); the shop checks your I.D. before marking the pre-order For Pick Up.",
+      "Pay at the shop's counter when you pick it up, on or before your pick-up date.",
+      "If an approved pre-order isn't picked up by the end of your pick-up date, it is discarded and the shop's penalty (₱10 unless the shop sets another amount) is charged to your account.",
+      "While a penalty with a shop is unpaid, you can't order from that shop. Pay it at the shop's counter or online if the shop accepts it; the shop clears it once paid.",
     ],
   },
   {
     title: "Selling",
     points: [
-      "Only accredited organizations and university offices created by the Verification Admin can sell.",
-      "Products are reviewed by BAO before they go live. List accurate names, prices, sizes, stock and photos.",
+      "Only accredited organizations and university offices set up by the Verification Admin can sell.",
+      "Products are reviewed by BAO before they go live. List accurate names, prices, sizes, stock and photos, and honour the prices, sizes and payment methods you list.",
       "Products using the official university logo carry a BAO royalty, deducted from the seller's earnings, not added to the buyer's price.",
-      "Honour the prices, sizes and payment methods you list, and keep orders and stock up to date.",
+      "Use buyers' I.D. photos and personal details only to confirm and hand over their orders.",
     ],
   },
   {
     title: "Conduct",
     points: [
-      "Be respectful in chats with buyers and sellers. Don't share another person's personal information.",
-      "Don't place fake orders, upload false receipts, or misuse restricted items.",
-      "Reports are reviewed by the Verification Admin and BAO. Accounts or stores that break these rules may be flagged, suspended or banned, and products may be pulled from the marketplace.",
+      "Be respectful in chats with buyers and sellers, and don't share another person's personal information.",
+      "Don't place fake orders, upload false receipts or I.D.s, or misuse restricted items.",
+      "Reports are reviewed by the Verification Admin and BAO. Accounts or shops that break these terms may be flagged, suspended or banned, and products may be pulled from the marketplace.",
+    ],
+  },
+  {
+    title: "Your personal data",
+    points: [
+      <>How we collect, use and protect your information is explained in our <Link href="/privacy" className="font-medium text-primary hover:underline">Privacy Policy</Link>.</>,
     ],
   },
 ]
 
 export default function TermsPage() {
   return (
-    <main className="min-h-dvh bg-background px-4 py-8 sm:px-6">
-      <div className="mx-auto max-w-2xl">
-        <Link href="/auth/sign-up" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" />Back
-        </Link>
-        <div className="mt-6 flex items-center gap-3">
-          <Image src="/sorsu-seal.png" alt="Sorsogon State University seal" width={44} height={44} className="rounded-full ring-1 ring-border" />
-          <div>
-            <h1 className="font-serif text-2xl font-semibold tracking-tight">Terms of Use</h1>
-            <p className="text-sm text-muted-foreground">UniMerch — Sorsogon State University campus marketplace</p>
-          </div>
-        </div>
-        <div className="mt-3 h-px bg-linear-to-r from-gold/60 via-gold/20 to-transparent" />
-
-        <div className="mt-6 space-y-6">
-          {SECTIONS.map((s) => (
-            <section key={s.title}>
-              <h2 className="font-serif text-lg font-semibold text-foreground">{s.title}</h2>
-              <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground">
-                {s.points.map((p) => <li key={p}>{p}</li>)}
-              </ul>
-            </section>
-          ))}
-        </div>
-      </div>
-    </main>
+    <LegalPage
+      title="Terms and Conditions"
+      intro="These terms explain how UniMerch works and what we expect from buyers and sellers. Please read them before using the marketplace."
+      sections={SECTIONS}
+      other={{ href: "/privacy", label: "Privacy Policy" }}
+    />
   )
 }

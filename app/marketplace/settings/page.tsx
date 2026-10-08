@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { BadgeCheck, Bell, ChevronRight, Clock, KeyRound, Mail, Moon, Phone, ShieldCheck, Smartphone, UserRound } from "lucide-react"
+import { BadgeCheck, Bell, ChevronRight, Clock, FileText, KeyRound, Mail, Moon, Phone, ShieldCheck, Smartphone, UserRound } from "lucide-react"
 import { InstallAppRow } from "@/components/pwa/install-app"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -63,7 +63,7 @@ export default async function SettingsPage() {
       </div>
 
       <nav aria-label="Settings sections" className="mb-4 flex gap-2 overflow-x-auto pb-1 text-xs">
-        {[["#security", "Account & Security"], ["#verification", "Verification"], ["#notifications", "Notifications"], ["#appearance", "Appearance"], ["#app", "App"]].map(([href, label]) => (
+        {[["#security", "Account & Security"], ["#verification", "Verification"], ["#notifications", "Notifications"], ["#appearance", "Appearance"], ["#app", "App"], ["#legal", "Legal"]].map(([href, label]) => (
           <a key={href} href={href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1 font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground">{label}</a>
         ))}
       </nav>
@@ -119,6 +119,15 @@ export default async function SettingsPage() {
 
         <Section id="app" title="App" icon={Smartphone}>
           <InstallAppRow />
+        </Section>
+
+        <Section id="legal" title="Legal" icon={FileText}>
+          <Row icon={FileText} label="Terms and Conditions" desc="The rules for buying and selling on UniMerch">
+            <Link href="/terms" className="text-sm font-medium text-primary hover:underline">View</Link>
+          </Row>
+          <Row icon={ShieldCheck} label="Privacy Policy" desc="What we collect, why, and your rights">
+            <Link href="/privacy" className="text-sm font-medium text-primary hover:underline">View</Link>
+          </Row>
         </Section>
       </div>
     </div>

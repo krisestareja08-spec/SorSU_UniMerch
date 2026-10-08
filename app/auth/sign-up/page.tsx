@@ -43,11 +43,9 @@ export default async function SignUpPage() {
         </div>
 
         <footer className="text-center text-xs text-muted-foreground lg:text-left">
-          By creating an account you agree to the university marketplace{" "}
-          <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">
-            terms of use
-          </Link>
-          .
+          <Link href="/terms" className="underline underline-offset-2 hover:text-foreground">Terms and Conditions</Link>
+          {" · "}
+          <Link href="/privacy" className="underline underline-offset-2 hover:text-foreground">Privacy Policy</Link>
         </footer>
       </div>
     </main>
