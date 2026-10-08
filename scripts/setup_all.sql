@@ -2,7 +2,7 @@
 -- UniMerch — COMPLETE DATABASE SETUP (all scripts, in order)
 -- Paste this WHOLE file into the Supabase SQL Editor and click Run.
 -- Safe to re-run: every step checks what already exists.
--- Generated from scripts 00, 1–5, 7–13, 15, 17–20 and 22–29. Afterwards run 14_appoint_verification_admin.sql
+-- Generated from scripts 00, 1–5, 7–13, 15, 17–20 and 22–30. Afterwards run 14_appoint_verification_admin.sql
 -- with your admin email to make that account the Verification Admin's Main Admin.
 -- ============================================================
 
@@ -3336,3 +3336,40 @@ notify pgrst, 'reload schema';
 select (select count(*) from public.buyer_penalties) as penalties,
        (select count(*) from public.orders where pickup_date is not null) as preorders_with_pickup_date,
        exists (select 1 from storage.buckets where id = 'preorder-ids') as id_bucket;
+
+
+-- ############################################################
+-- ## 30_guest_restriction.sql
+-- ############################################################
+
+-- ============================================================
+-- UniMerch — "Guest" option for restricted products (replaces "Alumni")
+-- Run in Supabase SQL Editor AFTER 29_preorder_id_penalties.sql. Paste and run the WHOLE file. Safe to re-run.
+--
+-- A restricted product lists who may see and buy it (products.allowed_roles):
+--   • student / faculty / staff — a VERIFIED university member with that affiliation
+--   • guest                     — any signed-in user who is NOT a verified university member
+--                                 (external accounts, and members whose verification isn't approved)
+-- "alumni" is no longer offered; products restricted to alumni now allow guests instead.
+-- ============================================================
+
+create or replace function public.viewer_role_allowed(allowed text[])
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and (
+      (coalesce(is_identity_verified, false) and affiliation = any(allowed))
+      or ('guest' = any(allowed) and (not coalesce(is_identity_verified, false) or affiliation = 'external'))
+    )
+  );
+$$;
+
+-- Existing products restricted to alumni → guests
+update public.products
+set allowed_roles = array(select distinct case when r = 'alumni' then 'guest' else r end from unnest(allowed_roles) as r)
+where 'alumni' = any(allowed_roles);
+
+notify pgrst, 'reload schema';
+
+-- Check: restricted products and who they allow
+select name, allowed_roles from public.products where is_restricted order by name;

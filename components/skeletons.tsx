@@ -59,3 +59,32 @@ export function ListRowsSkeleton({ rows = 4, className }: { rows?: number; class
     </div>
   )
 }
+
+/**
+ * Dashboard pages (Verification Admin, BAO, Supply Office, Cashier, Seller, My Account) while their
+ * data loads: the same frame as the dashboard — sidebar, top bar, title, stat cards and a list.
+ */
+export function DashboardSkeleton({ label = "Loading the dashboard" }: { label?: string }) {
+  return (
+    <LoadingRegion label={label} className="min-h-screen bg-background">
+      <div aria-hidden className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-2 bg-primary p-4 lg:flex">
+        <div className="mb-4 h-10 w-40 animate-pulse rounded-lg bg-primary-foreground/10" />
+        {Array.from({ length: 8 }, (_, i) => <div key={i} className="h-9 animate-pulse rounded-xl bg-primary-foreground/10" />)}
+      </div>
+      <div className="lg:pl-64">
+        <div className="flex h-14 items-center gap-3 border-b border-border bg-card px-4 sm:px-6">
+          <Bone className="size-7 rounded-full" />
+          <Bone className="h-4 w-24" />
+          <Bone className="ml-auto size-8 rounded-full" />
+        </div>
+        <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <div className="space-y-2"><Bone className="h-7 w-56" /><Bone className="h-4 w-80 max-w-full" /></div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {Array.from({ length: 4 }, (_, i) => <Bone key={i} className="h-24 rounded-2xl" />)}
+          </div>
+          <ListRowsSkeleton rows={5} />
+        </div>
+      </div>
+    </LoadingRegion>
+  )
+}

@@ -26,11 +26,12 @@ const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hin
 ]
 
 // Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
+// "Guest" = any signed-in user who isn't a verified university member (scripts/30).
 const RESTRICTABLE: { value: string; label: string }[] = [
   { value: "student", label: "Verified Student" },
   { value: "faculty", label: "Verified Faculty (teaching)" },
   { value: "staff",   label: "Verified Staff (non-teaching)" },
-  { value: "alumni",  label: "Verified Alumni" },
+  { value: "guest",   label: "Guest (not verified)" },
 ]
 
 export function AddProductModal({ sellerId, module = "seller" }: { sellerId: string; module?: "seller" | "cashier" | "supply_office" }) {
@@ -337,7 +338,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
           <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
             <label className="flex items-center gap-2 text-sm font-medium text-foreground">
               <input type="checkbox" checked={isRestricted} onChange={(e) => setIsRestricted(e.target.checked)} />
-              Restrict this product to verified users
+              Restrict who can buy this product
             </label>
             {isRestricted && (
               <div className="flex flex-wrap gap-2 pt-1">
