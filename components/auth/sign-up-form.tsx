@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Loader2, Eye, EyeOff, AlertCircle } from "lucide-react"
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
+import { termsAcceptance } from "@/lib/legal"
 
 const AFFILIATIONS = Object.entries(AFFILIATION_LABELS) as [Affiliation, string][]
 const CAMPUSES = Object.entries(CAMPUS_LABELS) as [Campus, string][]
@@ -38,12 +39,18 @@ export function SignUpForm() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // Required: agree to the Terms and Conditions and Privacy Policy (reading them is optional)
+  const [agreed, setAgreed] = useState(false)
 
   const isUniversityMember = affiliation !== "external"
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
+    if (!agreed) {
+      setError("Please agree to the Terms and Conditions and Privacy Policy to create an account.")
+      return
+    }
 
     if (password.length < 8) {
       setError("Password must be at least 8 characters long.")
@@ -100,6 +107,8 @@ export function SignUpForm() {
           // Accounts start unverified; the Verification Admin approves them via the Verification Queue.
           is_identity_verified: false,
           verification_status: "unverified",
+          // Which version of the Terms / Privacy Policy they agreed to, and when (lib/legal.ts)
+          ...termsAcceptance(),
         },
       },
     })
@@ -295,7 +304,18 @@ export function SignUpForm() {
         />
       </div>
 
-      <Button type="submit" size="lg" disabled={loading} className="mt-1">
+      <label className="flex items-start gap-2.5 text-sm text-muted-foreground">
+        <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} required
+          className="mt-0.5 size-4 shrink-0 rounded accent-primary" aria-describedby="terms-note" />
+        <span id="terms-note">
+          I have read and agree to the{" "}
+          <Link href="/terms" target="_blank" className="font-medium text-primary underline-offset-2 hover:underline">Terms and Conditions</Link>
+          {" "}and{" "}
+          <Link href="/privacy" target="_blank" className="font-medium text-primary underline-offset-2 hover:underline">Privacy Policy</Link>.
+        </span>
+      </label>
+
+      <Button type="submit" size="lg" disabled={loading || !agreed} className="mt-1">
         {loading ? (
           <>
             <Loader2 className="size-4 animate-spin" />

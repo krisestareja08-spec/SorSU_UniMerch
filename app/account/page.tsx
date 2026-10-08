@@ -6,6 +6,7 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { PasswordChange } from "@/components/account/password-change"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import Link from "next/link"
 
 /**
  * My Account for dashboard accounts (Verification Admin, BAO, Supply Office, Cashier, Seller).
@@ -36,6 +37,10 @@ export default async function AccountPage() {
           <CardHeader className="pb-2"><CardTitle className="font-serif text-sm">Change Password</CardTitle></CardHeader>
           <CardContent><PasswordChange /></CardContent>
         </Card>
+        <p className="text-xs text-muted-foreground">
+          <Link href="/terms" className="hover:text-foreground hover:underline">Terms and Conditions</Link>{" · "}
+          <Link href="/privacy" className="hover:text-foreground hover:underline">Privacy Policy</Link>
+        </p>
       </div>
     </ManagementShell>
   )
