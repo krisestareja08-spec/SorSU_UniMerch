@@ -8,7 +8,7 @@ export default async function CashierPage() {
     <OfficeHome
       ctx={ctx}
       title={ctx.dashboardName}
-      description="Uniforms and university merchandise sold by this cashier branch: stock, sales, orders and restricted items."
+      description="Uniforms and university merchandise sold by this Supply Office branch: stock, sales, orders and restricted items."
     />
   )
 }

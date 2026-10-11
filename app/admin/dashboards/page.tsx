@@ -26,7 +26,7 @@ export default async function DashboardsPage() {
     <ManagementShell ctx={ctx}>
       <PageHeading
         title="Dashboards"
-        description="Dashboards are management modules, not user accounts. Each has one Main Admin (full control, manages members) and any number of members. Appoint or replace a Main Admin here. Seller Dashboards are managed under Seller Management, and each campus Cashier under Cashier Branches."
+        description="Dashboards are management modules, not user accounts. Each has one Main Admin (full control, manages members) and any number of members. Appoint or replace a Main Admin here. Seller Dashboards are managed under Seller Management, and each campus Supply Office branch under Supply Office Branches."
       />
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
