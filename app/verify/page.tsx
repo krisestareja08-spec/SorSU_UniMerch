@@ -20,7 +20,7 @@ export default async function VerifyPage() {
 
   const { data: profile, error } = await supabase
     .from("profiles")
-    .select("full_name, role, affiliation, verification_status, is_identity_verified, student_employee_id, department, course, campus, contact, birthday")
+    .select("full_name, role, affiliation, verification_status, is_identity_verified, student_employee_id, department, course, campus, birthday")
     .eq("id", user.id)
     .maybeSingle()
 
@@ -35,7 +35,6 @@ export default async function VerifyPage() {
   const department = (!error && profile?.department) || null
   const campus = (!error && profile?.campus) || null
   const course = (!error && profile?.course) || null
-  const contact = (!error && profile?.contact) || null
   const birthday = (!error && profile?.birthday) || null
 
   const { data: latestRequest } = await supabase
@@ -127,7 +126,6 @@ export default async function VerifyPage() {
                   defaultDepartment={department}
                   defaultCampus={campus}
                   defaultCourse={course}
-                  defaultContact={contact}
                   defaultBirthday={birthday}
                 />
               )}
