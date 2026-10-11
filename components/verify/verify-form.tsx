@@ -4,12 +4,9 @@ import type React from "react"
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { PHONE_OTP_ENABLED } from "@/lib/features"
 import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation } from "@/lib/roles"
 import { validateFullName } from "@/lib/profile-rules"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
@@ -37,13 +34,6 @@ const ACCEPTED = [
 const ACCEPTED_EXT = [".jpg", ".jpeg", ".png", ".webp", ".pdf", ".doc", ".docx"]
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 
-/** "0917 123 4567" / "+63 917…" → "09171234567", or null if it isn't a PH mobile number. */
-function toLocalMobile(input: string) {
-  const d = input.replace(/D/g, "")
-  const local = d.startsWith("63") ? d.slice(2) : d.startsWith("0") ? d.slice(1) : d
-  return /^9d{9}$/.test(local) ? `0${local}` : null
-}
-
 export function VerifyForm({
   userId,
   defaultAffiliation,
@@ -52,7 +42,6 @@ export function VerifyForm({
   defaultDepartment,
   defaultCourse,
   defaultCampus,
-  defaultContact,
   defaultBirthday,
   onSubmitted,
 }: {
@@ -63,7 +52,6 @@ export function VerifyForm({
   defaultDepartment?: string | null
   defaultCourse?: string | null
   defaultCampus?: string | null
-  defaultContact?: string | null
   defaultBirthday?: string | null
   /** When set, called after a successful submit instead of redirecting to /verify/submitted. */
   onSubmitted?: () => void
@@ -77,7 +65,6 @@ export function VerifyForm({
   const [department, setDepartment] = useState(defaultDepartment ?? "")
   const [course, setCourse] = useState(defaultCourse ?? "")
   const [campus, setCampus] = useState(defaultCampus ?? "")
-  const [contact, setContact] = useState(defaultContact ?? "")
   const [birthday, setBirthday] = useState(defaultBirthday ?? "")
   const [confirmed, setConfirmed] = useState(false)
   const [idFile, setIdFile] = useState<File | null>(null)
@@ -118,12 +105,6 @@ export function VerifyForm({
     }
     if (!campus) {
       setError("Please select your campus.")
-      return
-    }
-    // Philippine mobile number, saved with the rest of the form when it is submitted
-    const mobile = toLocalMobile(contact)
-    if (!mobile) {
-      setError("Enter a valid Philippine mobile number, e.g. 0917 123 4567.")
       return
     }
     if (!idFile) {
@@ -198,7 +179,6 @@ export function VerifyForm({
         department: department.trim() || null,
         course: course.trim() || null,
         campus,
-        contact: toLocalMobile(contact) ?? contact.trim(),
         birthday: birthday || null,
         verification_status: "pending",
       })
@@ -282,31 +262,15 @@ export function VerifyForm({
         </Select>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="contact">Contact number</Label>
-          {PHONE_OTP_ENABLED ? (
-            // With SMS codes on, numbers are only changed (with a code) in Settings: a second form
-            // nested in this one would submit the whole verification form and clear it
-            <p className="flex h-9 items-center justify-between gap-2 rounded-lg border border-input px-3 text-sm">
-              <span>{contact || "No number yet"}</span>
-              <Link href="/marketplace/settings#security" className="text-xs font-medium text-primary hover:underline">{contact ? "Change" : "Add"} in Settings</Link>
-            </p>
-          ) : (
-            <Input id="contact" type="tel" inputMode="tel" autoComplete="tel" placeholder="0917 123 4567"
-              value={contact} onChange={(e) => setContact(e.target.value)} required />
-          )}
-        </div>
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="birthday">Birthday (optional)</Label>
-          <input
-            id="birthday"
-            type="date"
-            value={birthday}
-            onChange={(e) => setBirthday(e.target.value)}
-            className="h-9 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="birthday">Birthday (optional)</Label>
+        <input
+          id="birthday"
+          type="date"
+          value={birthday}
+          onChange={(e) => setBirthday(e.target.value)}
+          className="h-9 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
 
       <div className="flex flex-col gap-2">
