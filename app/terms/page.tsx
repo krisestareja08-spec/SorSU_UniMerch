@@ -21,7 +21,7 @@ const SECTIONS: LegalSection[] = [
       "Use your real full name and a working contact number. Sellers use them to confirm and hand over your orders.",
       "One account per person. Keep your password private; you are responsible for orders placed with your account.",
       "University members may verify their identity with a School ID or COR. Verification unlocks restricted, role-based items; browsing and regular purchases are open to everyone.",
-      "Accounts assigned to a management dashboard (Verification Admin, BAO, Supply Office, Cashier and seller organizations) are for managing and selling. They cannot place orders.",
+      "Accounts assigned to a management dashboard (Verification Admin, BAO, Supply Office and its branches, and seller organizations) are for managing and selling. They cannot place orders.",
     ],
   },
   {

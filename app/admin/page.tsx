@@ -14,8 +14,8 @@ const SECTIONS = [
   { perm: "duplicates", href: "/admin/duplicates", label: "Duplicate Detection", desc: "Accounts sharing the same I.D. number — one account per user.",          icon: AlertOctagon },
   { perm: "reports", href: "/admin/reports",    label: "Reported Accounts",   desc: "Buyers reported by sellers as dummy or fake — suspend or ban them.",    icon: Flag },
   { perm: "organizations", href: "/admin/sellers",    label: "Seller Management",   desc: "Create organizations — each gets a storefront and its own Seller Dashboard.", icon: Store },
-  { perm: "cashiers", href: "/admin/cashiers",   label: "Cashier Branches",    desc: "Create a cashier office per campus, department or centralized, and appoint its Main Admin.", icon: Wallet },
-  { perm: "dashboards", href: "/admin/dashboards", label: "Dashboard Admins",    desc: "Appoint the Main Admin of BAO, Supply Office, Cashier and this dashboard.", icon: Building2 },
+  { perm: "cashiers", href: "/admin/cashiers",   label: "Supply Office Branches", desc: "Create a Supply Office branch per campus, department or centralized, and appoint its Main Admin.", icon: Wallet },
+  { perm: "dashboards", href: "/admin/dashboards", label: "Dashboard Admins",    desc: "Appoint the Main Admin of BAO, Supply Office and this dashboard.", icon: Building2 },
   { perm: "logs", href: "/admin/logs",       label: "Activity Logs",       desc: "Every action taken in the Verification Admin dashboard.",                icon: ClipboardList },
 ]
 

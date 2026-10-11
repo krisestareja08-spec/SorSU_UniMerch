@@ -24,7 +24,7 @@ async function createCashierBranchImpl(formData: FormData) {
   const password = formData.get("password") as string
   const adminName = ((formData.get("admin_name") as string) ?? "").trim()
 
-  if (!(campus in CAMPUS_LABELS)) throw new Error("Choose the campus this cashier branch belongs to.")
+  if (!(campus in CAMPUS_LABELS)) throw new Error("Choose the campus this Supply Office branch belongs to.")
   if (!["campus", "department", "centralized"].includes(scope)) throw new Error("Choose what the branch serves.")
   if (scope === "department" && department.length < 2) throw new Error("Enter the department this branch serves.")
   if (!email) throw new Error("Enter the Main Admin's email.")

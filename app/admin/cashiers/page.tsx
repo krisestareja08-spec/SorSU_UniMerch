@@ -39,10 +39,10 @@ export default async function CashierBranchesPage({ searchParams }: { searchPara
   return (
     <ManagementShell ctx={ctx}>
       <PageHeading
-        title="Cashier Branches"
-        description="Each campus has its own cashier office — a secondary seller of uniforms and university merchandise. A branch serves its whole campus, one department, or the university centrally (still tied to a campus)."
+        title="Supply Office Branches"
+        description="Each campus has its own Supply Office branch — a secondary seller of uniforms and university merchandise. A branch serves its whole campus, one department, or the university centrally (still tied to a campus)."
       />
-      {full.error && <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">Run <code>scripts/19_cashier_branches.sql</code> in Supabase to enable cashier branches.</p>}
+      {full.error && <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">Run <code>scripts/19_cashier_branches.sql</code> in Supabase to enable Supply Office branches.</p>}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_22rem]">
         <div className="space-y-5">
@@ -53,7 +53,7 @@ export default async function CashierBranchesPage({ searchParams }: { searchPara
             ))}
           </nav>
 
-          {branches.length === 0 && <p className="rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">No cashier branches{campus ? " in this campus" : ""} yet.</p>}
+          {branches.length === 0 && <p className="rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">No Supply Office branches{campus ? " in this campus" : ""} yet.</p>}
 
           {[...groups.entries()].map(([campusKey, list]) => (
             <section key={campusKey || "none"}>
@@ -91,7 +91,7 @@ export default async function CashierBranchesPage({ searchParams }: { searchPara
         </div>
 
         <Card className="h-fit">
-          <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Plus className="size-4 text-primary" />New cashier branch</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Plus className="size-4 text-primary" />New Supply Office branch</CardTitle></CardHeader>
           <CardContent><CreateCashierBranchForm /></CardContent>
         </Card>
       </div>

@@ -43,7 +43,7 @@ export default async function CashierProductsPage({ searchParams }: { searchPara
   return (
     <ManagementShell ctx={ctx}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <PageHeading title="Add Walk-in Product" description="Quickly list a product for BAO approval from the cashier counter." />
+        <PageHeading title="Add Walk-in Product" description="Quickly list a product for BAO approval from the Supply Office counter." />
         <AddProductModal sellerId={sellerId} module="cashier" />
       </div>
 

@@ -29,14 +29,14 @@ export function CreateCashierBranchForm() {
     setDone(null)
     const form = e.currentTarget
     const fd = new FormData(form)
-    if (!campus) { setError("Choose the campus — every cashier branch needs its campus identity."); return }
+    if (!campus) { setError("Choose the campus — every Supply Office branch needs its campus identity."); return }
     fd.set("campus", campus)
     fd.set("scope", scope)
     fd.set("admin_mode", adminMode)
     startTransition(async () => {
       try {
         unwrap(await createCashierBranch(fd))
-        setDone(`${preview} created. Its Main Admin can now open the Cashier dashboard.`)
+        setDone(`${preview} created. Its Main Admin can now open the branch's Supply Office dashboard.`)
         form.reset()
         setCampus("")
         setScope("campus")
@@ -104,7 +104,7 @@ export function CreateCashierBranchForm() {
       )}
 
       <Button type="submit" disabled={pending} className="gap-2">
-        {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Create cashier branch
+        {pending ? <Loader2 className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}Create Supply Office branch
       </Button>
     </form>
   )

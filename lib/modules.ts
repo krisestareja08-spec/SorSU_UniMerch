@@ -33,7 +33,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "duplicates",    label: "Duplicate Detection", short: "Duplicates", href: "/admin/duplicates", icon: AlertOctagon },
       { perm: "reports",       label: "Reported Accounts",   short: "Reports", href: "/admin/reports",    icon: Flag },
       { perm: "organizations", label: "Seller Management",   short: "Sellers", href: "/admin/sellers",    icon: Store },
-      { perm: "cashiers",      label: "Cashier Branches",    short: "Cashiers", href: "/admin/cashiers",   icon: Wallet },
+      { perm: "cashiers",      label: "Supply Office Branches", short: "Branches", href: "/admin/cashiers",   icon: Wallet },
       { perm: "logs",          label: "Activity Logs",       short: "Logs", href: "/admin/logs",       icon: ClipboardList },
       { perm: "dashboards",    label: "Dashboard Admins",    short: "Admins", href: "/admin/dashboards", icon: Building2 },
     ],
@@ -74,7 +74,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
   },
   cashier: {
     key: "cashier",
-    name: "Cashier",
+    name: "Supply Office",
     basePath: "/cashier",
     pages: [
       { perm: null,         label: "Dashboard",           href: "/cashier",            icon: LayoutDashboard },

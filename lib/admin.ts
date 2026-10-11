@@ -43,7 +43,7 @@ export const ACTION_LABELS: Record<string, string> = {
   stock_adjusted: "Adjusted stock",
   sales_report_submitted: "Submitted sales report",
   seller_created: "Created organization",
-  cashier_branch_created: "Created cashier branch",
+  cashier_branch_created: "Created Supply Office branch",
   member_added: "Added dashboard member",
   member_removed: "Removed dashboard member",
   member_permissions: "Changed member permissions",

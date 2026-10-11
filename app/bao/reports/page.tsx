@@ -42,7 +42,7 @@ export default async function BaoReportsPage({ searchParams }: { searchParams: P
 
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Sales Reports" description="Reports submitted by stores (organizations, Cashier, Supply Office). Figures are computed from recorded orders; acknowledge or flag each one." />
+      <PageHeading title="Sales Reports" description="Reports submitted by stores (organizations, Supply Office and its branches). Figures are computed from recorded orders; acknowledge or flag each one." />
 
       <div className="mt-5 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
         {TABS.map((t) => (

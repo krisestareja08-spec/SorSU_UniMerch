@@ -1,6 +1,6 @@
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 
-/** What a cashier branch serves. Centralized branches still belong to a campus location. */
+/** What a Supply Office branch serves. Centralized branches still belong to a campus location. */
 export type CashierScope = "campus" | "department" | "centralized"
 
 export const CASHIER_SCOPE_LABELS: Record<CashierScope, string> = {
@@ -16,7 +16,7 @@ function campusShort(campus: string | null | undefined) {
 
 export function cashierBranchName(campus: Campus, scope: CashierScope, department?: string | null) {
   const where = campusShort(campus)
-  if (scope === "department") return `Cashier — ${department} (${where})`
-  if (scope === "centralized") return `Cashier — Centralized (${where})`
-  return `Cashier — ${where}`
+  if (scope === "department") return `Supply Office — ${department} (${where})`
+  if (scope === "centralized") return `Supply Office — Centralized (${where})`
+  return `Supply Office — ${where}`
 }

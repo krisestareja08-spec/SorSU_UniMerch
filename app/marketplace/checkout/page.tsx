@@ -529,7 +529,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             {payment === "cash" && (
               <p className="mt-3 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
                 <Banknote className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span>Your order is reserved. Pay in cash at the store&apos;s counter, and the cashier will mark it paid and hand over your items. Bring your I.D. and order number.</span>
+                <span>Your order is reserved. Pay in cash at the store&apos;s counter, and the staff will mark it paid and hand over your items. Bring your I.D. and order number.</span>
               </p>
             )}
           </section>
