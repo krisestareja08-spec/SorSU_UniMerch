@@ -2,6 +2,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Search, SlidersHorizontal, Store, X } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { ProductCard } from "@/components/marketplace/product-card"
 import { RatingSummary } from "@/components/reviews/stars"
 import { storefrontHref } from "@/lib/storefront-theme"
@@ -21,7 +22,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const supabase = await createClient()
 
   // "Near me" defaults to the signed-in user's campus
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   const { data: me } = user ? await supabase.from("profiles").select("campus").eq("id", user.id).maybeSingle() : { data: null }
   const myCampus = (me?.campus as string | null) ?? null
   const campus = params.campus === "near" ? myCampus ?? undefined : params.campus && params.campus in CAMPUS_LABELS ? params.campus : undefined

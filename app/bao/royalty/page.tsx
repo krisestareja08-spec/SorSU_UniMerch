@@ -5,7 +5,7 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ColumnChart } from "@/components/analytics/charts"
-import { Coins, Hourglass, Percent, Receipt } from "lucide-react"
+import { Coins, HandCoins, Hourglass, Percent, Receipt, Wallet } from "lucide-react"
 import { EARNED_STATUSES, byMonth, groupBy, loadSales, peso, storeNames } from "@/lib/analytics"
 import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
 import { formatOrderTime, statusDef } from "@/lib/order-status"
@@ -17,7 +17,11 @@ import { formatOrderTime, statusDef } from "@/lib/order-status"
 export default async function RoyaltyPage() {
   const ctx = await requireDashboard("bao", "royalty")
   const supabase = await createClient()
-  const [allLines, percentage] = await Promise.all([loadSales(supabase), getGlobalRoyaltyPercentage()])
+  const [allLines, percentage, { data: remitted }] = await Promise.all([
+    loadSales(supabase),
+    getGlobalRoyaltyPercentage(),
+    supabase.from("royalty_remittances").select("amount, status").in("status", ["approved", "pending"]),
+  ])
   const lines = allLines.filter((l) => l.royaltyPerUnit > 0)
 
   const earned = lines.filter((l) => EARNED_STATUSES.includes(l.status)).reduce((s, l) => s + l.royaltyPerUnit * l.quantity, 0)
@@ -29,11 +33,17 @@ export default async function RoyaltyPage() {
   const names = await storeNames(supabase, perStore.map((s) => s.key))
   const recent = [...lines].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 15)
 
+  // Remittances (scripts/32): approved = received by BAO; the rest of the earned royalty is still owed
+  const received = (remitted ?? []).filter((r) => r.status === "approved").reduce((s, r) => s + Number(r.amount), 0)
+  const toReview = (remitted ?? []).filter((r) => r.status === "pending").reduce((s, r) => s + Number(r.amount), 0)
+
   const stats: Stat[] = [
     { label: "Royalty earned", value: peso(earned), icon: Coins, hint: "From paid / completed orders", accent: "gold" },
     { label: "Pending royalty", value: peso(pending), icon: Hourglass, hint: "Orders awaiting payment", accent: "primary" },
     { label: "Official-logo sales", value: peso(logoSales), icon: Receipt, hint: `${lines.reduce((n, l) => n + l.quantity, 0)} items`, accent: "green" },
     { label: "Current royalty rate", value: `${percentage}%`, icon: Percent, hint: "Set in Royalty Settings", accent: "primary" },
+    { label: "Remitted (approved)", value: peso(received), icon: HandCoins, hint: toReview ? `${peso(toReview)} waiting for review` : "Received from stores", accent: "green" },
+    { label: "Outstanding", value: peso(Math.max(0, earned - received)), icon: Wallet, hint: "Earned, not yet remitted", accent: "red" },
   ]
 
   return (

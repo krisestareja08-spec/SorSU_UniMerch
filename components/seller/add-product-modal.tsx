@@ -57,6 +57,9 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   const [isRestricted, setIsRestricted] = useState(false)
   const [allowedRoles, setAllowedRoles] = useState<string[]>([])
   const [hasLogo, setHasLogo] = useState(false)
+  // Organization sellers only: made with the Main Supply Office, which then pays the royalty
+  const [supplyOfficeCollab, setSupplyOfficeCollab] = useState(false)
+  const canCollab = module === "seller"
   const [royaltyPercentage, setRoyaltyPercentage] = useState(3)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -71,7 +74,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     setName(""); setDescription(""); setCategory(""); setPrice(""); setStock(""); setBadge("Available")
     setSku(""); setTags(""); setVariantRows([]); setPayment(defaultPayment)
     setImageFiles([]); setImagePreviews([]); setError(null)
-    setIsRestricted(false); setAllowedRoles([]); setHasLogo(false)
+    setIsRestricted(false); setAllowedRoles([]); setHasLogo(false); setSupplyOfficeCollab(false)
   }
 
   function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -157,6 +160,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
       formData.set("is_restricted", String(isRestricted))
       if (isRestricted) formData.set("allowed_roles", JSON.stringify(allowedRoles))
       formData.set("has_logo", String(hasLogo))
+      formData.set("supply_office_collab", String(canCollab && hasLogo && supplyOfficeCollab))
 
       unwrap(await addProduct(formData))
       reset()
@@ -358,9 +362,20 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
               <input type="checkbox" checked={hasLogo} onChange={(e) => setHasLogo(e.target.checked)} />
               Uses official university logo
             </label>
+            {hasLogo && canCollab && (
+              <label className="flex items-start gap-2 text-sm text-foreground">
+                <input type="checkbox" className="mt-1" checked={supplyOfficeCollab} onChange={(e) => setSupplyOfficeCollab(e.target.checked)} />
+                <span>
+                  In collaboration with the Main Supply Office
+                  <span className="block text-xs text-muted-foreground">The Supply Office pays this product&apos;s royalty and is notified when it goes live.</span>
+                </span>
+              </label>
+            )}
             {hasLogo && (
               <p className="text-xs text-muted-foreground">
-                A {royaltyPercentage}% BAO royalty applies. Buyers pay ₱{priceNum.toLocaleString()}; ₱{royaltyPreview.royaltyAmount.toLocaleString()} per sale goes to BAO and you receive ₱{royaltyPreview.finalPrice.toLocaleString()}.
+                {canCollab && supplyOfficeCollab
+                  ? <>A {royaltyPercentage}% BAO royalty applies (₱{royaltyPreview.royaltyAmount.toLocaleString()} per sale), paid by the Main Supply Office. Buyers pay ₱{priceNum.toLocaleString()} and you receive the full ₱{priceNum.toLocaleString()}.</>
+                  : <>A {royaltyPercentage}% BAO royalty applies. Buyers pay ₱{priceNum.toLocaleString()}; ₱{royaltyPreview.royaltyAmount.toLocaleString()} per sale goes to BAO and you receive ₱{royaltyPreview.finalPrice.toLocaleString()}.</>}
               </p>
             )}
           </div>

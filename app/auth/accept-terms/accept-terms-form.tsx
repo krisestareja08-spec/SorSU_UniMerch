@@ -19,8 +19,11 @@ export function AcceptTermsForm({ next }: { next: string }) {
     if (!agreed) return
     setBusy("accept")
     setError(null)
-    const { error: err } = await createClient().auth.updateUser({ data: termsAcceptance() })
+    const supabase = createClient()
+    const { error: err } = await supabase.auth.updateUser({ data: termsAcceptance() })
     if (err) { setError(err.message); setBusy(null); return }
+    // New token so the agreement is in its claims straight away (lib/supabase/proxy.ts reads them)
+    await supabase.auth.refreshSession()
     router.replace(next)
     router.refresh()
   }

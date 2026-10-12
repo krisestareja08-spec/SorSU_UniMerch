@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 import { CheckCircle2, Package, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { getBuyerOrders } from "@/lib/orders"
 import { OrderStatusBadge, PickupLocationCard } from "@/components/orders/order-parts"
 import { formatOrderTime, peso } from "@/lib/order-status"
@@ -14,7 +15,7 @@ const PAYMENT_LABELS: Record<string, string> = { gcash: "GCash (receipt uploaded
 export default async function OrderSuccessPage({ searchParams }: { searchParams: Promise<{ orders?: string }> }) {
   const { orders: raw } = await searchParams
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
   const ids = (raw ?? "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20)

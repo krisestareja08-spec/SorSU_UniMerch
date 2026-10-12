@@ -1,12 +1,12 @@
-import { createClient } from "@/lib/supabase/server"
+import { redirect } from "next/navigation"
 import { profileFromUser } from "@/lib/profile"
 import { MarketplaceHeader } from "@/components/marketplace/marketplace-header"
 import { MarketplaceDesktopSidebar } from "@/components/marketplace/marketplace-desktop-sidebar"
 import { MarketplaceBottomTabs } from "@/components/marketplace/marketplace-bottom-tabs"
 import { CartProvider } from "@/lib/cart-context"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
-import { getMemberships } from "@/lib/dashboards"
-import { redirectIfBanned } from "@/lib/auth"
+import { getMyMemberships } from "@/lib/dashboards"
+import { getCurrentUser, getProfileRow } from "@/lib/auth"
 import type { DashboardSummary } from "@/lib/modules"
 
 /**
@@ -14,8 +14,7 @@ import type { DashboardSummary } from "@/lib/modules"
  * Shared by /marketplace/* and the public seller storefront at /seller/[sellerId].
  */
 export async function MarketplaceChrome({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   let dashboards: DashboardSummary[] = []
   let fullName: string | null = null
@@ -23,15 +22,11 @@ export async function MarketplaceChrome({ children }: { children: React.ReactNod
   let affiliation: string | null = null
 
   if (user) {
-    await redirectIfBanned(supabase, user.id)
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("full_name, affiliation, is_identity_verified")
-      .eq("id", user.id)
-      .maybeSingle()
+    const [profile, memberships] = await Promise.all([getProfileRow(user.id), getMyMemberships(user.id)])
+    if (profile?.account_status === "banned") redirect("/auth/restricted")
 
     const resolved = profile ?? profileFromUser(user)
-    dashboards = (await getMemberships(supabase, user.id)).map(({ id, module, name, storeId, isMain }) => ({ id, module, name, storeId, isMain }))
+    dashboards = memberships.map(({ id, module, name, storeId, isMain }) => ({ id, module, name, storeId, isMain }))
     fullName = resolved.full_name ?? null
     isVerified = !!resolved.is_identity_verified
     affiliation = resolved.affiliation ?? null

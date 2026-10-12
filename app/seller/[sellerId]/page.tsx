@@ -3,9 +3,10 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { MarketplaceChrome } from "@/components/marketplace/marketplace-chrome"
 import { ManagementShell } from "@/components/management/management-shell"
-import { getMemberships, requireDashboard } from "@/lib/dashboards"
+import { getMyMemberships, requireDashboard } from "@/lib/dashboards"
 import { MODULES, primaryDashboard } from "@/lib/modules"
 import { SellerHeader } from "@/components/storefront/seller-header"
 import { SellerInfo } from "@/components/storefront/seller-info"
@@ -45,7 +46,7 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
 
   const category = rawCategory?.trim() || null
   const page = Math.max(1, Number.parseInt(rawPage ?? "1", 10) || 1)
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   const [{ products, total }, categories, manageHref, follow, followers] = await Promise.all([
     getStorefrontProducts(supabase, storefront, { category, page }),
@@ -59,7 +60,7 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
   const productCount = categories.reduce((sum, c) => sum + c.count, 0)
 
   // Dashboard accounts never shop: they preview storefronts inside their own dashboard, without buyer actions
-  const primary = user ? primaryDashboard(await getMemberships(supabase, user.id)) : undefined
+  const primary = user ? primaryDashboard(await getMyMemberships(user.id)) : undefined
   const sellerCtx = primary ? await requireDashboard(primary.module) : null
 
   const base = storefrontHref(storefront.id)

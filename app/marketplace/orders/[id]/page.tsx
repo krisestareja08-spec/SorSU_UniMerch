@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
 import { ArrowLeft, MessageCircle, Receipt } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { getBuyerOrders } from "@/lib/orders"
 import { OrderHeader, OrderProductCard, OrderStepper, OrderTimeline, PickupLocationCard } from "@/components/orders/order-parts"
 import { OrderChat } from "@/components/orders/order-chat"
@@ -15,7 +16,7 @@ const PAYMENT_LABELS: Record<string, string> = { gcash: "GCash", cash: "Cash (wa
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
   const [order] = await getBuyerOrders(supabase, { ids: [id], limit: 1 })

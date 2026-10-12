@@ -19,11 +19,11 @@ async function storeContext(moduleRaw: unknown) {
   const mod = (STORE_MODULES.includes(moduleRaw as ModuleKey) ? moduleRaw : "seller") as ModuleKey
   const { supabase, storeId } = await assertDashboard(mod, "products")
   if (!storeId) throw new Error("This dashboard has no store.")
-  return { supabase, storeId, path: `${MODULES[mod].basePath}/products` }
+  return { supabase, storeId, mod, path: `${MODULES[mod].basePath}/products` }
 }
 
 async function addProductImpl(formData: FormData) {
-  const { supabase, storeId, path } = await storeContext(formData.get("module"))
+  const { supabase, storeId, mod, path } = await storeContext(formData.get("module"))
 
   // The store must be active before listing products.
   const { data: sellerProfile } = await supabase
@@ -53,6 +53,8 @@ async function addProductImpl(formData: FormData) {
   const allowedRolesRaw = formData.get("allowed_roles") as string | null
   const allowedRoles = isRestricted && allowedRolesRaw ? JSON.parse(allowedRolesRaw) as string[] : []
   const hasLogo = formData.get("has_logo") === "true"
+  // Organization sellers' logo products made with the Main Supply Office: the Supply Office pays the royalty
+  const supplyOfficeCollab = mod === "seller" && hasLogo && formData.get("supply_office_collab") === "true"
 
   if (!name?.trim()) throw new Error("Product name is required.")
   if (isNaN(price) || price < 0) throw new Error("Enter a valid price.")
@@ -79,8 +81,12 @@ async function addProductImpl(formData: FormData) {
     final_price: finalPrice,
     is_royalty_product: isRoyaltyProduct,
     status: draft ? "draft" : "pending",
+    ...(supplyOfficeCollab ? { supply_office_collab: true } : {}),
   }
   let { data: created, error } = await supabase.from("products").insert({ ...row, payment_modes: paymentModes }).select("id").single()
+  if (error && /supply_office_collab/.test(error.message)) {
+    throw new Error("Supply Office collaborations need scripts/32_performance.sql. Ask the admin to run it in Supabase.")
+  }
   if (error && /payment_modes/.test(error.message)) {
     if (paymentModes.length < 2) throw new Error("Payment modes need scripts/27_variant_prices_payment_modes.sql. Ask the admin to run it in Supabase.")
     ;({ data: created, error } = await supabase.from("products").insert(row).select("id").single()) // database without scripts/27 yet

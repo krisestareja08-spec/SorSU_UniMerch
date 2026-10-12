@@ -26,7 +26,7 @@ export type ProductFilters = {
   limit?: number
 }
 
-type Row = { id: string; name: string; price: number; image_url: string | null; badge: string; stock: number; seller_id: string; rating_avg?: number; rating_count?: number; sold_count?: number }
+type Row = { id: string; name: string; price: number; image_url: string | null; badge: string; stock: number; seller_id: string; rating_avg?: number; rating_count?: number; sold_count?: number; price_max?: number | null }
 
 /** Strips characters that would break a PostgREST `or()` filter. */
 export function cleanTerm(q: string) {
@@ -35,7 +35,8 @@ export function cleanTerm(q: string) {
 
 /**
  * Approved products matching the filters, with store names. Rating / popularity columns come
- * from scripts/26; without them the query retries without rating filters or sorts.
+ * from scripts/26 and price_max from scripts/28; without them the query retries without rating
+ * filters or sorts (and looks the price range up separately).
  */
 export async function findProducts(supabase: Supabase, f: ProductFilters): Promise<Product[]> {
   let sellerScope: string[] | null = null
@@ -48,7 +49,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
   const run = (extended: boolean) => {
     let q = supabase
       .from("products")
-      .select(`id, name, price, image_url, badge, stock, seller_id${extended ? ", rating_avg, rating_count, sold_count" : ""}`)
+      .select(`id, name, price, image_url, badge, stock, seller_id${extended ? ", rating_avg, rating_count, sold_count, price_max" : ""}`)
       .eq("status", "approved")
     const term = f.q ? cleanTerm(f.q) : ""
     if (term) q = q.or(`name.ilike.%${term}%,description.ilike.%${term}%,category.ilike.%${term}%`)
@@ -67,6 +68,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
   }
 
   let { data, error } = await run(true)
+  const extended = !error
   if (error) ({ data } = await run(false))
   const rows = (data ?? []) as unknown as Row[]
 
@@ -76,7 +78,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
     : { data: [] as { id: string; org_name: string }[] }
   const names = new Map((sellers ?? []).map((s) => [s.id, s.org_name]))
 
-  return withPriceRange(supabase, rows.map((p) => ({
+  const products = rows.map((p) => ({
     id: p.id,
     name: p.name,
     price: Number(p.price),
@@ -88,5 +90,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
     rating: Number(p.rating_avg ?? 0),
     ratingCount: p.rating_count ?? 0,
     sold: p.sold_count ?? 0,
-  })))
+    priceMax: p.price_max != null ? Number(p.price_max) : null,
+  }))
+  return extended ? products : withPriceRange(supabase, products)
 }

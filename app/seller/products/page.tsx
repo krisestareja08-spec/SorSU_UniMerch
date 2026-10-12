@@ -114,9 +114,13 @@ export default async function SellerProductsPage({ searchParams }: { searchParam
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
                     <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="seller"
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
-                    {product.is_royalty_product && (
+                    {product.is_royalty_product && (product.supply_office_collab ? (
+                      <p className="text-[10px] text-muted-foreground">
+                        <span className="font-semibold text-amber-800 dark:text-gold">Supply Office collab</span> — you receive the full price; the Supply Office pays the royalty
+                      </p>
+                    ) : (
                       <p className="text-[10px] text-muted-foreground">You receive ₱{Number(product.final_price).toLocaleString()} per sale after the BAO royalty</p>
-                    )}
+                    ))}
                     <p className="text-[10px] text-muted-foreground">Stock: {product.stock}</p>
                     {(product.status === "rejected" || product.status === "pulled") && product.bao_comment && (
                       <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">

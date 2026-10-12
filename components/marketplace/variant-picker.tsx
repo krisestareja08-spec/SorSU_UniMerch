@@ -65,6 +65,8 @@ export function describeSelection(
   const soldOut = base.badge === "Sold Out" || (!preOrder && !!options && (sel.variant ? sel.variant.stock < 1 : hasVariants ? options.variants.every((v) => v.stock < 1) : stock < 1))
   return {
     hasVariants, needsChoice, preOrder, soldOut, maxQty, price,
+    /** A price range is showing because the sizes are priced differently and none is picked yet */
+    priceVaries: !sel.variant && min !== max,
     /** Before a size is chosen: the range; after: the exact price */
     priceLabel: sel.variant || min === max ? `₱${price.toLocaleString()}` : `₱${min.toLocaleString()} – ₱${max.toLocaleString()}`,
     stockLabel: !options ? "Loading…" : preOrder ? "Pre-order" : needsChoice ? `${hasVariants ? options.variants.reduce((n, v) => n + v.stock, 0) : stock} in stock across sizes` : soldOut ? "Out of stock" : `${stock} in stock`,

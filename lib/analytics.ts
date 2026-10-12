@@ -8,6 +8,8 @@ type Supabase = Awaited<ReturnType<typeof createClient>>
  * Royalty model: buyers pay the listed price; for official-logo products a royalty (like a tax)
  * is taken from the seller's earnings and goes to BAO. Royalty counts as EARNED once the sale is
  * paid (paid / ready for pickup / completed) and as PENDING while the order awaits payment.
+ * Products made in collaboration with the Main Supply Office: the Supply Office owes their royalty,
+ * so in the selling store's own figures they carry no royalty (BAO's figures still count it).
  */
 
 export const EARNED_STATUSES = ["paid", "ready_for_pickup", "completed"]
@@ -21,12 +23,18 @@ export type SaleLine = {
   productName: string
   quantity: number
   unitPrice: number
+  /** Royalty per unit — in a store's own view, only what that store owes */
   royaltyPerUnit: number
+  /** Royalty rate of the sale (%), when recorded */
+  royaltyPercentage: number | null
+  /** Royalty paid by the Main Supply Office (collaboration product) */
+  collab: boolean
 }
 
 type Row = {
   order_id: string; product_id: string | null; product_name: string; quantity: number
   unit_price: number; royalty_amount?: number | null; seller_id: string
+  royalty_percentage?: number | null; royalty_store_id?: string | null
   orders: { created_at: string; status: string } | { created_at: string; status: string }[] | null
 }
 
@@ -37,17 +45,19 @@ export async function loadSales(
 ): Promise<SaleLine[]> {
   const page = 1000
   const lines: SaleLine[] = []
-  let withRoyalty = true
+  // 2: royalty amount + rate + owner (scripts/32), 1: amount only (scripts/15), 0: neither
+  let level = 2
+  const royaltyCols = ["", ", royalty_amount", ", royalty_amount, royalty_percentage, royalty_store_id"]
 
   for (let offset = 0; offset < 20000; offset += page) {
-    const cols = `order_id, product_id, product_name, quantity, unit_price, seller_id${withRoyalty ? ", royalty_amount" : ""}, orders!inner(created_at, status)`
+    const cols = `order_id, product_id, product_name, quantity, unit_price, seller_id${royaltyCols[level]}, orders!inner(created_at, status)`
     let q = supabase.from("order_items").select(cols).neq("orders.status", "cancelled").range(offset, offset + page - 1)
     if (opts.storeId) q = q.eq("seller_id", opts.storeId)
     if (opts.from) q = q.gte("orders.created_at", opts.from.toISOString())
     if (opts.to) q = q.lte("orders.created_at", opts.to.toISOString())
     const { data, error } = await q
-    if (error && withRoyalty && error.message.includes("royalty_amount")) {
-      withRoyalty = false // before scripts/15_bao_bi.sql
+    if (error && level > 0 && /royalty_(amount|percentage|store_id)/.test(error.message)) {
+      level-- // database before scripts/32 (or scripts/15)
       offset -= page
       continue
     }
@@ -55,10 +65,14 @@ export async function loadSales(
     for (const r of (data ?? []) as unknown as Row[]) {
       const o = Array.isArray(r.orders) ? r.orders[0] : r.orders
       if (!o) continue
+      const collab = !!r.royalty_store_id && r.royalty_store_id !== r.seller_id
       lines.push({
         orderId: r.order_id, createdAt: o.created_at, status: o.status, storeId: r.seller_id,
         productId: r.product_id, productName: r.product_name, quantity: r.quantity,
-        unitPrice: Number(r.unit_price), royaltyPerUnit: Number(r.royalty_amount ?? 0),
+        unitPrice: Number(r.unit_price),
+        royaltyPerUnit: collab && opts.storeId ? 0 : Number(r.royalty_amount ?? 0),
+        royaltyPercentage: r.royalty_percentage != null ? Number(r.royalty_percentage) : null,
+        collab,
       })
     }
     if (!data || data.length < page) break
@@ -112,19 +126,22 @@ export function byMonth(lines: SaleLine[], months = 6) {
 
 /** Aggregate by a key (store or product), sorted by gross sales. */
 export function groupBy(lines: SaleLine[], key: (l: SaleLine) => string) {
-  const map = new Map<string, { key: string; gross: number; royaltyEarned: number; royaltyPending: number; items: number; orders: Set<string> }>()
+  type Group = { key: string; gross: number; royaltyEarned: number; royaltyPending: number; items: number; orders: Set<string>; rates: Set<number>; collab: boolean }
+  const map = new Map<string, Group>()
   for (const l of lines) {
     const k = key(l)
-    const g = map.get(k) ?? { key: k, gross: 0, royaltyEarned: 0, royaltyPending: 0, items: 0, orders: new Set<string>() }
+    const g = map.get(k) ?? { key: k, gross: 0, royaltyEarned: 0, royaltyPending: 0, items: 0, orders: new Set<string>(), rates: new Set<number>(), collab: false }
     g.gross += l.unitPrice * l.quantity
     g.items += l.quantity
     g.orders.add(l.orderId)
+    if (l.royaltyPercentage != null) g.rates.add(l.royaltyPercentage)
+    if (l.collab) g.collab = true
     if (EARNED_STATUSES.includes(l.status)) g.royaltyEarned += l.royaltyPerUnit * l.quantity
     else g.royaltyPending += l.royaltyPerUnit * l.quantity
     map.set(k, g)
   }
   return [...map.values()]
-    .map((g) => ({ ...g, orders: g.orders.size }))
+    .map((g) => ({ ...g, orders: g.orders.size, rates: [...g.rates].sort((a, b) => a - b) }))
     .sort((a, b) => b.gross - a.gross)
 }
 
@@ -133,6 +150,11 @@ export async function storeNames(supabase: Supabase, ids: string[]) {
   if (!unique.length) return new Map<string, string>()
   const { data } = await supabase.from("seller_profiles").select("id, org_name").in("id", unique)
   return new Map((data ?? []).map((s) => [s.id as string, s.org_name as string]))
+}
+
+/** "3%" or "3% / 5%" (sales recorded at different rates); "—" when no rate is recorded. */
+export function ratesLabel(rates: number[]) {
+  return rates.length ? rates.map((r) => `${r}%`).join(" / ") : "—"
 }
 
 export function peso(n: number) {

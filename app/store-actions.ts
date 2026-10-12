@@ -33,6 +33,8 @@ async function submitSalesReportImpl(formData: FormData) {
   const t = totals(lines)
   const breakdown = groupBy(lines, (l) => l.productName).map((g) => ({
     product: g.key, items: g.items, gross: Math.round(g.gross * 100) / 100, royalty: Math.round((g.royaltyEarned + g.royaltyPending) * 100) / 100,
+    // Royalty rate(s) the items sold at, and whether the Main Supply Office pays the royalty
+    rates: g.rates, collab: g.collab,
   }))
 
   const { error } = await supabase.from("sales_reports").insert({

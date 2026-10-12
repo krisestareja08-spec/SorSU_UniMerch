@@ -3,6 +3,7 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ChevronRight, MapPin, Package } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { getBuyerOrders } from "@/lib/orders"
 import { OrderStatusBadge } from "@/components/orders/order-parts"
 import { ReorderButton } from "@/components/orders/reorder-button"
@@ -18,7 +19,7 @@ const TABS = [
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: tabParam } = await searchParams
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
   // Completed is the buyer's full purchase history, so load well past the usual page size
   const allOrders = await getBuyerOrders(supabase, { limit: 500 })

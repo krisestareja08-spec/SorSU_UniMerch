@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ColumnChart } from "@/components/analytics/charts"
 import { Coins, Send, ShoppingCart, Store, Package } from "lucide-react"
 import { submitSalesReport } from "@/app/store-actions"
-import { byMonth, groupBy, loadSales, parseDay, peso, totals } from "@/lib/analytics"
+import { byMonth, groupBy, loadSales, parseDay, peso, ratesLabel, totals } from "@/lib/analytics"
 import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
@@ -69,14 +69,20 @@ export async function SalesReportsPage({ ctx, from: fromRaw, to: toRaw }: { ctx:
             <table className="w-full text-sm">
               <thead><tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
                 <th className="py-2 pr-3 font-medium">Product</th><th className="py-2 pr-3 text-right font-medium">Sold</th>
-                <th className="py-2 pr-3 text-right font-medium">Sales</th><th className="py-2 text-right font-medium">Royalty</th></tr></thead>
+                <th className="py-2 pr-3 text-right font-medium">Sales</th><th className="py-2 pr-3 text-right font-medium">Rate</th>
+                <th className="py-2 text-right font-medium">Royalty</th></tr></thead>
               <tbody>
-                {products.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No sales in this period.</td></tr>}
+                {products.length === 0 && <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">No sales in this period.</td></tr>}
                 {products.map((p) => (
                   <tr key={p.key} className="border-b border-border/60 last:border-0">
-                    <td className="py-2 pr-3">{p.key}</td><td className="py-2 pr-3 text-right tabular-nums">{p.items}</td>
+                    <td className="py-2 pr-3">
+                      {p.key}
+                      {p.collab && <span className="ml-1.5 rounded-full bg-gold/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-gold">Supply Office collab</span>}
+                    </td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{p.items}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{peso(p.gross)}</td>
-                    <td className="py-2 text-right tabular-nums">{peso(p.royaltyEarned + p.royaltyPending)}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{ratesLabel(p.rates)}</td>
+                    <td className="py-2 text-right tabular-nums">{p.collab ? <span className="text-xs text-muted-foreground">Paid by Supply Office</span> : peso(p.royaltyEarned + p.royaltyPending)}</td>
                   </tr>
                 ))}
               </tbody>

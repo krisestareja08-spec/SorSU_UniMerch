@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { profileFromUser } from "@/lib/profile"
 import { type Affiliation, type UserRole, type VerificationStatus } from "@/lib/roles"
 import { AppHeader } from "@/components/app-header"
@@ -12,9 +13,7 @@ import { ArrowLeft, ShieldCheck, Info, BadgeCheck, Clock } from "lucide-react"
 
 export default async function VerifyPage() {
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
 
   if (!user) redirect("/auth/login")
 

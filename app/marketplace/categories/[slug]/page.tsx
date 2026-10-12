@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
-import { ProductCard, type Product } from "@/components/marketplace/product-card"
+import { ProductCard } from "@/components/marketplace/product-card"
 import Link from "next/link"
-import { withPriceRange } from "@/lib/variants"
+import { findProducts } from "@/lib/products"
 import { ArrowLeft } from "lucide-react"
 
 const CATEGORY_LABELS: Record<string, string | null> = {
@@ -25,33 +25,12 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   const dbCategory = CATEGORY_LABELS[slug]
   const label = slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
 
-  let query = supabase
-    .from("products")
-    .select("id, name, price, image_url, badge, stock, seller_id")
-    .eq("status", "approved")
-    .gt("stock", 0)
-    .order("created_at", { ascending: false })
-
-  if (dbCategory !== undefined && dbCategory !== null) query = query.eq("category", dbCategory)
-
-  const { data } = await query
-
-  const sellerIds = [...new Set((data ?? []).map((p) => p.seller_id))]
-  const { data: sellers } = sellerIds.length
-    ? await supabase.from("seller_profiles").select("id, org_name").in("id", sellerIds)
-    : { data: [] as { id: string; org_name: string }[] }
-  const sellerNames = new Map((sellers ?? []).map((s) => [s.id, s.org_name]))
-
-  const products: Product[] = await withPriceRange(supabase, (data ?? []).map((p) => ({
-    id: p.id,
-    name: p.name,
-    price: Number(p.price),
-    seller: sellerNames.get(p.seller_id) ?? "Campus Seller",
-    sellerId: p.seller_id,
-    image: p.image_url ?? "/placeholder.jpg",
-    badge: p.badge as Product["badge"],
-    stock: p.stock,
-  })))
+  // Capped like search, so a big catalogue doesn't load every product at once
+  const products = await findProducts(supabase, {
+    category: dbCategory ?? undefined,
+    inStock: true,
+    limit: 120,
+  })
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">

@@ -5,7 +5,7 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { CheckCircle2, FileText, Flag } from "lucide-react"
 import { reviewSalesReport } from "../actions"
-import { peso, storeNames } from "@/lib/analytics"
+import { peso, ratesLabel, storeNames } from "@/lib/analytics"
 import { formatDateTime, profilesById } from "@/lib/admin"
 import { MODULES, type ModuleKey } from "@/lib/modules"
 import { cn } from "@/lib/utils"
@@ -20,7 +20,8 @@ const TABS = [
 type Report = {
   id: string; store_id: string; module: ModuleKey; period_start: string; period_end: string
   orders_count: number; items_sold: number; gross_sales: number; royalty_due: number; net_sales: number
-  breakdown: { product: string; items: number; gross: number; royalty: number }[] | null
+  // rates / collab: added with royalty remittance (older reports don't have them)
+  breakdown: { product: string; items: number; gross: number; royalty: number; rates?: number[]; collab?: boolean }[] | null
   notes: string | null; submitted_by: string | null; status: string; bao_note: string | null; created_at: string
 }
 
@@ -86,12 +87,19 @@ export default async function BaoReportsPage({ searchParams }: { searchParams: P
                 <table className="w-full text-sm">
                   <thead><tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
                     <th className="py-1.5 pr-3 font-medium">Product</th><th className="py-1.5 pr-3 text-right font-medium">Sold</th>
-                    <th className="py-1.5 pr-3 text-right font-medium">Sales</th><th className="py-1.5 text-right font-medium">Royalty</th></tr></thead>
+                    <th className="py-1.5 pr-3 text-right font-medium">Sales</th><th className="py-1.5 pr-3 text-right font-medium">Rate</th>
+                    <th className="py-1.5 text-right font-medium">Royalty</th></tr></thead>
                   <tbody>
                     {(r.breakdown ?? []).map((b) => (
                       <tr key={b.product} className="border-b border-border/60 last:border-0">
-                        <td className="py-1.5 pr-3">{b.product}</td><td className="py-1.5 pr-3 text-right tabular-nums">{b.items}</td>
-                        <td className="py-1.5 pr-3 text-right tabular-nums">{peso(b.gross)}</td><td className="py-1.5 text-right tabular-nums">{peso(b.royalty)}</td>
+                        <td className="py-1.5 pr-3">
+                          {b.product}
+                          {b.collab && <span className="ml-1.5 rounded-full bg-gold/15 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-gold">Supply Office collab</span>}
+                        </td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums">{b.items}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums">{peso(b.gross)}</td>
+                        <td className="py-1.5 pr-3 text-right tabular-nums">{ratesLabel(b.rates ?? [])}</td>
+                        <td className="py-1.5 text-right tabular-nums">{b.collab ? <span className="text-xs text-muted-foreground">Paid by Supply Office</span> : peso(b.royalty)}</td>
                       </tr>
                     ))}
                   </tbody>

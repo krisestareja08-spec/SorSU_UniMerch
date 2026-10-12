@@ -67,7 +67,12 @@ export function ProductPurchasePanel({
         {header}
 
         <div>
-          <p className="text-3xl font-bold text-gold" aria-live="polite">{d.priceLabel}</p>
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <p className="text-3xl font-bold text-gold" aria-live="polite">{d.priceLabel}</p>
+            {d.priceVaries && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">Price may vary</span>
+            )}
+          </div>
           {d.needsChoice && <p className="mt-0.5 text-xs text-muted-foreground">Select a size to see its exact price and stock.</p>}
         </div>
 
