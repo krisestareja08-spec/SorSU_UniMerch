@@ -34,6 +34,7 @@ export const ACTION_LABELS: Record<string, string> = {
   account_flagged: "Flagged account",
   account_banned: "Banned account",
   account_deleted: "Deleted account",
+  email_changed: "Changed login email",
   report_dismissed: "Dismissed account report",
   product_pulled: "Pulled out product",
   store_flagged: "Flagged store for a violation",

@@ -159,6 +159,9 @@ export function canUse(ctx: Pick<DashboardCtx, "isMain" | "permissions">, perm: 
   return ctx.isMain || perm === null || ctx.permissions.includes(perm)
 }
 
+/** Store accounts (Seller, Supply Office and its branches) change their login email instantly. */
+export const INSTANT_EMAIL_MODULES: ModuleKey[] = ["seller", "supply_office", "cashier"]
+
 /** Modules with many dashboards (one per organization / cashier branch). */
 export const MULTI_INSTANCE: ModuleKey[] = ["seller", "cashier"]
 

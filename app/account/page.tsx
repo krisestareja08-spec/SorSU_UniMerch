@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
 import { getMyMemberships, requireDashboard } from "@/lib/dashboards"
-import { primaryDashboard } from "@/lib/modules"
+import { INSTANT_EMAIL_MODULES, primaryDashboard } from "@/lib/modules"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { PasswordChange } from "@/components/account/password-change"
+import { EmailChange } from "@/components/account/email-change"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 
@@ -17,7 +18,8 @@ export default async function AccountPage() {
   const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
-  const primary = primaryDashboard(await getMyMemberships(user.id))
+  const memberships = await getMyMemberships(user.id)
+  const primary = primaryDashboard(memberships)
   if (!primary) redirect("/marketplace/settings")
   const ctx = await requireDashboard(primary.module)
 
@@ -27,9 +29,10 @@ export default async function AccountPage() {
       <div className="mt-6 max-w-2xl space-y-4">
         <Card className="border-primary/10">
           <CardHeader className="pb-2"><CardTitle className="font-serif text-sm">Account</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
+          <CardContent className="space-y-4 text-sm">
             <div><p className="text-xs text-muted-foreground">Name</p><p className="font-medium">{ctx.fullName || "Not set"}</p></div>
-            <div><p className="text-xs text-muted-foreground">Email</p><p className="break-all font-medium">{ctx.email}</p></div>
+            {/* Store accounts change their login email instantly; others confirm it from the new address */}
+            <EmailChange currentEmail={ctx.email} instant={memberships.some((m) => INSTANT_EMAIL_MODULES.includes(m.module))} />
           </CardContent>
         </Card>
         <Card className="border-primary/10">
