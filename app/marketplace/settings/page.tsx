@@ -1,6 +1,7 @@
 import Link from "next/link"
+import { EmailChange } from "@/components/account/email-change"
 import { redirect } from "next/navigation"
-import { BadgeCheck, Bell, ChevronRight, Clock, FileText, KeyRound, Mail, Moon, Phone, ShieldCheck, Smartphone, UserRound } from "lucide-react"
+import { BadgeCheck, Bell, ChevronRight, Clock, FileText, KeyRound, Moon, Phone, ShieldCheck, Smartphone, UserRound } from "lucide-react"
 import { InstallAppRow } from "@/components/pwa/install-app"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -71,7 +72,10 @@ export default async function SettingsPage() {
 
       <div className="space-y-4">
         <Section id="security" title="Account & Security" icon={KeyRound}>
-          <Row icon={Mail} label={user.email ?? "No email"} desc={`Sign-in: ${signInMethod}`} />
+          <div className="py-3">
+            <EmailChange currentEmail={user.email ?? ""} instant={false} googleSignIn={signInMethod === "Google"} />
+            <p className="mt-2 text-xs text-muted-foreground">Sign-in: {signInMethod}</p>
+          </div>
           <div className="py-3">
             <p className="mb-2 flex items-center gap-1.5 text-sm font-medium"><Phone className="size-4 text-primary" />Phone number</p>
             <p className="mb-3 text-xs text-muted-foreground">

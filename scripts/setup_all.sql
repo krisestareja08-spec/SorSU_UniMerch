@@ -3813,6 +3813,29 @@ end;
 $$;
 grant execute on function public.start_store_conversation(uuid) to authenticated;
 
+-- ── 3c. Log every login-email change (Verification Admin → Activity Logs) ──
+-- Store accounts (Seller, Supply Office and its branches) change their email instantly; other users
+-- confirm it from the new address first. Either way this records the change the moment it actually
+-- happens. Logging never blocks the change itself.
+create or replace function public.log_email_change()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.email is distinct from old.email then
+    begin
+      insert into public.verification_audit_log (user_id, action, reason)
+      select new.id, 'email_changed', coalesce(old.email, '—') || ' → ' || coalesce(new.email, '—')
+      where exists (select 1 from public.profiles where id = new.id);
+    exception when others then
+      raise warning 'Email change not logged for %: %', new.id, sqlerrm;
+    end;
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists log_email_change on auth.users;
+create trigger log_email_change after update of email on auth.users
+  for each row execute procedure public.log_email_change();
+
 -- ── 4. Faster security checks for every policy ───────────────
 
 -- Rewrites one policy expression (temporary helper, gone when this run ends)

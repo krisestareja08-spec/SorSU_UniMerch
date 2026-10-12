@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
 
 /**
  * Activity Logs — user account management only: new sign-ups, verification submissions and the
- * admin's decisions on verifications, account status, identity changes and account reports.
+ * admin's decisions on verifications, account status, identity changes, login-email changes and
+ * account reports.
  * (Organization, cashier branch and dashboard member activity is not shown here.)
  */
 const CATEGORIES = [
@@ -19,6 +20,7 @@ const CATEGORIES = [
   { key: "verification", label: "Verification Decisions" },
   { key: "account",      label: "Account Status" },
   { key: "identity",     label: "Identity Changes" },
+  { key: "email",        label: "Email Changes" },
 ] as const
 type CategoryKey = (typeof CATEGORIES)[number]["key"]
 
@@ -28,6 +30,7 @@ const ACCOUNT_ACTIONS: { category: CategoryKey; filter: string }[] = [
   { category: "account",      filter: "action.like.account_%" },
   { category: "account",      filter: "action.eq.report_dismissed" },
   { category: "identity",     filter: "action.like.identity_change_%" },
+  { category: "email",        filter: "action.eq.email_changed" },
 ]
 
 type Entry = {
@@ -71,7 +74,8 @@ export default async function ActivityLogsPage({ searchParams }: { searchParams:
     ...(audit?.data ?? []).map((l): Entry => ({
       id: `log-${l.id}`,
       at: l.created_at,
-      category: l.action.startsWith("verification_") ? "verification" : l.action.startsWith("identity_change_") ? "identity" : "account",
+      category: l.action.startsWith("verification_") ? "verification" : l.action.startsWith("identity_change_") ? "identity"
+        : l.action === "email_changed" ? "email" : "account",
       action: ACTION_LABELS[l.action] ?? l.action,
       actorId: l.actor_id,
       userId: l.user_id,
@@ -107,7 +111,7 @@ export default async function ActivityLogsPage({ searchParams }: { searchParams:
 
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Activity Logs" description="User account activity — new accounts, verification requests and the decisions made on them, and account status changes." />
+      <PageHeading title="Activity Logs" description="User account activity — new accounts, verification requests and the decisions made on them, account status and login-email changes." />
 
       <div className="mt-5 flex flex-wrap gap-2">
         {CATEGORIES.map((c) => (
