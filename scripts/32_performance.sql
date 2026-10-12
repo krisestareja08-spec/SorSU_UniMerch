@@ -350,6 +350,37 @@ drop trigger if exists notify_product_events on public.products;
 create trigger notify_product_events after insert or update of status on public.products
   for each row execute procedure public.notify_product_events();
 
+-- ── 3b. Message a store without picking a product ─────────────
+-- The storefront's "Contact Seller" button opens a general chat with the store (start_conversation
+-- needs a product). One general conversation per buyer and store; products can be shared inside it.
+create or replace function public.start_store_conversation(p_store uuid)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  me uuid := auth.uid();
+  store_name text;
+  conv uuid;
+begin
+  if me is null then raise exception 'Sign in to message the seller.'; end if;
+  select coalesce(org_name, 'the seller') into store_name
+  from public.seller_profiles where id = p_store and status = 'active';
+  if store_name is null then raise exception 'This store is not available.'; end if;
+  if public.store_access(p_store) then raise exception 'You can''t message your own store.'; end if;
+
+  -- unique (buyer, store, product) doesn't match rows without a product, so look it up here
+  select id into conv from public.conversations where buyer_id = me and seller_id = p_store and product_id is null;
+  if conv is not null then return conv; end if;
+
+  insert into public.conversations (buyer_id, seller_id, product_id, status)
+  values (me, p_store, null, 'open')
+  returning id into conv;
+
+  insert into public.conversation_messages (conversation_id, kind, content, is_read)
+  values (conv, 'system', 'You are now chatting with ' || store_name || '.', true);
+  return conv;
+end;
+$$;
+grant execute on function public.start_store_conversation(uuid) to authenticated;
+
 -- ── 4. Faster security checks for every policy ───────────────
 
 -- Rewrites one policy expression (temporary helper, gone when this run ends)

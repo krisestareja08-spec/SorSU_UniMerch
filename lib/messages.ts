@@ -77,6 +77,7 @@ export const CLOSED_REASON: Record<NonNullable<ConversationSummary["closed_reaso
 
 /** Friendly error when the chat tables haven't been created yet. */
 export function chatSetupError(message: string) {
+  if (/start_store_conversation/.test(message)) return "Messaging a store needs scripts/32_performance.sql. Ask the admin to run it in Supabase."
   return /conversation|list_conversations|schema cache|does not exist/i.test(message)
     ? "Messaging isn't set up yet. Run scripts/24_product_chat.sql in Supabase."
     : message
