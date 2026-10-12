@@ -44,25 +44,38 @@ export async function loadSales(
   opts: { storeId?: string | null; from?: Date | null; to?: Date | null } = {},
 ): Promise<SaleLine[]> {
   const page = 1000
-  const lines: SaleLine[] = []
+  const maxPages = 20
   // 2: royalty amount + rate + owner (scripts/32), 1: amount only (scripts/15), 0: neither
   let level = 2
   const royaltyCols = ["", ", royalty_amount", ", royalty_amount, royalty_percentage, royalty_store_id"]
 
-  for (let offset = 0; offset < 20000; offset += page) {
+  // A stable order (the row id) keeps pages from skipping or repeating rows
+  const fetchPage = (index: number, withCount: boolean) => {
     const cols = `order_id, product_id, product_name, quantity, unit_price, seller_id${royaltyCols[level]}, orders!inner(created_at, status)`
-    let q = supabase.from("order_items").select(cols).neq("orders.status", "cancelled").range(offset, offset + page - 1)
+    let q = supabase.from("order_items").select(cols, withCount ? { count: "exact" } : undefined)
+      .neq("orders.status", "cancelled").order("id").range(index * page, index * page + page - 1)
     if (opts.storeId) q = q.eq("seller_id", opts.storeId)
     if (opts.from) q = q.gte("orders.created_at", opts.from.toISOString())
     if (opts.to) q = q.lte("orders.created_at", opts.to.toISOString())
-    const { data, error } = await q
-    if (error && level > 0 && /royalty_(amount|percentage|store_id)/.test(error.message)) {
-      level-- // database before scripts/32 (or scripts/15)
-      offset -= page
-      continue
-    }
-    if (error) break
-    for (const r of (data ?? []) as unknown as Row[]) {
+    return q
+  }
+
+  // First page (also tells us how many rows there are); older databases lack some royalty columns
+  let first = await fetchPage(0, true)
+  while (first.error && level > 0 && /royalty_(amount|percentage|store_id)/.test(first.error.message)) {
+    level-- // database before scripts/32 (or scripts/15)
+    first = await fetchPage(0, true)
+  }
+  if (first.error) return []
+
+  // The remaining pages are fetched together instead of one after another
+  const total = first.count ?? (first.data?.length ?? 0)
+  const pageCount = Math.min(maxPages, Math.ceil(total / page))
+  const rest = await Promise.all(Array.from({ length: Math.max(0, pageCount - 1) }, (_, i) => fetchPage(i + 1, false)))
+
+  const lines: SaleLine[] = []
+  for (const result of [first, ...rest]) {
+    for (const r of (result.data ?? []) as unknown as Row[]) {
       const o = Array.isArray(r.orders) ? r.orders[0] : r.orders
       if (!o) continue
       const collab = !!r.royalty_store_id && r.royalty_store_id !== r.seller_id
@@ -75,7 +88,6 @@ export async function loadSales(
         collab,
       })
     }
-    if (!data || data.length < page) break
   }
   return lines
 }

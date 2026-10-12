@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/components/marketplace/product-card"
 import { withPriceRange } from "@/lib/variants"
@@ -72,12 +73,16 @@ export async function getStorefront(supabase: Supabase, sellerId: string): Promi
   if (!isSellerId(sellerId)) return null
 
   const base = "id, org_name, description, campus, category, gcash_number, rating, rating_count, created_at, status"
-  // Branding columns come from scripts/11_storefront.sql — fall back gracefully if not run yet.
-  let { data, error } = await supabase.from("seller_profiles").select(`${base}, logo_url, banner_url, theme`).eq("id", sellerId).maybeSingle()
+  // Branding columns come from scripts/11_storefront.sql, pickup columns from scripts/13 — separate
+  // queries (run together) so a database that hasn't run them yet still loads the storefront.
+  const [main, { data: pickup }] = await Promise.all([
+    supabase.from("seller_profiles").select(`${base}, logo_url, banner_url, theme`).eq("id", sellerId).maybeSingle(),
+    supabase.from("seller_profiles").select("pickup_location, pickup_notes").eq("id", sellerId).maybeSingle(),
+  ])
+  let { data, error } = main
   if (error) ({ data, error } = await supabase.from("seller_profiles").select(base).eq("id", sellerId).maybeSingle())
   const row = data as StoreRow | null
   if (!row || (row.status && row.status !== "active")) return null
-  const { data: pickup } = await supabase.from("seller_profiles").select("pickup_location, pickup_notes").eq("id", sellerId).maybeSingle()
 
   return {
     id: row.id,
@@ -96,6 +101,9 @@ export async function getStorefront(supabase: Supabase, sellerId: string): Promi
     theme: parseTheme(row.theme),
   }
 }
+
+/** getStorefront shared for the whole request (a page and its metadata both need it). */
+export const getStorefrontOnce = cache(async (sellerId: string) => getStorefront(await createClient(), sellerId))
 
 export type StorefrontProduct = Product & { category: string }
 

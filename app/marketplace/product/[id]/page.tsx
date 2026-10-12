@@ -35,28 +35,31 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   // "approved products are public" RLS policy in scripts/5_seller_ecosystem.sql simply omits the row.
   if (!product) notFound()
 
-  // The seller is the store that owns this product (products.seller_id) — never the viewer.
-  const storefront = await getStorefront(supabase, product.seller_id)
+  // Everything else only needs the product, so it is fetched together rather than one after another.
+  //  • The seller is the store that owns this product (products.seller_id) — never the viewer.
+  //  • Each size is its own variant with its own price, stock, SKU and image (scripts/28); before that
+  //    script, sizes are names only and share the product's price and stock.
+  //  • price_max / rating_avg / rating_count arrive with scripts/28 and 26 — separate queries so older
+  //    databases still load the page.
+  const [storefront, variantMap, { data: range }, { data: rating }, { data: relatedRows }] = await Promise.all([
+    getStorefront(supabase, product.seller_id),
+    loadVariants(supabase, [product.id]),
+    supabase.from("products").select("price_max").eq("id", product.id).maybeSingle(),
+    supabase.from("products").select("rating_avg, rating_count").eq("id", product.id).maybeSingle(),
+    supabase
+      .from("products")
+      .select("id, name, price, final_price, is_royalty_product, image_url, stock")
+      .eq("seller_id", product.seller_id)
+      .eq("status", "approved")
+      .neq("id", product.id)
+      .limit(10),
+  ])
   const sellerName = storefront?.name ?? "Campus Seller"
   const sellerHref = storefrontHref(product.seller_id)
   // Buyers pay the listed price; the logo royalty is deducted from the seller's earnings and goes to BAO.
   const displayPrice = Number(product.price)
   const variations: string[] = Array.isArray(product.variations) ? product.variations : []
-  // Each size is its own variant with its own price, stock, SKU and image (scripts/28); before that
-  // script, sizes are names only and share the product's price and stock
-  const variantMap = await loadVariants(supabase, [product.id])
   const variants = variantMap?.get(product.id) ?? []
-  const { data: range } = await supabase.from("products").select("price_max").eq("id", product.id).maybeSingle()
-  // rating_avg / rating_count arrive with scripts/26; a separate query so older databases still load the page
-  const { data: rating } = await supabase.from("products").select("rating_avg, rating_count").eq("id", product.id).maybeSingle()
-
-  const { data: relatedRows } = await supabase
-    .from("products")
-    .select("id, name, price, final_price, is_royalty_product, image_url, stock")
-    .eq("seller_id", product.seller_id)
-    .eq("status", "approved")
-    .neq("id", product.id)
-    .limit(10)
 
   const relatedProducts = (relatedRows ?? []).map((p) => ({
     id: p.id,

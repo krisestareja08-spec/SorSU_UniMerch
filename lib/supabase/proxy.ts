@@ -103,11 +103,26 @@ export async function updateSession(request: NextRequest) {
   // Storefronts (/seller/{id}) stay open to non-BAO dashboards as a read-only preview.
   const path = request.nextUrl.pathname
   if (user && (path.startsWith('/marketplace') || isPublicStorefront)) {
-    const { data: rows } = await supabase.from('dashboard_members').select('dashboards(module)').eq('user_id', user.id)
-    const modules = new Set(
-      (rows ?? []).flatMap((r: { dashboards: { module: string } | { module: string }[] | null }) =>
-        (Array.isArray(r.dashboards) ? r.dashboards : r.dashboards ? [r.dashboards] : []).map((d) => d.module)),
-    )
+    // Which dashboard (if any) this person manages. Looked up once and remembered for 5 minutes in a
+    // cookie tied to their account, so ordinary page-to-page browsing doesn't query the database here.
+    const KNOWN = ['verification', 'bao', 'supply_office', 'cashier', 'seller']
+    const cached = request.cookies.get('um_dash')?.value
+    let primaryModule: string | undefined
+    if (cached && cached.startsWith(user.id + ':') && [...KNOWN, '-'].includes(cached.slice(user.id.length + 1))) {
+      const value = cached.slice(user.id.length + 1)
+      primaryModule = value === '-' ? undefined : value
+    } else {
+      const { data: rows } = await supabase.from('dashboard_members').select('dashboards(module)').eq('user_id', user.id)
+      const modules = new Set(
+        (rows ?? []).flatMap((r: { dashboards: { module: string } | { module: string }[] | null }) =>
+          (Array.isArray(r.dashboards) ? r.dashboards : r.dashboards ? [r.dashboards] : []).map((d) => d.module)),
+      )
+      // Same order as DASHBOARD_PRIORITY in lib/modules.ts
+      primaryModule = KNOWN.find((m) => modules.has(m))
+      supabaseResponse.cookies.set('um_dash', `${user.id}:${primaryModule ?? '-'}`, {
+        maxAge: 300, path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
+      })
+    }
     const redirectTo = (pathname: string) => {
       const url = request.nextUrl.clone()
       url.pathname = pathname
@@ -116,8 +131,7 @@ export async function updateSession(request: NextRequest) {
       supabaseResponse.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie))
       return redirect
     }
-    // Same order as DASHBOARD_PRIORITY in lib/modules.ts
-    const primary = ['verification', 'bao', 'supply_office', 'cashier', 'seller'].find((m) => modules.has(m))
+    const primary = primaryModule
 
     if (primary === 'bao') {
       const product = path.match(/^\/marketplace\/product\/([^/]+)/)
