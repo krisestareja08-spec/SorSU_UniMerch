@@ -4,15 +4,15 @@ import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProfileDetails } from "@/components/admin/profile-details"
 import { DeleteUserButton } from "@/components/admin/delete-user-button"
-import { ArrowLeft, Building2, Crown, History, ClipboardList, ShieldCheck, UserX } from "lucide-react"
+import { Building2, Crown, History, ClipboardList, ShieldCheck, UserX } from "lucide-react"
 import { updateAccountStatus } from "../../verification-actions"
 import { ACTION_LABELS, formatDateTime, profilesById } from "@/lib/admin"
 import { MODULES, type ModuleKey } from "@/lib/modules"
 import { ActionForm } from "@/components/ui/action-form"
+import { BackLink } from "@/components/navigation/history-nav"
 
 const FIELD_LABELS: Record<string, string> = {
   full_name: "Full name", role: "Role", affiliation: "Affiliation", student_employee_id: "I.D. number",
@@ -46,9 +46,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
 
   return (
     <ManagementShell ctx={ctx}>
-      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
-        <Link href="/admin/users"><ArrowLeft className="size-4" />Back to users</Link>
-      </Button>
+      <BackLink href="/admin/users" className="mb-3 -ml-2 rounded-lg px-2 py-1.5 font-medium text-foreground hover:bg-muted" />
       <PageHeading title={user.full_name || "Unnamed user"} description="Full profile, account standing, dashboard memberships and change history." />
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">

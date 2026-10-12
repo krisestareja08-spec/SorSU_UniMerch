@@ -5,6 +5,7 @@ import { THEME_SCRIPT } from '@/lib/theme'
 import { PwaRegister } from '@/components/pwa/pwa-register'
 import { OfflineBanner } from '@/components/pwa/offline-banner'
 import { NavigationProgress } from '@/components/navigation-progress'
+import { NavHistoryTracker } from '@/components/navigation/history-nav'
 import './globals.css'
 
 const sourceSans = Source_Sans_3({
@@ -63,6 +64,7 @@ export default function RootLayout({
           Skip to content
         </a>
         <NavigationProgress />
+        <NavHistoryTracker />
         <OfflineBanner />
         {children}
         <PwaRegister />

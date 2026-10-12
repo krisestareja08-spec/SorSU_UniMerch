@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { ProductPurchasePanel } from "@/components/marketplace/product-purchase-panel"
@@ -12,6 +11,7 @@ import { Stars } from "@/components/reviews/stars"
 import { SellerProductCarousel } from "@/components/storefront/seller-product-carousel"
 import { getStorefront, storefrontHref } from "@/lib/storefront"
 import { loadVariants } from "@/lib/variants"
+import { BackLink } from "@/components/navigation/history-nav"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":      "bg-emerald-100 text-emerald-700 border border-emerald-200",
@@ -68,9 +68,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6">
-      <Link href="/marketplace" className="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> Back to Marketplace
-      </Link>
+      <BackLink href="/marketplace" className="mb-6" />
 
       <ProductPurchasePanel
         product={{

@@ -1,7 +1,5 @@
 import type { Metadata } from "next"
-import Link from "next/link"
 import { notFound } from "next/navigation"
-import { ArrowLeft } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth"
 import { MarketplaceChrome } from "@/components/marketplace/marketplace-chrome"
@@ -14,6 +12,7 @@ import { ProductGrid } from "@/components/storefront/product-grid"
 import {
   getStorefront, getStorefrontCategories, getStorefrontProducts, manageStorefrontHref, storefrontHref,
 } from "@/lib/storefront"
+import { BackLink } from "@/components/navigation/history-nav"
 
 type Props = {
   params: Promise<{ sellerId: string }>
@@ -74,9 +73,7 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
 
   const content = (
       <div className={sellerCtx ? "" : "mx-auto max-w-7xl px-4 py-6 sm:px-6"}>
-        <Link href={sellerCtx ? MODULES[sellerCtx.module].basePath : "/marketplace"} className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="size-4" /> {sellerCtx ? "Back to Dashboard" : "Back to Marketplace"}
-        </Link>
+        <BackLink href={sellerCtx ? MODULES[sellerCtx.module].basePath : "/marketplace"} className="mb-4" />
 
         <SellerHeader storefront={storefront} productCount={productCount} isFollowing={!!follow.data} manageHref={manageHref} sellerMode={!!sellerCtx} />
 

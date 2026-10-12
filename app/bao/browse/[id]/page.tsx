@@ -5,13 +5,13 @@ import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { ProductControl } from "@/components/bao/product-control"
 import { FlagViolationForm } from "@/components/bao/flag-violation-form"
-import { ArrowLeft, Package, ShieldAlert, Store } from "lucide-react"
+import { Package, ShieldAlert, Store } from "lucide-react"
 import { peso } from "@/lib/analytics"
 import { loadVariants } from "@/lib/variants"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
+import { BackLink } from "@/components/navigation/history-nav"
 
 type ProductRow = {
   id: string; name: string; description: string | null; category: string; price: number; stock: number; badge: string; status: string
@@ -40,9 +40,7 @@ export default async function BaoProductReviewPage({ params }: { params: Promise
 
   return (
     <ManagementShell ctx={ctx}>
-      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
-        <Link href="/bao/browse"><ArrowLeft className="size-4" />Marketplace (view only)</Link>
-      </Button>
+      <BackLink href="/bao/browse" className="mb-3 -ml-2 rounded-lg px-2 py-1.5 font-medium text-foreground hover:bg-muted" />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.1fr]">
         <div className="space-y-3">

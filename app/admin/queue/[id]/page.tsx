@@ -4,13 +4,13 @@ import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
-import { Button } from "@/components/ui/button"
 import { ProfileDetails, DocumentPreview } from "@/components/admin/profile-details"
-import { AlertTriangle, ArrowLeft } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { decideVerification } from "../../verification-actions"
 import { findDuplicateGroups, formatDateTime, profilesById, signedDocUrl, type AdminProfile } from "@/lib/admin"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { ActionForm } from "@/components/ui/action-form"
+import { BackLink } from "@/components/navigation/history-nav"
 
 export default async function VerificationRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -42,9 +42,7 @@ export default async function VerificationRequestPage({ params }: { params: Prom
 
   return (
     <ManagementShell ctx={ctx}>
-      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
-        <Link href="/admin/queue"><ArrowLeft className="size-4" />Back to queue</Link>
-      </Button>
+      <BackLink href="/admin/queue" className="mb-3 -ml-2 rounded-lg px-2 py-1.5 font-medium text-foreground hover:bg-muted" />
       <PageHeading
         title={`Verification request — ${request.full_name}`}
         description={`Applying as ${AFFILIATION_LABELS[request.claimed_affiliation as Affiliation] ?? request.claimed_affiliation} · submitted ${formatDateTime(request.created_at)} · status: ${request.status.replace(/_/g, " ")}`}

@@ -1,6 +1,5 @@
-import Link from "next/link"
 import { notFound, redirect } from "next/navigation"
-import { ArrowLeft, MessageCircle, Receipt } from "lucide-react"
+import { MessageCircle, Receipt } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth"
 import { getBuyerOrders } from "@/lib/orders"
@@ -10,6 +9,7 @@ import { ReorderButton } from "@/components/orders/reorder-button"
 import { ReviewForm } from "@/components/reviews/review-form"
 import { Button } from "@/components/ui/button"
 import { peso } from "@/lib/order-status"
+import { BackLink } from "@/components/navigation/history-nav"
 
 const PAYMENT_LABELS: Record<string, string> = { gcash: "GCash", cash: "Cash (walk-in)", bank: "Bank transfer" }
 
@@ -28,9 +28,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <Link href="/marketplace/orders" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> My Orders
-      </Link>
+      <BackLink href="/marketplace/orders" className="mb-4" />
 
       {/* Header: store + status, progress stepper, actions */}
       <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">

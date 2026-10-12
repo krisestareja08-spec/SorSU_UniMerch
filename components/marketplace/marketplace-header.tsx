@@ -2,6 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { Search, ShoppingCart, Menu, LayoutDashboard, BadgeCheck } from "lucide-react"
 import { BurgerDrawer } from "./burger-drawer"
@@ -12,6 +13,7 @@ import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
 import { cn } from "@/lib/utils"
+import { HistoryButtons } from "@/components/navigation/history-nav"
 
 export function MarketplaceHeader({
   dashboards = [],
@@ -24,6 +26,7 @@ export function MarketplaceHeader({
   isVerified?: boolean
   affiliation?: string | null
 }) {
+  const pathname = usePathname()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [query, setQuery] = useState("")
   const { itemCount } = useCart()
@@ -45,8 +48,11 @@ export function MarketplaceHeader({
             <Menu className="size-5" />
           </button>
 
-          {/* Logo */}
-          <Link href="/marketplace" className="flex shrink-0 items-center gap-2">
+          {/* Back / Forward through the pages visited in this tab */}
+          <HistoryButtons fallbackHref="/marketplace" tone="dark" className="-ml-1" />
+
+          {/* Logo (on phones only on the home page, so the search box keeps its room) */}
+          <Link href="/marketplace" className={cn("shrink-0 items-center gap-2", pathname === "/marketplace" ? "flex" : "hidden sm:flex")}>
             <Image src="/sorsu-seal.png" alt="SorSU seal" width={32} height={32}
               className="rounded-full ring-1 ring-primary-foreground/30" />
             <span className="hidden font-serif text-sm font-semibold text-primary-foreground sm:inline lg:text-base">
