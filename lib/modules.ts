@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShieldCheck, Users, AlertOctagon, Store, ClipboardList, Building2,
   CheckSquare, BarChart2, FileText, Settings, Boxes, ShoppingCart, Package,
-  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, HandCoins, type LucideIcon,
+  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, HandCoins, ClipboardCheck, type LucideIcon,
 } from "lucide-react"
 
 /**
@@ -65,6 +65,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "storefront", label: "Storefront",       href: "/supply-office/shop",       icon: Store },
       { perm: "storefront", label: "Banners",          href: "/supply-office/banners",    icon: Megaphone },
       { perm: "orders",     label: "Orders",           href: "/supply-office/orders",     icon: ShoppingCart },
+      { perm: "orders",     label: "Pre-order Forms",  short: "Pre-orders", href: "/supply-office/preorders", icon: ClipboardCheck },
       { perm: "messages",   label: "Buyer Messages", short: "Messages",   href: "/supply-office/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",         href: "/supply-office/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",        href: "/supply-office/inventory",  icon: Boxes },
@@ -83,6 +84,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "storefront", label: "Storefront",          href: "/cashier/shop",       icon: Store },
       { perm: "storefront", label: "Banners",             href: "/cashier/banners",    icon: Megaphone },
       { perm: "orders",     label: "Orders",              href: "/cashier/orders",     icon: ShoppingCart },
+      { perm: "orders",     label: "Pre-order Forms",     short: "Pre-orders", href: "/cashier/preorders", icon: ClipboardCheck },
       { perm: "messages",   label: "Buyer Messages", short: "Messages",      href: "/cashier/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",            href: "/cashier/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",           href: "/cashier/inventory",  icon: Boxes },
