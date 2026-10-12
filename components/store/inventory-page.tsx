@@ -4,11 +4,10 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, Boxes, History, PackageX, TrendingDown } from "lucide-react"
-import { adjustStock } from "@/app/store-actions"
+import { StockControl } from "@/components/store/stock-control"
 import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
-import { ActionForm } from "@/components/ui/action-form"
 import { Fragment } from "react"
 import { loadVariants } from "@/lib/variants"
 
@@ -22,24 +21,6 @@ type ProductRow = { id: string; name: string; category: string; stock: number; s
 
 const stockTone = (n: number) => (n === 0 ? "text-destructive" : n <= LOW_STOCK ? "text-amber-700" : "")
 const stockNote = (n: number) => (n === 0 ? " · out of stock" : n <= LOW_STOCK ? " · low" : "")
-
-/** Restock (+) or adjustment (±) for a product, or for one size of it. */
-function StockForm({ module, productId, variantId }: { module: string; productId: string; variantId?: string }) {
-  return (
-    <ActionForm action={adjustStock} className="flex flex-wrap items-center gap-1.5">
-      <input type="hidden" name="module" value={module} />
-      <input type="hidden" name="product_id" value={productId} />
-      {variantId && <input type="hidden" name="variant_id" value={variantId} />}
-      <select name="reason" className="h-8 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Type">
-        <option value="restock">Restock (+)</option>
-        <option value="adjustment">Adjustment (±)</option>
-      </select>
-      <input name="change" type="number" required placeholder="Qty" className="h-8 w-20 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Quantity" />
-      <input name="note" placeholder="Note" className="h-8 w-32 rounded-lg border border-input bg-background px-2 text-xs" aria-label="Note" />
-      <button type="submit" className="h-8 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">Save</button>
-    </ActionForm>
-  )
-}
 
 /**
  * Inventory management for a store: current stock, low-stock alerts, restock / adjustment,
@@ -69,16 +50,16 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
 
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Inventory" description="Stock levels for your products. Sales take items out of stock automatically and cancelled orders put them back; record restocks and corrections here." />
+      <PageHeading title="Inventory" description="Stock levels for your products. Sales take items out of stock automatically and cancelled orders put them back; use Update stock to add units you received, remove units that are lost or damaged, or set the total you counted." />
       <div className="mt-6"><StatGrid stats={stats} /></div>
 
       <Card className="mt-6">
         <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Boxes className="size-4 text-primary" />Stock levels</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="w-full min-w-180 text-sm">
+          <table className="w-full min-w-170 text-sm">
             <thead><tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="py-2 pr-3 font-medium">Product</th><th className="py-2 pr-3 text-right font-medium">In stock</th>
-              <th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">Restock / adjust</th></tr></thead>
+              <th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">Update stock</th></tr></thead>
             <tbody>
               {products.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No products yet.</td></tr>}
               {products.map((p) => {
@@ -97,7 +78,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                       <td className="py-2">
                         {variants.length
                           ? <span className="text-xs text-muted-foreground">Total of all sizes — adjust each size below</span>
-                          : <StockForm module={ctx.module} productId={p.id} />}
+                          : <StockControl module={ctx.module} productId={p.id} current={p.stock} />}
                       </td>
                     </tr>
                     {variants.map((v: { id: string; name: string; stock: number; sku: string | null }, i: number) => (
@@ -108,7 +89,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                         </td>
                         <td className={cn("py-1.5 pr-3 text-right font-semibold tabular-nums", stockTone(v.stock))}>{v.stock}</td>
                         <td className="py-1.5 pr-3 text-xs text-muted-foreground">{stockNote(v.stock).replace(" · ", "") || "in stock"}</td>
-                        <td className="py-1.5"><StockForm module={ctx.module} productId={p.id} variantId={v.id} /></td>
+                        <td className="py-1.5"><StockControl module={ctx.module} productId={p.id} variantId={v.id} current={v.stock} /></td>
                       </tr>
                     ))}
                   </Fragment>
