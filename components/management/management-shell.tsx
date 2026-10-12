@@ -162,7 +162,7 @@ export function ManagementShell({
   return (
     <div className="min-h-screen bg-background">
       {/* ── Desktop sidebar (fixed, always visible ≥ lg) ────────────────────── */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-primary/20 shadow-lg lg:block">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-primary/20 shadow-lg lg:block print:hidden">
         {SidebarContent}
       </aside>
 
@@ -187,9 +187,9 @@ export function ManagementShell({
       </div>
 
       {/* ── Main content area ─────────────────────────────────────────────────── */}
-      <div className="flex min-h-screen flex-col lg:pl-64">
+      <div className="flex min-h-screen flex-col lg:pl-64 print:pl-0">
         {/* Top bar — desktop + mobile */}
-        <header className="sticky top-0 z-20 border-b border-border bg-card/95 shadow-sm backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-border bg-card/95 shadow-sm backdrop-blur print:hidden">
           <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
             {/* Hamburger — mobile only */}
             <button onClick={() => setDrawerOpen(true)}
@@ -230,14 +230,14 @@ export function ManagementShell({
         </header>
 
         {/* Page content */}
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:py-8 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:py-8 focus:outline-none print:p-0">
           {children}
         </main>
       </div>
       <LiveAlerts />
 
       {/* ── Mobile bottom tab nav ─────────────────────────────────────────────── */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card shadow-[0_-2px_16px_rgba(0,0,0,0.07)] lg:hidden">
+      <nav className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-card shadow-[0_-2px_16px_rgba(0,0,0,0.07)] lg:hidden print:hidden">
         <div className="mx-auto flex h-16 max-w-lg items-end justify-around px-2 pb-2 pt-1">
           {bottomTabs.map((tab) => {
             const active = isActive(tab.href)
