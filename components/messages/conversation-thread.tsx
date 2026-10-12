@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/client"
 import { storefrontHref } from "@/lib/storefront-theme"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { cn } from "@/lib/utils"
+import { compressImage } from "@/lib/image-compress"
 import { ChatBuyButton, type BuyableProduct } from "./chat-buy-button"
 import {
   CLOSED_REASON, MESSAGE_COLUMNS, STATUS_LABEL, STATUS_STYLE, chatSetupError, chatTime,
@@ -177,9 +178,10 @@ export function ConversationThread({ conversationId, perspective, onActivity, on
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
-      const ext = (file.name.split(".").pop() || "jpg").toLowerCase()
+      const small = await compressImage(file, { maxSide: 1280 })
+      const ext = (small.name.split(".").pop() || "jpg").toLowerCase()
       const path = `${user.id}/${conversationId}/${crypto.randomUUID()}.${ext}`
-      const { error: upErr } = await supabase.storage.from("chat-images").upload(path, file, { contentType: file.type })
+      const { error: upErr } = await supabase.storage.from("chat-images").upload(path, small, { contentType: small.type })
       if (upErr) setError(upErr.message.includes("Bucket") ? "Photo uploads aren't set up yet. Run scripts/24_product_chat.sql." : upErr.message)
       else await insertMessage({ kind: "image", image_url: supabase.storage.from("chat-images").getPublicUrl(path).data.publicUrl })
     }

@@ -6,6 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { variantName, type Variant, type VariantInput } from "@/lib/variants"
+import { compressImage } from "@/lib/image-compress"
 
 /** One size row while the seller is editing (numbers stay strings until saved). */
 export type VariantDraft = {
@@ -59,9 +60,10 @@ export async function draftsToInputs(supabase: SupabaseClient, storeId: string, 
   for (const r of rows) {
     let imageUrl = r.imageUrl
     if (r.imageFile) {
-      const ext = r.imageFile.name.split(".").pop() || "jpg"
+      const file = await compressImage(r.imageFile)
+      const ext = file.name.split(".").pop() || "jpg"
       const path = `${storeId}/variants/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error } = await supabase.storage.from("product-images").upload(path, r.imageFile, { cacheControl: "3600", upsert: false })
+      const { error } = await supabase.storage.from("product-images").upload(path, file, { cacheControl: "3600", upsert: false })
       if (error) throw new Error("A variant image couldn't be uploaded. Please try again.")
       imageUrl = supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl
     }

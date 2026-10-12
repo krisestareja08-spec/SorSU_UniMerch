@@ -23,9 +23,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   // "Near me" defaults to the signed-in user's campus
   const user = await getCurrentUser()
-  const { data: me } = user ? await supabase.from("profiles").select("campus").eq("id", user.id).maybeSingle() : { data: null }
-  const myCampus = (me?.campus as string | null) ?? null
-  const campus = params.campus === "near" ? myCampus ?? undefined : params.campus && params.campus in CAMPUS_LABELS ? params.campus : undefined
+  const loadMyCampus = async () => {
+    if (!user) return null
+    const { data } = await supabase.from("profiles").select("campus").eq("id", user.id).maybeSingle()
+    return (data?.campus as string | null) ?? null
+  }
+  // Only a "Near me" search needs the campus before the products can load; otherwise it loads alongside them
+  const nearMe = params.campus === "near"
+  const myCampusEarly = nearMe ? await loadMyCampus() : null
+  const campus = nearMe ? myCampusEarly ?? undefined : params.campus && params.campus in CAMPUS_LABELS ? params.campus : undefined
 
   const filters = {
     q: term || undefined,
@@ -38,13 +44,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     sort,
   }
 
-  const [products, { data: catRows }, storeRes] = await Promise.all([
+  const [products, { data: catRows }, storeRes, myCampusLate] = await Promise.all([
     findProducts(supabase, filters),
     supabase.from("products").select("category").eq("status", "approved").limit(1000),
     term
       ? supabase.from("seller_profiles").select("id, org_name, category, logo_url, rating, rating_count").ilike("org_name", `%${term}%`).eq("status", "active").limit(12)
       : Promise.resolve({ data: [] as { id: string; org_name: string; category: string | null; logo_url: string | null; rating: number | null; rating_count: number | null }[] }),
+    nearMe ? Promise.resolve(myCampusEarly) : loadMyCampus(),
   ])
+  const myCampus = nearMe ? myCampusEarly : myCampusLate
   const categories = [...new Set((catRows ?? []).map((c) => c.category as string).filter(Boolean))].sort()
   const stores = (storeRes.data ?? []) as { id: string; org_name: string; category: string | null; logo_url: string | null; rating: number | null; rating_count: number | null }[]
 

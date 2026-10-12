@@ -15,6 +15,7 @@ import {
   AlertCircle, ArrowLeft, Check, ImageIcon, LayoutGrid, List, Loader2, MapPin, Palette, QrCode, Store, Upload, Wallet, X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { compressImage } from "@/lib/image-compress"
 
 type ShopProfile = {
   org_name: string; description: string; gcash_number: string
@@ -106,13 +107,17 @@ export function StoreShop({ ctx, viewHref }: { ctx: DashboardCtx; viewHref: stri
   const set = (patch: Partial<ShopProfile>) => setShop((s) => ({ ...s, ...patch }))
   const setTheme = (patch: Partial<StorefrontTheme>) => setShop((s) => ({ ...s, theme: { ...(s.theme ?? DEFAULT_THEME), ...patch } }))
 
-  async function upload(kind: ImageKind, file: File) {
+  async function upload(kind: ImageKind, picked: File) {
+    let file = picked
     if (!storeId) return
     if (!file.type.startsWith("image/")) { setError("Please choose an image file."); return }
     if (file.size > 5 * 1024 * 1024) { setError("Images must be under 5 MB."); return }
     setUploading(kind)
     setError(null)
     const supabase = createClient()
+    // Logos and banners are shrunk; QR codes must stay exactly as uploaded so they still scan
+    if (kind === "logo") file = await compressImage(file, { maxSide: 512 })
+    else if (kind === "banner") file = await compressImage(file, { maxSide: 1600 })
     const ext = file.name.split(".").pop() || "png"
     const path = kind === "logo" || kind === "banner"
       ? `${storeId}/storefront-${kind}-${file.lastModified}-${file.size}.${ext}`

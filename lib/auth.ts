@@ -13,14 +13,31 @@ export type SessionUser = {
   profile: Profile
 }
 
+/** What pages need to know about the signed-in person (read from their verified sign-in token). */
+export type CurrentUser = {
+  id: string
+  email: string | null
+  user_metadata: Record<string, unknown>
+  app_metadata: Record<string, unknown>
+}
+
 /**
- * The signed-in auth user, or null. Cached for the request: the layout, the page and any server
- * components share one call to the Auth server instead of each making their own.
+ * The signed-in user, or null. Read from the session token, whose signature is verified without a
+ * round trip to the Auth server (the proxy has already refreshed an expired token). Cached for the
+ * request, so the layout, page and server components share one lookup. Server actions that change
+ * data still ask the Auth server (see assertDashboard in lib/dashboards.ts).
  */
-export const getCurrentUser = cache(async () => {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
+  const { data } = await supabase.auth.getClaims()
+  const claims = data?.claims
+  if (!claims?.sub) return null
+  return {
+    id: claims.sub,
+    email: typeof claims.email === "string" ? claims.email : null,
+    user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown>,
+    app_metadata: (claims.app_metadata ?? {}) as Record<string, unknown>,
+  }
 })
 
 type ProfileRow = {

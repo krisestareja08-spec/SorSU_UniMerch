@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
+import { compressImage } from "@/lib/image-compress"
 
 type Banner = { id: string; title: string; subtitle: string | null; image_url: string | null; link_url: string | null; starts_at: string; ends_at: string }
 type Draft = { id?: string; title: string; subtitle: string; image_url: string | null; link_url: string; starts_at: string; ends_at: string }
@@ -73,8 +74,9 @@ export function StoreBanners({ ctx }: { ctx: DashboardCtx }) {
     if (file.size > MAX_BYTES) { setError("Images must be 5 MB or smaller."); return }
     setBusy(true)
     const supabase = createClient()
-    const path = `${storeId}/${crypto.randomUUID()}.${file.type.split("/")[1]}`
-    const { error: err } = await supabase.storage.from("store-banners").upload(path, file, { contentType: file.type })
+    const small = await compressImage(file, { maxSide: 1600 })
+    const path = `${storeId}/${crypto.randomUUID()}.${small.type.split("/")[1]}`
+    const { error: err } = await supabase.storage.from("store-banners").upload(path, small, { contentType: small.type })
     setBusy(false)
     if (err) { setError(err.message); return }
     setDraft({ ...draft, image_url: supabase.storage.from("store-banners").getPublicUrl(path).data.publicUrl })

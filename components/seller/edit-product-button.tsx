@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
 import { updateProduct } from "@/app/seller/products/actions"
 import { unwrap } from "@/lib/action-result"
+import { compressImage } from "@/lib/image-compress"
 import type { ModuleKey } from "@/lib/modules"
 import type { PaymentMode } from "@/lib/product-pricing"
 import { cn } from "@/lib/utils"
@@ -122,9 +123,10 @@ export function EditProductButton({ product, storeId, module }: { product: Edita
       const urls: string[] = []
       for (const p of photos) {
         if (!p.file) { urls.push(p.url); continue }
-        const ext = p.file.name.split(".").pop() || "jpg"
+        const file = await compressImage(p.file)
+        const ext = file.name.split(".").pop() || "jpg"
         const path = `${storeId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: upErr } = await supabase.storage.from("product-images").upload(path, p.file, { cacheControl: "3600", upsert: false })
+        const { error: upErr } = await supabase.storage.from("product-images").upload(path, file, { cacheControl: "3600", upsert: false })
         if (upErr) throw new Error("A photo couldn't be uploaded. Please try again.")
         urls.push(supabase.storage.from("product-images").getPublicUrl(path).data.publicUrl)
       }

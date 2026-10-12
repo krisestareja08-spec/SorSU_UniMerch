@@ -13,6 +13,7 @@ import { computeRoyalty } from "@/lib/access"
 import type { PaymentMode } from "@/lib/product-pricing"
 import { cn } from "@/lib/utils"
 import { unwrap } from "@/lib/action-result"
+import { compressImage } from "@/lib/image-compress"
 import { VariantEditor, draftsToInputs, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
 
 export const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
@@ -127,7 +128,8 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     try {
       const supabase = createClient()
       const imageUrls: string[] = []
-      for (const file of imageFiles) {
+      for (const original of imageFiles) {
+        const file = await compressImage(original)
         const ext = file.name.split(".").pop() || "jpg"
         const path = `${sellerId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
         const { error: uploadError } = await supabase.storage

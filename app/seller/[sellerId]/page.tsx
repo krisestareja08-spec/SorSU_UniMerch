@@ -10,7 +10,7 @@ import { SellerHeader } from "@/components/storefront/seller-header"
 import { SellerInfo } from "@/components/storefront/seller-info"
 import { ProductGrid } from "@/components/storefront/product-grid"
 import {
-  getStorefront, getStorefrontCategories, getStorefrontProducts, manageStorefrontHref, storefrontHref,
+  getStorefrontOnce, getStorefrontCategories, getStorefrontProducts, manageStorefrontHref, storefrontHref,
 } from "@/lib/storefront"
 import { BackLink } from "@/components/navigation/history-nav"
 
@@ -21,8 +21,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { sellerId } = await params
-  const supabase = await createClient()
-  const storefront = await getStorefront(supabase, sellerId)
+  const storefront = await getStorefrontOnce(sellerId)
   if (!storefront) return { title: "Seller not found · UniMerch" }
   return {
     title: `${storefront.name} · UniMerch`,
@@ -40,7 +39,7 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
   const { category: rawCategory, page: rawPage } = await searchParams
   const supabase = await createClient()
 
-  const storefront = await getStorefront(supabase, sellerId)
+  const storefront = await getStorefrontOnce(sellerId)
   if (!storefront) notFound()
 
   const category = rawCategory?.trim() || null
