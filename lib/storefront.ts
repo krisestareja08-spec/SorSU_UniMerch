@@ -152,7 +152,8 @@ export async function manageStorefrontHref(supabase: Supabase, sellerId: string,
     .limit(1)
   const dash = (data ?? [])[0] as { id: string; module: string } | undefined
   if (!dash) return null
-  if (dash.module === "cashier") return `/dashboards/switch?id=${dash.id}&next=/cashier/shop`
-  if (dash.module === "supply_office") return "/supply-office/shop"
-  return `/dashboards/switch?id=${dash.id}&next=/seller/shop`
+  // Straight into the storefront editor
+  if (dash.module === "cashier") return `/dashboards/switch?id=${dash.id}&next=${encodeURIComponent("/cashier/shop?edit=1")}`
+  if (dash.module === "supply_office") return "/supply-office/shop?edit=1"
+  return `/dashboards/switch?id=${dash.id}&next=${encodeURIComponent("/seller/shop?edit=1")}`
 }
