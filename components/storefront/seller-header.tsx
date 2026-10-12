@@ -70,7 +70,7 @@ export function SellerHeader({
           ) : !sellerMode && (
             <SellerFollowButton sellerId={storefront.id} initiallyFollowing={isFollowing} />
           )}
-          {!sellerMode && <ContactSellerButton gcashNumber={storefront.gcashNumber} />}
+          {!sellerMode && <ContactSellerButton storeId={storefront.id} />}
         </div>
       </div>
     </section>
