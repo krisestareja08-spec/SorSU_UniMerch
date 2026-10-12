@@ -57,17 +57,23 @@ async function submitSalesReportImpl(formData: FormData) {
   revalidatePath("/bao/reports")
 }
 
-/** Restock or correct a product's stock; every change is recorded as an inventory movement. */
-async function adjustStockImpl(formData: FormData) {
+/**
+ * Update a product's (or one size's) stock in plain terms; every change is recorded as an inventory movement:
+ *  • add    — units received: adds to the current stock (recorded as a restock)
+ *  • remove — units lost, damaged or taken out: subtracts (recorded as an adjustment)
+ *  • set    — the actual counted total: replaces the current stock (recorded as an adjustment)
+ */
+async function adjustStockImpl(formData: FormData): Promise<{ before: number; after: number; label: string }> {
   const mod = storeModule(formData.get("module"))
   const productId = formData.get("product_id") as string
   // A size of the product (scripts/28): its own stock; the product total follows automatically
   const variantId = (formData.get("variant_id") as string | null) || null
-  const change = Number.parseInt(formData.get("change") as string, 10)
-  const reason = formData.get("reason") === "adjustment" ? "adjustment" : "restock"
+  const mode = String(formData.get("mode") ?? "")
+  const quantity = Number(formData.get("quantity"))
   const note = ((formData.get("note") as string) ?? "").trim().slice(0, 300) || null
-  if (!productId || !Number.isFinite(change) || change === 0) throw new Error("Enter a non-zero quantity.")
-  if (reason === "restock" && change < 0) throw new Error("A restock must add stock. Use Adjustment to remove units.")
+  if (!productId) throw new Error("Choose a product.")
+  if (!["add", "remove", "set"].includes(mode)) throw new Error("Choose what you want to do: add, remove or set the count.")
+  if (!Number.isInteger(quantity)) throw new Error("Enter a whole number of units.")
 
   const { supabase, userId, storeId } = await assertDashboard(mod, "inventory")
   const { data: product } = await supabase.from("products").select("name, stock, seller_id").eq("id", productId).maybeSingle()
@@ -80,7 +86,22 @@ async function adjustStockImpl(formData: FormData) {
     before = Number(variant.stock)
     label = `${product.name} (${variant.name})`
   }
-  const newStock = Math.max(0, before + change)
+
+  let newStock: number
+  if (mode === "add") {
+    if (quantity < 1) throw new Error("Enter how many units you're adding (1 or more).")
+    newStock = before + quantity
+  } else if (mode === "remove") {
+    if (quantity < 1) throw new Error("Enter how many units you're removing (1 or more).")
+    if (quantity > before) throw new Error(`Only ${before} in stock — you can't remove ${quantity}.`)
+    newStock = before - quantity
+  } else {
+    if (quantity < 0) throw new Error("The counted total can't be negative.")
+    newStock = quantity
+  }
+  if (newStock === before) throw new Error(`Stock is already ${before} — nothing to change.`)
+  const reason = mode === "add" ? "restock" : "adjustment"
+  const recordedNote = note ?? (mode === "set" ? "Stock count" : null)
 
   const { error } = variantId
     ? await supabase.from("product_variants").update({ stock: newStock, updated_at: new Date().toISOString() }).eq("id", variantId)
@@ -90,10 +111,11 @@ async function adjustStockImpl(formData: FormData) {
   await supabase.from("inventory_movements").insert({
     store_id: storeId, product_id: productId, product_name: label,
     ...(variantId ? { variant_id: variantId } : {}),
-    change: newStock - before, reason, note, created_by: userId,
+    change: newStock - before, reason, note: recordedNote, created_by: userId,
   }).then(() => {}, () => {}) // table arrives with scripts/15_bao_bi.sql
 
   revalidatePath(`${MODULES[mod].basePath}/inventory`)
+  return { before, after: newStock, label }
 }
 
 // ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
