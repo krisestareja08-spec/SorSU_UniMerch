@@ -40,8 +40,8 @@ export function BrandPanel() {
           className="rounded-full ring-2 ring-sidebar-primary/60"
         />
         <div className="leading-tight">
-          <p className="font-serif text-lg font-semibold tracking-tight">SorSU Marketplace</p>
-          <p className="text-xs text-sidebar-foreground/70">Sorsogon State University</p>
+          <p className="font-serif text-lg font-semibold tracking-tight">Uni<span className="text-sidebar-primary">Merch</span></p>
+          <p className="text-xs text-sidebar-foreground/70">Campus Marketplace · Sorsogon State University</p>
         </div>
       </div>
 
