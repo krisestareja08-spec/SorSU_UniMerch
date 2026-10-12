@@ -14,11 +14,17 @@ import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
-  type DashboardCtx, type ModulePage,
+  type DashboardCtx, type ModuleKey, type ModulePage,
 } from "@/lib/modules"
 
-// Seller bottom tabs, in order; Storefront is the raised, highlighted button. Other pages are in the menu.
-const SELLER_TABS = ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"]
+// Mobile bottom tabs: each dashboard's most-used pages, in order (the rest are in the menu).
+// The seller's Storefront is the raised, highlighted button.
+const BOTTOM_TABS: Partial<Record<ModuleKey, string[]>> = {
+  seller: ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"],
+  bao: ["/bao", "/bao/approvals", "/bao/browse", "/bao/royalty", "/bao/reports"],
+  supply_office: ["/supply-office", "/supply-office/orders", "/supply-office/products", "/supply-office/inventory", "/supply-office/shop"],
+  cashier: ["/cashier", "/cashier/orders", "/cashier/products", "/cashier/inventory", "/cashier/payments"],
+}
 const HIGHLIGHT_TAB = "/seller/shop"
 
 export function ManagementShell({
@@ -44,11 +50,13 @@ export function ManagementShell({
     { label: "My Account", short: "Account", href: "/account", icon: UserCog },
   ]
   const homeHref = moduleDef.basePath
-  // Sellers: a fixed set of tabs (pages the member has no permission for are left out)
-  const sellerTabs = ctx.module === "seller"
-    ? SELLER_TABS.map((href) => nav.find((n) => n.href === href)).filter((n): n is (typeof nav)[number] => !!n)
-    : null
-  const bottomTabs = sellerTabs ?? nav.slice(0, 5)
+  // A fixed set of tabs per dashboard (pages the member has no permission for are left out)
+  const preferred = BOTTOM_TABS[ctx.module]
+  const pickedTabs = preferred
+    ? preferred.map((href) => nav.find((n) => n.href === href)).filter((n): n is (typeof nav)[number] => !!n)
+    : []
+  const bottomTabs = pickedTabs.length >= 2 ? pickedTabs : nav.slice(0, 5)
+  const sellerTabs = ctx.module === "seller" ? pickedTabs : null
   const roleLabel = ctx.isMain ? "Main Admin" : "Member"
 
   async function signOut() {
@@ -218,7 +226,7 @@ export function ManagementShell({
         </header>
 
         {/* Page content */}
-        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8 pb-24 lg:pb-8 focus:outline-none">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip px-4 pt-6 pb-24 sm:px-6 lg:px-8 lg:py-8 focus:outline-none">
           {children}
         </main>
       </div>
@@ -232,8 +240,9 @@ export function ManagementShell({
             const Icon = tab.icon
             return (
               <Link key={tab.href + tab.label} href={tab.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "relative flex flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-medium transition-all active:scale-95",
+                  "relative flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[11px] font-medium transition-all active:scale-95",
                   active ? "text-primary" : "text-muted-foreground",
                 )}
               >
@@ -248,7 +257,7 @@ export function ManagementShell({
                 ) : (
                   <Icon className="size-5" />
                 )}
-                <span className={cn("whitespace-nowrap", sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.short ?? tab.label}</span>
+                <span className={cn("block max-w-full truncate px-0.5", sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.short ?? tab.label}</span>
               </Link>
             )
           })}

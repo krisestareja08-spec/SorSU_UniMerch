@@ -80,16 +80,16 @@ export function SellerChatPanel({ products, sellerId }: { products: Product[]; s
   }
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-primary/10 shadow-sm">
-      {/* Product list sidebar */}
-      <div className="w-60 shrink-0 overflow-y-auto border-r border-border bg-card">
-        <p className="px-4 pb-2 pt-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Products</p>
+    <div className="flex h-[calc(100dvh-14rem)] min-h-96 flex-col overflow-hidden rounded-2xl border border-primary/10 shadow-sm md:h-[calc(100dvh-12rem)] md:flex-row">
+      {/* Product list: a scrollable strip on phones, a sidebar from md up */}
+      <div className="flex shrink-0 overflow-x-auto border-b border-border bg-card md:block md:w-60 md:overflow-y-auto md:border-b-0 md:border-r">
+        <p className="hidden px-4 pb-2 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:block">Products</p>
         {products.map((p) => (
           <button
             key={p.id}
             onClick={() => setSelectedProduct(p)}
             className={cn(
-              "flex w-full items-center gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/40",
+              "flex w-56 shrink-0 items-center gap-3 border-r border-border px-3 py-3 text-left transition-colors hover:bg-muted/40 md:w-full md:border-b md:border-r-0",
               selectedProduct?.id === p.id && "bg-primary/5"
             )}
           >
@@ -111,13 +111,13 @@ export function SellerChatPanel({ products, sellerId }: { products: Product[]; s
       </div>
 
       {/* Chat area */}
-      <div className="flex flex-1 flex-col bg-background">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
         {selectedProduct ? (
           <>
             <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <MessageCircle className="size-4 text-primary" />
-              <p className="text-sm font-medium text-foreground">{selectedProduct.name}</p>
-              <span className={cn("ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold", STATUS_COLORS[selectedProduct.status] ?? STATUS_COLORS.pending)}>
+              <p className="min-w-0 truncate text-sm font-medium text-foreground">{selectedProduct.name}</p>
+              <span className={cn("ml-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold", STATUS_COLORS[selectedProduct.status] ?? STATUS_COLORS.pending)}>
                 {selectedProduct.status}
               </span>
             </div>
@@ -129,7 +129,7 @@ export function SellerChatPanel({ products, sellerId }: { products: Product[]; s
               {messages.map((m) => (
                 <div key={m.id} className={cn("flex", m.sender_id === sellerId ? "justify-end" : "justify-start")}>
                   <div className={cn(
-                    "max-w-xs rounded-2xl px-3.5 py-2 text-sm leading-relaxed",
+                    "max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed sm:max-w-xs",
                     m.sender_id === sellerId
                       ? "bg-primary text-primary-foreground rounded-br-sm"
                       : "bg-muted text-foreground rounded-bl-sm"
@@ -147,7 +147,8 @@ export function SellerChatPanel({ products, sellerId }: { products: Product[]; s
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Type a message to BAO..."
-                className="flex-1 h-9 rounded-xl border border-border bg-background px-3 text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                aria-label="Message to BAO"
+                className="h-10 min-w-0 flex-1 rounded-xl border border-border bg-background px-3 text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
               <Button type="submit" size="icon" disabled={sending || !input.trim()} className="shrink-0 rounded-xl bg-primary text-primary-foreground hover:bg-primary/90">
                 {sending ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

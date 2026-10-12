@@ -38,16 +38,18 @@ export function StatGrid({ stats }: { stats: Stat[] }) {
       {stats.map((s) => {
         const Icon = s.icon
         const a = ACCENT_STYLES[s.accent ?? "primary"]
+        // Long figures (e.g. ₱1,234,567.00) get a smaller size on phones so they stay on one line
+        const long = String(s.value).length > 8
         return (
           <Card key={s.label} className="overflow-hidden border-primary/10 shadow-sm transition-shadow hover:shadow-md">
-            <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2 pt-4 px-4">
+            <CardHeader className="flex flex-row items-start justify-between gap-2 px-3 pb-2 pt-4 sm:px-4">
               <CardTitle className="text-xs font-medium text-muted-foreground sm:text-sm leading-tight">{s.label}</CardTitle>
               <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", a.bg)}>
                 <Icon className={cn("size-4", a.icon)} />
               </div>
             </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className={cn("font-serif text-2xl font-semibold sm:text-3xl", a.value)}>{s.value}</p>
+            <CardContent className="px-3 pb-4 sm:px-4">
+              <p className={cn("whitespace-nowrap font-serif font-semibold tabular-nums sm:text-3xl", long ? "text-base min-[400px]:text-lg" : "text-2xl", a.value)}>{s.value}</p>
               <div className="mt-1 flex items-center gap-1.5">
                 {s.trend != null && (
                   s.trend >= 0

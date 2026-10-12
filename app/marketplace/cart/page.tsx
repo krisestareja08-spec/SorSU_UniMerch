@@ -107,7 +107,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
   const checkoutDisabled = selectedCount === 0 || selectedShops > 1
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-7xl px-4 pb-24 pt-6 sm:px-6 lg:pb-6">
       <div className="mb-6">
         <h1 className="flex items-center gap-2 font-serif text-2xl font-semibold tracking-tight text-foreground">
           <ShoppingBag className="size-6 text-primary" />

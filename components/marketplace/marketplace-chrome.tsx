@@ -42,7 +42,7 @@ export async function MarketplaceChrome({ children }: { children: React.ReactNod
         <MarketplaceDesktopSidebar dashboards={dashboards} />
 
         {/* Main content */}
-        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-hidden pb-24 focus:outline-none lg:pb-8">
+        <main id="main-content" tabIndex={-1} className="min-w-0 flex-1 overflow-x-clip pb-24 focus:outline-none lg:pb-8">
           {children}
         </main>
       </div>

@@ -127,6 +127,21 @@
   color: var(--gold-ink);
 }
 
+/* Mobile: nothing may push the page wider than the screen (a wide table or long word would make
+   phones zoom the whole page out). "clip" keeps sticky headers working, unlike "hidden". */
+html, body { overflow-x: clip; }
+body { overflow-wrap: break-word; }
+
+/* iPhones zoom into any text field under 16px when it's tapped. Phones get 16px fields; larger
+   screens keep the compact size. Unlayered so it wins over text-sm on hand-written fields. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;

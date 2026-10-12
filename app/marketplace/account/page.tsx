@@ -217,7 +217,7 @@ export default function AccountPage() {
 
       {confirmFields && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setConfirmFields(null)}>
-          <div role="alertdialog" aria-modal="true" aria-labelledby="reverify-title" className="w-full max-w-md rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div role="alertdialog" aria-modal="true" aria-labelledby="reverify-title" className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
             <h2 id="reverify-title" className="flex items-center gap-2 font-serif text-lg font-semibold"><AlertTriangle className="size-5 text-amber-600" />Re-verification required</h2>
             <p className="mt-2 text-sm text-muted-foreground">You changed: <strong className="text-foreground">{confirmFields.join(", ")}</strong>.</p>
             <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
