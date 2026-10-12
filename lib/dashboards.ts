@@ -1,7 +1,8 @@
+import { cache } from "react"
 import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { requireUser } from "@/lib/auth"
+import { getCurrentUser, requireUser } from "@/lib/auth"
 import { MODULES, MULTI_INSTANCE, canUse, type DashboardCtx, type DashboardSummary, type ModuleKey } from "@/lib/modules"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -42,15 +43,21 @@ export async function getMemberships(supabase: Supabase, userId: string) {
     .sort((a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name))
 }
 
+/** The signed-in user's memberships, loaded once per request (pages, layouts and guards share it). */
+export const getMyMemberships = cache(async (userId: string) => getMemberships(await createClient(), userId))
+
 /**
  * Guard for every management page. Replaces role checks: the signed-in user must be a member of
  * a dashboard of this module, and (unless Main Admin) must have been granted `perm`.
  * `perm === "members"` is Main-Admin-only.
  */
 export async function requireDashboard(module: ModuleKey, perm: string | null = null): Promise<DashboardCtx> {
-  const { id: userId, email, profile } = await requireUser()
-  const supabase = await createClient()
-  const memberships = await getMemberships(supabase, userId)
+  // Profile and memberships load side by side (both only need the user id)
+  const user = await getCurrentUser()
+  const [{ id: userId, email, profile }, memberships] = await Promise.all([
+    requireUser(),
+    user ? getMyMemberships(user.id) : Promise.resolve([]),
+  ])
   const candidates = memberships.filter((m) => m.module === module)
   if (candidates.length === 0) redirect(`/dashboard?denied=${module}`)
 

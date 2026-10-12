@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { getMemberships } from "@/lib/dashboards"
+import { getCurrentUser } from "@/lib/auth"
+import { getMyMemberships } from "@/lib/dashboards"
 import { dashboardHref, primaryDashboard } from "@/lib/modules"
 
 /**
@@ -8,11 +8,10 @@ import { dashboardHref, primaryDashboard } from "@/lib/modules"
  * go straight to it; everyone else lands on the marketplace.
  */
 export default async function Page() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
-  const memberships = await getMemberships(supabase, user.id).catch(() => [])
+  const memberships = await getMyMemberships(user.id).catch(() => [])
   const first = primaryDashboard(memberships)
   redirect(first ? dashboardHref(first) : "/marketplace")
 }

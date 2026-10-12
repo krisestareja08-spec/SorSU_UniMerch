@@ -31,6 +31,8 @@ export function BaoSettingsPage({ ctx }: { ctx: DashboardCtx }) {
     }
   })
   const [saved, setSaved] = useState(false)
+  // The rate saved in the database, to warn before changing it
+  const [savedRate, setSavedRate] = useState<number | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
@@ -43,16 +45,23 @@ export function BaoSettingsPage({ ctx }: { ctx: DashboardCtx }) {
       const { data: baoSettings } = await supabase.from("bao_settings").select("global_royalty_percentage").eq("id", 1).maybeSingle()
       if (baoSettings?.global_royalty_percentage != null) {
         setSettings((s) => ({ ...s, royaltyRate: String(baoSettings.global_royalty_percentage) }))
+        setSavedRate(Number(baoSettings.global_royalty_percentage))
       }
     })
   }, [router])
 
   async function handleSave() {
+    const royaltyRate = parseFloat(settings.royaltyRate)
+    if (!isNaN(royaltyRate) && royaltyRate !== savedRate && !window.confirm(
+      `Change the royalty rate to ${royaltyRate}%?
+
+Every official-logo product on the marketplace and every sale not yet remitted will use ${royaltyRate}%. Sales already remitted keep their rate.`,
+    )) return
     localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
     const supabase = createClient()
-    const royaltyRate = parseFloat(settings.royaltyRate)
     if (!isNaN(royaltyRate)) {
       await supabase.from("bao_settings").upsert({ id: 1, global_royalty_percentage: royaltyRate, updated_at: new Date().toISOString() }, { onConflict: "id" })
+      setSavedRate(royaltyRate)
     }
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -70,6 +79,7 @@ export function BaoSettingsPage({ ctx }: { ctx: DashboardCtx }) {
             <div className="flex flex-col gap-1.5">
               <Label>Logo-item royalty rate (%)</Label>
               <Input type="number" min="0" max="100" value={settings.royaltyRate} onChange={(e) => setSettings((s) => ({ ...s, royaltyRate: e.target.value }))} />
+              <p className="text-xs text-muted-foreground">A new rate applies to every official-logo product on the marketplace and to every sale not yet remitted. Remitted sales keep the rate they were remitted at.</p>
             </div>
             <div className="flex flex-col gap-1.5">
               <Label>Default low-stock threshold</Label>

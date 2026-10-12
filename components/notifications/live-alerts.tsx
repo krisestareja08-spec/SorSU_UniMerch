@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, X } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, currentUserId } from "@/lib/supabase/client"
 import { showSystemNotification } from "@/lib/pwa"
 
 type Alert = { id: string; title: string; body: string | null; href: string | null }
@@ -38,14 +38,14 @@ export function LiveAlerts() {
     let cancelled = false
     const pending = timers.current
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    currentUserId().then((userId) => {
       // Unmounted before the user loaded (e.g. React's dev double-mount): don't subscribe at all
-      if (!user || cancelled) return
+      if (!userId || cancelled) return
       channel = supabase
         // Unique per mount: supabase.channel() returns an existing channel with the same name, and
         // adding callbacks to one that is already subscribed throws
-        .channel(`live-alerts-${user.id}-${crypto.randomUUID()}`)
-        .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` }, (payload) => {
+        .channel(`live-alerts-${userId}-${crypto.randomUUID()}`)
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload) => {
           const n = payload.new as Alert
           window.dispatchEvent(new CustomEvent(NOTIFICATION_EVENT))
           // Already looking at it (e.g. the open chat) — no need to interrupt

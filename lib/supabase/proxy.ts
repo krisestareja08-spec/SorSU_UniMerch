@@ -41,14 +41,16 @@ export async function updateSession(request: NextRequest) {
   })
 
   // Do not run code between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to debug
+  // supabase.auth.getClaims(). A simple mistake could make it very hard to debug
   // issues with users being randomly logged out.
 
-  // IMPORTANT: If you remove getUser() and you use server-side rendering
+  // IMPORTANT: If you remove getClaims() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // getClaims() refreshes the session and verifies the JWT locally (no round trip to the Auth
+  // server on every request, unlike getUser()).
+  const { data: claimsData } = await supabase.auth.getClaims()
+  const claims = claimsData?.claims
+  const user = claims?.sub ? { id: claims.sub, user_metadata: claims.user_metadata ?? {} } : null
 
   const protectedPrefixes = [
     '/dashboard',
@@ -77,9 +79,13 @@ export async function updateSession(request: NextRequest) {
   }
 
   // Signed in but hasn't agreed to the current Terms and Conditions / Privacy Policy (Google
-  // sign-ins, older accounts, or the terms changed): ask once before using the app. The user
-  // record is already loaded above, so this costs no extra request.
-  if (user && (isProtected || request.nextUrl.pathname === '/') && !hasAcceptedTerms(user.user_metadata)) {
+  // sign-ins, older accounts, or the terms changed): ask once before using the app.
+  // The token's metadata can be a little stale right after they agree, so a "no" is confirmed
+  // with the Auth server before redirecting (only ever costs a request for those users).
+  if (
+    user && (isProtected || request.nextUrl.pathname === '/') && !hasAcceptedTerms(user.user_metadata) &&
+    !hasAcceptedTerms((await supabase.auth.getUser()).data.user?.user_metadata)
+  ) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/accept-terms'
     url.search = ''

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { createContext, useContext, useReducer, useEffect, useRef } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, currentUserId } from "@/lib/supabase/client"
 
 export type CartItem = {
   id: string
@@ -133,22 +133,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     let channel: ReturnType<typeof supabase.channel> | null = null
     let cancelled = false
 
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (!user || cancelled) return
-      const { data: row, error } = await supabase.from("user_carts").select("items").eq("user_id", user.id).maybeSingle()
+    currentUserId().then(async (userId) => {
+      if (!userId || cancelled) return
+      const { data: row, error } = await supabase.from("user_carts").select("items").eq("user_id", userId).maybeSingle()
       if (error || cancelled) return // table not created yet: stay local-only
       let owner: string | null = null
       try { owner = localStorage.getItem(OWNER_KEY) } catch {}
       // Never carry another account's leftover cart into this one
-      const mine = owner && owner !== user.id ? [] : local
+      const mine = owner && owner !== userId ? [] : local
       const server = Array.isArray(row?.items) ? (row.items as CartItem[]) : []
-      try { localStorage.setItem(OWNER_KEY, user.id) } catch {}
-      syncUser.current = user.id
+      try { localStorage.setItem(OWNER_KEY, userId) } catch {}
+      syncUser.current = userId
       dispatch({ type: "LOAD", items: mergeCarts(server, mine) })
 
       channel = supabase
-        .channel(`cart-${user.id}`)
-        .on("postgres_changes", { event: "*", schema: "public", table: "user_carts", filter: `user_id=eq.${user.id}` }, (payload) => {
+        .channel(`cart-${userId}`)
+        .on("postgres_changes", { event: "*", schema: "public", table: "user_carts", filter: `user_id=eq.${userId}` }, (payload) => {
           const next = payload.new as { items?: CartItem[]; device?: string } | undefined
           if (!next?.items || next.device === device) return
           skipPush.current = true // applying a remote change: don't send it straight back

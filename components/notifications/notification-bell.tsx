@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Bell, CheckCheck, Loader2 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, currentUserId } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { NOTIFICATION_EVENT } from "./live-alerts"
 
@@ -23,7 +23,8 @@ function timeAgo(iso: string) {
 
 /**
  * Bell icon with unread count and a dropdown of the latest notifications.
- * Notifications are created by the database (scripts/17_notifications.sql); this polls every 30s.
+ * Notifications are created by the database (scripts/17_notifications.sql); this polls every 30s
+ * while the tab is visible (LiveAlerts also signals new ones the moment they arrive).
  * `tone` adapts the icon to a dark (maroon header) or light background.
  */
 /** `showAll`: link to the full notifications page (a buyer page; off for seller accounts). */
@@ -36,13 +37,12 @@ export function NotificationBell({ tone = "light", showAll = true }: { tone?: "l
   const boxRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    const { data, error } = await supabase
+    const userId = await currentUserId()
+    if (!userId) return
+    const { data, error } = await createClient()
       .from("notifications")
       .select("id, kind, title, body, href, read_at, created_at")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(20)
     if (error) { setUnavailable(true); return }
@@ -53,7 +53,8 @@ export function NotificationBell({ tone = "light", showAll = true }: { tone?: "l
   useEffect(() => {
     // Initial fetch + polling; all state updates happen after the awaited request.
     const first = setTimeout(load, 0)
-    const id = setInterval(load, POLL_MS)
+    // A hidden tab doesn't poll; it catches up on focus
+    const id = setInterval(() => { if (document.visibilityState === "visible") load() }, POLL_MS)
     const onFocus = () => load()
     window.addEventListener("focus", onFocus)
     window.addEventListener(NOTIFICATION_EVENT, onFocus) // LiveAlerts saw a new one arrive

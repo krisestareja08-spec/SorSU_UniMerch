@@ -1,8 +1,9 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { AFFILIATION_LABELS } from "@/lib/roles"
-import { getMemberships } from "@/lib/dashboards"
+import { getMyMemberships } from "@/lib/dashboards"
 import { MODULES, dashboardHref, type ModuleKey } from "@/lib/modules"
 import { profileFromUser } from "@/lib/profile"
 import { AppHeader } from "@/components/app-header"
@@ -15,7 +16,7 @@ import type { Affiliation, UserRole, VerificationStatus } from "@/lib/roles"
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const { denied } = await searchParams
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
   const { data: profile, error } = await supabase
@@ -33,7 +34,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   }
 
   // Management dashboards this user has been assigned to (users are people, dashboards are modules).
-  const dashboards = await getMemberships(supabase, user.id)
+  const dashboards = await getMyMemberships(user.id)
 
   const { affiliation, verification_status: status, is_identity_verified: verified } = resolved
   const isUniversityMember = affiliation !== "external"

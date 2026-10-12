@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShieldCheck, Users, AlertOctagon, Store, ClipboardList, Building2,
   CheckSquare, BarChart2, FileText, Settings, Boxes, ShoppingCart, Package,
-  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, type LucideIcon,
+  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, HandCoins, type LucideIcon,
 } from "lucide-react"
 
 /**
@@ -46,6 +46,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: null,          label: "Dashboard",          href: "/bao",             icon: LayoutDashboard },
       { perm: "analytics",   label: "BI Analytics",       href: "/bao/analytics",   icon: BarChart2 },
       { perm: "royalty",     label: "Royalty Earnings",   href: "/bao/royalty",     icon: Coins },
+      { perm: "royalty",     label: "Royalty Remittances", short: "Remittances", href: "/bao/remittances", icon: HandCoins },
       { perm: "sellers",     label: "Seller Monitoring",  href: "/bao/sellers",     icon: Store },
       { perm: "marketplace", label: "Marketplace",        href: "/bao/browse",      icon: Store },
       { perm: "marketplace", label: "Product Monitor",    href: "/bao/marketplace", icon: Globe },
@@ -69,6 +70,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "inventory",  label: "Inventory",        href: "/supply-office/inventory",  icon: Boxes },
       { perm: "restricted", label: "Restricted Items", href: "/supply-office/restricted", icon: ShieldCheck },
       { perm: "reports",    label: "Sales Reports",    href: "/supply-office/reports",    icon: FileText },
+      { perm: "reports",    label: "Royalty",          href: "/supply-office/royalty",    icon: HandCoins },
       { perm: "settings",   label: "Settings",         href: "/supply-office/settings",   icon: Settings },
     ],
   },
@@ -87,6 +89,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "restricted", label: "Restricted Items",    href: "/cashier/restricted", icon: ShieldCheck },
       { perm: "payments",   label: "Transaction History", href: "/cashier/payments",   icon: CreditCard },
       { perm: "reports",    label: "Sales Reports",       href: "/cashier/reports",    icon: FileText },
+      { perm: "reports",    label: "Royalty",             href: "/cashier/royalty",    icon: HandCoins },
       { perm: "settings",   label: "Settings",            href: "/cashier/settings",   icon: Settings },
     ],
   },
@@ -103,6 +106,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "inventory",  label: "Inventory",   href: "/seller/inventory", icon: Boxes },
       { perm: "analytics",  label: "Analytics",   href: "/seller/analytics", icon: BarChart2 },
       { perm: "reports",    label: "Sales Reports", href: "/seller/reports", icon: FileText },
+      { perm: "reports",    label: "Royalty",     href: "/seller/royalty",   icon: HandCoins },
       { perm: "payments",   label: "Payments",    href: "/seller/payments",  icon: CreditCard },
       { perm: "messages",   label: "Buyer Messages", href: "/seller/messages", icon: MessageCircle },
       { perm: "messages",   label: "BAO Messages", href: "/seller/chat",      icon: MessagesSquare },

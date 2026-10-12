@@ -10,6 +10,7 @@ import { BrowserAlertsToggle } from "@/components/notifications/browser-alerts-t
 import { PhoneVerification } from "@/components/account/phone-verification"
 import { PasswordChange } from "@/components/account/password-change"
 import { createClient } from "@/lib/supabase/server"
+import { getCurrentUser } from "@/lib/auth"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { PHONE_OTP_ENABLED } from "@/lib/features"
 
@@ -41,7 +42,7 @@ function Row({ icon: Icon, label, desc, children }: { icon?: React.ElementType; 
 
 export default async function SettingsPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getCurrentUser()
   if (!user) redirect("/auth/login")
 
   const [{ data: profile }, { data: request }] = await Promise.all([

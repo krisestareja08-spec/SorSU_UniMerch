@@ -16,3 +16,13 @@ export function createClient() {
     cookieOptions: { secure: process.env.NODE_ENV === 'production' },
   })
 }
+
+/**
+ * The signed-in user's id from the local session — no request to the Auth server, so widgets that
+ * mount on every page (cart, alerts, bell) stay cheap. Only use it to choose which rows to load or
+ * subscribe to: row-level security still checks every query on the server.
+ */
+export async function currentUserId() {
+  const { data } = await createClient().auth.getSession()
+  return data.session?.user.id ?? null
+}

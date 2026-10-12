@@ -82,6 +82,23 @@ async function reviewSalesReportImpl(formData: FormData) {
   revalidatePath("/bao/reports")
 }
 
+/** BAO approves a royalty remittance (the store's balance resets) or rejects it (the sales return to it). */
+async function reviewRoyaltyRemittanceImpl(formData: FormData) {
+  const remittanceId = formData.get("remittance_id") as string
+  const decision = formData.get("decision") as string
+  const note = ((formData.get("note") as string) ?? "").trim() || null
+  if (!remittanceId || !["approved", "rejected"].includes(decision)) throw new Error("Invalid decision")
+  if (decision === "rejected" && !note) throw new Error("Tell the store why the remittance is rejected.")
+
+  const { supabase, userId } = await assertDashboard("bao", "royalty")
+  const { error } = await supabase.rpc("review_royalty_remittance", { p_id: remittanceId, p_decision: decision, p_note: note })
+  if (error) throw new Error(error.message)
+
+  await logAudit(supabase, userId, { action: `remittance_${decision}`, reason: note })
+  revalidatePath("/bao/remittances")
+  revalidatePath("/bao/royalty")
+}
+
 // ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
 export async function pullProduct(...args: Parameters<typeof pullProductImpl>) {
   return attempt(() => pullProductImpl(...args))
@@ -94,4 +111,7 @@ export async function flagStoreViolation(...args: Parameters<typeof flagStoreVio
 }
 export async function reviewSalesReport(...args: Parameters<typeof reviewSalesReportImpl>) {
   return attempt(() => reviewSalesReportImpl(...args))
+}
+export async function reviewRoyaltyRemittance(...args: Parameters<typeof reviewRoyaltyRemittanceImpl>) {
+  return attempt(() => reviewRoyaltyRemittanceImpl(...args))
 }
