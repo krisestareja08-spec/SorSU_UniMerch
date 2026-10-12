@@ -11,14 +11,17 @@ export function SellerInfo({
   categories,
   activeCategory,
   followers,
+  baseHref,
 }: {
   storefront: Storefront
   categories: { name: string; count: number }[]
   activeCategory: string | null
   followers: number
+  /** Where category links point (default: the public storefront); the dashboard preview stays in place */
+  baseHref?: string
 }) {
   const accent = ACCENTS[storefront.theme.accent]
-  const base = storefrontHref(storefront.id)
+  const base = baseHref ?? storefrontHref(storefront.id)
 
   return (
     <aside className="space-y-4">
