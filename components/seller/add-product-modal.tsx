@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils"
 import { unwrap } from "@/lib/action-result"
 import { VariantEditor, draftsToInputs, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
 
-const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
-const BADGES = ["Available", "Pre-Order", "Interest Check"]
-const MAX_IMAGES = 5
+export const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
+export const BADGES = ["Available", "Pre-Order", "Interest Check"]
+export const MAX_IMAGES = 5
 // How buyers may pay. Cashier and Supply Office are walk-in counters first; online is optional.
-const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hint: string }[] = [
+export const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hint: string }[] = [
   { value: "walk_in", modes: ["walk_in"],           label: "Walk-in only", hint: "Buyer pays at your counter" },
   { value: "online",  modes: ["online"],            label: "Online only",  hint: "GCash / bank transfer" },
   { value: "both",    modes: ["walk_in", "online"], label: "Both",         hint: "Buyer chooses at checkout" },
@@ -27,7 +27,7 @@ const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: string; hin
 
 // Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
 // "Guest" = any signed-in user who isn't a verified university member (scripts/30).
-const RESTRICTABLE: { value: string; label: string }[] = [
+export const RESTRICTABLE: { value: string; label: string }[] = [
   { value: "student", label: "Verified Student" },
   { value: "faculty", label: "Verified Faculty (teaching)" },
   { value: "staff",   label: "Verified Staff (non-teaching)" },

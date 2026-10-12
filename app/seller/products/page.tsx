@@ -10,6 +10,7 @@ import { Package, Clock, CheckCircle2, XCircle, AlertTriangle, FilePenLine, Lock
 import { deleteProduct, publishDraft } from "./actions"
 import { ActionForm } from "@/components/ui/action-form"
 import { EditVariantsButton } from "@/components/seller/edit-variants-button"
+import { EditProductButton } from "@/components/seller/edit-product-button"
 import { priceRangeLabel } from "@/lib/variants"
 
 const STATUS_STYLES = {
@@ -112,6 +113,7 @@ export default async function SellerProductsPage({ searchParams }: { searchParam
                     <p className="line-clamp-2 text-xs font-medium leading-tight text-foreground">{product.name}</p>
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
+                    <EditProductButton product={product} storeId={sellerId} module="seller" />
                     <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="seller"
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     {product.is_royalty_product && (product.supply_office_collab ? (

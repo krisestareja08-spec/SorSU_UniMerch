@@ -10,6 +10,7 @@ import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-rea
 import { deleteProduct } from "@/app/seller/products/actions"
 import { ActionForm } from "@/components/ui/action-form"
 import { EditVariantsButton } from "@/components/seller/edit-variants-button"
+import { EditProductButton } from "@/components/seller/edit-product-button"
 import { priceRangeLabel } from "@/lib/variants"
 
 const STATUS_STYLES = {
@@ -71,6 +72,7 @@ export default async function SupplyOfficeProductsPage({ searchParams }: { searc
                     <p className="line-clamp-2 text-xs font-medium leading-tight text-foreground">{product.name}</p>
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
+                    <EditProductButton product={product} storeId={sellerId} module="supply_office" />
                     <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="supply_office"
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     {product.status === "rejected" && product.bao_comment && <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">BAO: {product.bao_comment}</p>}
