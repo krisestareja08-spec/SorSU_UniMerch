@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Menu, X, LogOut, ChevronsUpDown, Check, Crown, UserCog } from "lucide-react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
+import { HistoryButtons } from "@/components/navigation/history-nav"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
   type DashboardCtx, type ModuleKey, type ModulePage,
@@ -196,6 +197,9 @@ export function ManagementShell({
               aria-label="Open menu">
               <Menu className="size-5" />
             </button>
+
+            {/* Back / Forward through the pages visited in this tab */}
+            <HistoryButtons fallbackHref={homeHref} className="-ml-1" />
 
             {/* Logo — always visible in header */}
             <Link href={homeHref} className="flex shrink-0 items-center gap-2">

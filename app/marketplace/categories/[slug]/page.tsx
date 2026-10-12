@@ -1,8 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { ProductCard } from "@/components/marketplace/product-card"
-import Link from "next/link"
 import { findProducts } from "@/lib/products"
-import { ArrowLeft } from "lucide-react"
+import { BackLink } from "@/components/navigation/history-nav"
 
 const CATEGORY_LABELS: Record<string, string | null> = {
   shirts: "Shirts & Uniforms",
@@ -34,9 +33,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-      <Link href="/marketplace/categories" className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="size-4" /> All Categories
-      </Link>
+      <BackLink href="/marketplace/categories" className="mb-4" />
 
       <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground">{label}</h1>
       <p className="mt-1 text-sm text-muted-foreground">{products.length} product{products.length !== 1 && "s"} found</p>

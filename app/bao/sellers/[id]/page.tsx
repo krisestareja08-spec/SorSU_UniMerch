@@ -6,14 +6,14 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { ColumnChart } from "@/components/analytics/charts"
 import { ProductControl } from "@/components/bao/product-control"
-import { ArrowLeft, Coins, ExternalLink, Flag, Package, ShoppingCart, Store } from "lucide-react"
+import { Coins, ExternalLink, Flag, Package, ShoppingCart, Store } from "lucide-react"
 import { FlagViolationForm } from "@/components/bao/flag-violation-form"
 import { byMonth, loadSales, peso, totals } from "@/lib/analytics"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { profilesById, formatDateTime } from "@/lib/admin"
+import { BackLink } from "@/components/navigation/history-nav"
 
 type ProductRow = {
   id: string; name: string; category: string; price: number; stock: number; status: string; image_url: string | null
@@ -58,9 +58,7 @@ export default async function SellerDetailPage({ params }: { params: Promise<{ i
 
   return (
     <ManagementShell ctx={ctx}>
-      <Button asChild variant="ghost" size="sm" className="-ml-2 mb-3">
-        <Link href="/bao/sellers"><ArrowLeft className="size-4" />Seller Monitoring</Link>
-      </Button>
+      <BackLink href="/bao/sellers" className="mb-3 -ml-2 rounded-lg px-2 py-1.5 font-medium text-foreground hover:bg-muted" />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="relative flex size-14 items-center justify-center overflow-hidden rounded-2xl bg-primary/10">

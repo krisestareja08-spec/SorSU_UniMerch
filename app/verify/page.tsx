@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser } from "@/lib/auth"
@@ -8,8 +7,8 @@ import { AppHeader } from "@/components/app-header"
 import { VerificationStatusBadge } from "@/components/verification-status-badge"
 import { VerifyForm } from "@/components/verify/verify-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft, ShieldCheck, Info, BadgeCheck, Clock } from "lucide-react"
+import { ShieldCheck, Info, BadgeCheck, Clock } from "lucide-react"
+import { BackLink } from "@/components/navigation/history-nav"
 
 export default async function VerifyPage() {
   const supabase = await createClient()
@@ -54,12 +53,7 @@ export default async function VerifyPage() {
       <AppHeader fullName={resolvedProfile.full_name ?? null} email={user.email ?? ""} />
 
       <main className="mx-auto max-w-2xl px-4 py-8 sm:px-6">
-        <Button asChild variant="ghost" size="sm" className="mb-4 -ml-2">
-          <Link href="/marketplace/settings#verification">
-            <ArrowLeft className="size-4" />
-            Back to settings
-          </Link>
-        </Button>
+        <BackLink href="/marketplace/settings#verification" className="mb-4 -ml-2 rounded-lg px-2 py-1.5 font-medium text-foreground hover:bg-muted" />
 
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
