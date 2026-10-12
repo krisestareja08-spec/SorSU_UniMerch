@@ -137,6 +137,103 @@ async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJs
   revalidatePath(`/marketplace/product/${productId}`)
 }
 
+/** Fields that change what a buyer is shown or allowed: editing them on a live product needs BAO again. */
+const REVIEWED_FIELDS = ["name", "description", "category", "images", "has_logo", "supply_office_collab", "is_restricted", "allowed_roles"] as const
+
+const same = (a: unknown, b: unknown) => {
+  const norm = (v: unknown) => Array.isArray(v) ? JSON.stringify([...v].map(String).sort()) : JSON.stringify(v ?? null)
+  return norm(a) === norm(b)
+}
+
+/**
+ * Edit a product's details. Badge, payment options, SKU, tags and (without sizes) price save straight
+ * to the live listing. Changing what BAO reviewed — name, description, category, photos, logo/royalty
+ * or restriction — sends an approved product back to BAO (it leaves the marketplace until approved).
+ * Editing a rejected or pulled product resubmits it to BAO.
+ */
+async function updateProductImpl(formData: FormData) {
+  const { supabase, storeId, mod, path } = await storeContext(formData.get("module"))
+  const productId = String(formData.get("product_id") ?? "")
+  const { data: current } = await supabase.from("products").select("*").eq("id", productId).eq("seller_id", storeId).maybeSingle()
+  if (!current) throw new Error("Product not found in your store.")
+
+  const name = String(formData.get("name") ?? "").trim()
+  const description = String(formData.get("description") ?? "").trim()
+  const category = String(formData.get("category") ?? "")
+  const badge = String(formData.get("badge") ?? "Available")
+  const images = String(formData.get("images") ?? "").split(",").map((u) => u.trim()).filter(Boolean)
+  const sku = String(formData.get("sku") ?? "").trim() || null
+  const tags = String(formData.get("tags") ?? "").split(",").map((t) => t.trim()).filter(Boolean)
+  const paymentModes = parsePaymentModes(JSON.parse((formData.get("payment_modes") as string | null) ?? "[]"))
+  const isRestricted = formData.get("is_restricted") === "true"
+  const allowedRoles = isRestricted ? (JSON.parse((formData.get("allowed_roles") as string | null) ?? "[]") as string[]) : []
+  const hasLogo = formData.get("has_logo") === "true"
+  const supplyOfficeCollab = mod === "seller" && hasLogo && formData.get("supply_office_collab") === "true"
+
+  if (!name) throw new Error("Product name is required.")
+  if (!category) throw new Error("Please select a category.")
+  if (!["Available", "Pre-Order", "Interest Check", "Sold Out"].includes(badge)) throw new Error("Choose a valid availability.")
+  if (images.length === 0) throw new Error("At least one product image is required.")
+  if (isRestricted && allowedRoles.length === 0) throw new Error("Select who can buy this restricted product.")
+
+  // With sizes, prices live on each size (Sizes & Prices); otherwise the product has one price
+  const variants = await loadVariants(supabase, [productId])
+  const hasSizes = (variants?.get(productId)?.length ?? 0) > 0
+  let price = Number(current.price)
+  if (!hasSizes && formData.get("price") != null) {
+    price = parseFloat(formData.get("price") as string)
+    if (isNaN(price) || price < 0) throw new Error("Enter a valid price.")
+  }
+
+  // Royalty follows the logo choice: a product that newly uses the logo takes today's BAO rate
+  const royaltyPercentage = !hasLogo ? 0
+    : current.is_royalty_product ? Number(current.royalty_percentage) : await getGlobalRoyaltyPercentage()
+  const { royaltyAmount, finalPrice, isRoyaltyProduct } = computeRoyalty(price, hasLogo, royaltyPercentage)
+
+  const next = {
+    name, description, category, images, has_logo: hasLogo, supply_office_collab: supplyOfficeCollab,
+    is_restricted: isRestricted, allowed_roles: allowedRoles,
+  }
+  const reviewedChange = REVIEWED_FIELDS.some((f) => !same(next[f], current[f] ?? (f === "supply_office_collab" ? false : null)))
+  const resubmit = current.status === "rejected" || current.status === "pulled"
+  const status = (current.status === "approved" && reviewedChange) || resubmit ? "pending" : current.status
+
+  const row = {
+    ...next,
+    image_url: images[0],
+    badge, sku, tags, price,
+    royalty_percentage: royaltyPercentage,
+    royalty_amount: royaltyAmount,
+    final_price: supplyOfficeCollab ? price : finalPrice,
+    is_royalty_product: isRoyaltyProduct,
+    status,
+    ...(status === "pending" && current.status !== "pending"
+      ? { bao_comment: null, ...(current.status === "pulled" ? { pulled_reason: null, pulled_at: null, pulled_by: null } : {}) }
+      : {}),
+    updated_at: new Date().toISOString(),
+  }
+  // Database before scripts/32 has no collaboration column: don't send it
+  if (current.supply_office_collab === undefined) delete (row as Partial<typeof row>).supply_office_collab
+
+  let { error } = await supabase.from("products").update({ ...row, payment_modes: paymentModes }).eq("id", productId).eq("seller_id", storeId)
+  if (error && /payment_modes/.test(error.message)) {
+    ;({ error } = await supabase.from("products").update(row).eq("id", productId).eq("seller_id", storeId)) // database without scripts/27 yet
+  }
+  if (error && /supply_office_collab/.test(error.message)) {
+    throw new Error("Supply Office collaborations need scripts/32_performance.sql. Ask the admin to run it in Supabase.")
+  }
+  if (error && /updated_at/.test(error.message)) {
+    const { updated_at: _u, ...withoutStamp } = row
+    ;({ error } = await supabase.from("products").update(withoutStamp).eq("id", productId).eq("seller_id", storeId))
+  }
+  if (error) throw new Error(error.message)
+
+  revalidatePath(path)
+  revalidatePath(`/marketplace/product/${productId}`)
+  revalidatePath("/marketplace", "layout")
+  return { status, sentForReview: status === "pending" && current.status !== "pending" }
+}
+
 async function deleteProductImpl(productId: string, module: ModuleKey = "seller") {
   const { supabase, storeId, path } = await storeContext(module)
 
@@ -168,6 +265,9 @@ async function publishDraftImpl(productId: string, module: ModuleKey = "seller")
 // ── Exported actions: return ActionResult (lib/action-result.ts) instead of throwing ──
 export async function addProduct(...args: Parameters<typeof addProductImpl>) {
   return attempt(() => addProductImpl(...args))
+}
+export async function updateProduct(...args: Parameters<typeof updateProductImpl>) {
+  return attempt(() => updateProductImpl(...args))
 }
 export async function deleteProduct(...args: Parameters<typeof deleteProductImpl>) {
   return attempt(() => deleteProductImpl(...args))
