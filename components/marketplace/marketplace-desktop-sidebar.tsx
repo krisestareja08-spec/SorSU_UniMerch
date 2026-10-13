@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { Home, Store, Tag, ShoppingCart, MessageCircle, Bell, Users, Settings, Building2, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
+import { VerificationNavItem, type VerificationState } from "@/components/verify/verification-nav"
 
 type NavItem = { label: string; href: string; icon: LucideIcon }
 
@@ -21,7 +22,7 @@ const USER_NAV: NavItem[] = [
   { label: "Settings",     href: "/marketplace/settings",   icon: Settings },
 ]
 
-export function MarketplaceDesktopSidebar({ dashboards = [] }: { dashboards?: DashboardSummary[] }) {
+export function MarketplaceDesktopSidebar({ dashboards = [], verification = "verified" }: { dashboards?: DashboardSummary[]; verification?: VerificationState }) {
   const pathname = usePathname()
   // The Stores page is part of the buyer navigation only
   const nav = dashboards.length > 0 ? USER_NAV.filter((n) => n.href !== "/marketplace/stores") : USER_NAV
@@ -33,6 +34,7 @@ export function MarketplaceDesktopSidebar({ dashboards = [] }: { dashboards?: Da
 
   return (
     <aside className="sticky top-14 hidden h-[calc(100vh-3.5rem)] w-56 shrink-0 flex-col self-start overflow-y-auto border-r border-primary/15 bg-primary shadow-sm lg:flex sm:top-16 sm:h-[calc(100vh-4rem)] xl:w-64">
+      {dashboards.length === 0 && <div className="pt-3"><VerificationNavItem state={verification} layout="sidebar" /></div>}
       <nav className="flex flex-1 flex-col gap-0.5 py-3 px-2">
         {nav.map((item) => {
           const active = isActive(item.href)

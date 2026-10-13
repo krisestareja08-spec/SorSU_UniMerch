@@ -14,17 +14,20 @@ import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
 import { cn } from "@/lib/utils"
 import { HistoryButtons } from "@/components/navigation/history-nav"
+import type { VerificationState } from "@/components/verify/verification-nav"
 
 export function MarketplaceHeader({
   dashboards = [],
   fullName,
   isVerified = false,
   affiliation,
+  verification = "verified",
 }: {
   dashboards?: DashboardSummary[]
   fullName?: string | null
   isVerified?: boolean
   affiliation?: string | null
+  verification?: VerificationState
 }) {
   const pathname = usePathname()
   const [drawerOpen, setDrawerOpen] = useState(false)
@@ -119,7 +122,7 @@ export function MarketplaceHeader({
         <div className="h-0.5 w-full bg-gold/70" />
       </header>
 
-      <BurgerDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} dashboards={dashboards} />
+      <BurgerDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} dashboards={dashboards} verification={verification} />
     </>
   )
 }
