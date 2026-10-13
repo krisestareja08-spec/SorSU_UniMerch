@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { resetTheme } from "@/lib/theme"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
+import { VerificationNavItem, type VerificationState } from "@/components/verify/verification-nav"
 
 type NavItem = { href: string; label: string; icon: React.ElementType }
 
@@ -32,10 +33,12 @@ export function BurgerDrawer({
   open,
   onClose,
   dashboards = [],
+  verification = "verified",
 }: {
   open: boolean
   onClose: () => void
   dashboards?: DashboardSummary[]
+  verification?: VerificationState
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -80,6 +83,7 @@ export function BurgerDrawer({
         <div className="h-0.5 bg-gradient-to-r from-gold/80 via-gold/40 to-transparent" />
 
         <nav className="flex-1 overflow-y-auto py-3">
+          {dashboards.length === 0 && <VerificationNavItem state={verification} layout="drawer" onNavigate={onClose} />}
           {nav.map(({ href, label, icon: Icon }) => {
             const active = pathname === href
             return (

@@ -6,6 +6,7 @@ import { PwaRegister } from '@/components/pwa/pwa-register'
 import { OfflineBanner } from '@/components/pwa/offline-banner'
 import { NavigationProgress } from '@/components/navigation-progress'
 import { NavHistoryTracker } from '@/components/navigation/history-nav'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 const sourceSans = Source_Sans_3({
@@ -68,6 +69,7 @@ export default function RootLayout({
         <OfflineBanner />
         {children}
         <PwaRegister />
+        <Toaster />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
