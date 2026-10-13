@@ -1,4 +1,5 @@
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { collegeLabel } from "@/lib/campus-catalog"
 
 /** What a Supply Office branch serves. Centralized branches still belong to a campus location. */
 export type CashierScope = "campus" | "department" | "centralized"
@@ -16,7 +17,7 @@ function campusShort(campus: string | null | undefined) {
 
 export function cashierBranchName(campus: Campus, scope: CashierScope, department?: string | null) {
   const where = campusShort(campus)
-  if (scope === "department") return `Supply Office — ${department} (${where})`
+  if (scope === "department") return `Supply Office — ${collegeLabel(department, { short: true }) ?? department} (${where})`
   if (scope === "centralized") return `Supply Office — Centralized (${where})`
   return `Supply Office — ${where}`
 }

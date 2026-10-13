@@ -8,20 +8,19 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createOrganization } from "@/app/admin/sellers/actions"
-import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { CampusCollegeProgramFields, type CampusCollegeProgram } from "@/components/forms/campus-college-program"
 
 const ORG_CATEGORIES = [
   "Student Organization", "Academic Department", "Faculty Association",
   "Student Council", "Events & Activities", "Supply & Procurement", "Other",
 ]
 
-const CAMPUSES = Object.entries(CAMPUS_LABELS) as [Campus, string][]
-
 export function CreateSellerForm() {
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [category, setCategory] = useState("")
-  const [campus, setCampus] = useState<Campus | "">("")
+  // Campus (Baribag counts as Main for stores) + the college it belongs to, if any
+  const [place, setPlace] = useState<CampusCollegeProgram>({ campus: "", college: "", program: "" })
   const [adminMode, setAdminMode] = useState<"existing" | "new">("existing")
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -29,9 +28,10 @@ export function CreateSellerForm() {
     setError(null)
     const fd = new FormData(e.currentTarget)
     if (!category) { setError("Please select an organization category."); return }
-    if (!campus) { setError("Please select a campus."); return }
+    if (!place.campus) { setError("Please select a campus."); return }
     fd.set("category", category)
-    fd.set("campus", campus)
+    fd.set("campus", place.campus)
+    fd.set("department", place.college)
     fd.set("admin_mode", adminMode)
     startTransition(async () => {
       // On success the action redirects; on failure it returns the reason
@@ -86,16 +86,9 @@ export function CreateSellerForm() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label>
-          <MapPin className="inline size-3.5 mr-1" />Campus *
-        </Label>
-        <Select value={campus} onValueChange={(value) => setCampus((value as Campus) ?? "")}>
-          <SelectTrigger><SelectValue placeholder="Select campus" /></SelectTrigger>
-          <SelectContent>
-            {CAMPUSES.map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">Identifies which SorSU campus this organization belongs to.</p>
+        <p className="flex items-center gap-1 text-sm font-medium"><MapPin className="size-3.5" />Campus and college *</p>
+        <CampusCollegeProgramFields mode="store" collegeOptional idPrefix="org" value={place} onChange={setPlace} />
+        <p className="text-xs text-muted-foreground">Which campus — and college, for college-based organizations — this organization belongs to. Buyers can filter products by it. Baribag Extension is part of the Main campus.</p>
       </div>
 
       <div className="h-px bg-border" />

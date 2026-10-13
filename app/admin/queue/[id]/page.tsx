@@ -11,6 +11,7 @@ import { findDuplicateGroups, formatDateTime, profilesById, signedDocUrl, type A
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { ActionForm } from "@/components/ui/action-form"
 import { BackLink } from "@/components/navigation/history-nav"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 export default async function VerificationRequestPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -69,8 +70,8 @@ export default async function VerificationRequestPage({ params }: { params: Prom
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
               <dt className="text-muted-foreground">Name on request</dt><dd>{request.full_name}</dd>
               <dt className="text-muted-foreground">I.D. number</dt><dd>{request.student_employee_id}</dd>
-              <dt className="text-muted-foreground">Department</dt><dd>{request.department || "—"}</dd>
-              <dt className="text-muted-foreground">Course</dt><dd>{request.course || "—"}</dd>
+              <dt className="text-muted-foreground">College</dt><dd>{collegeLabel(request.department) || "—"}</dd>
+              <dt className="text-muted-foreground">Course / program</dt><dd>{programLabel(request.course) || "—"}</dd>
               <dt className="text-muted-foreground">Applying as</dt><dd>{AFFILIATION_LABELS[request.claimed_affiliation as Affiliation] ?? request.claimed_affiliation}</dd>
               {request.note && (<><dt className="text-muted-foreground">Note</dt><dd className="font-medium text-amber-700">{request.note}</dd></>)}
               {request.review_reason && (<><dt className="text-muted-foreground">Reviewer note</dt><dd>{request.review_reason}</dd></>)}

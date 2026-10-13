@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createCashierBranch } from "@/app/admin/cashiers/actions"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { STORE_CAMPUSES, collegesFor } from "@/lib/campus-catalog"
 import { CASHIER_SCOPE_LABELS, cashierBranchName, type CashierScope } from "@/lib/cashier-branches"
 import { unwrap } from "@/lib/action-result"
 
@@ -55,10 +56,10 @@ export function CreateCashierBranchForm() {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="campus">Campus *</Label>
-          <select id="campus" value={campus} onChange={(e) => setCampus(e.target.value as Campus)} required
+          <select id="campus" value={campus} onChange={(e) => { setCampus(e.target.value as Campus); setDepartment("") }} required
             className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm">
             <option value="">Select campus</option>
-            {Object.entries(CAMPUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {STORE_CAMPUSES.map((v) => <option key={v} value={v}>{CAMPUS_LABELS[v]}</option>)}
           </select>
         </div>
         <div className="space-y-1.5">
@@ -71,8 +72,12 @@ export function CreateCashierBranchForm() {
       </div>
       {scope === "department" && (
         <div className="space-y-1.5">
-          <Label htmlFor="department">Department *</Label>
-          <Input id="department" name="department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. CICT" required />
+          <Label htmlFor="department">College it serves *</Label>
+          <select id="department" name="department" value={department} onChange={(e) => setDepartment(e.target.value)} required disabled={!campus}
+            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm disabled:opacity-50">
+            <option value="">{campus ? "Select college" : "Choose a campus first"}</option>
+            {collegesFor(campus, { forStores: true }).map((c) => <option key={c.code} value={c.code}>{c.abbr} — {c.name}</option>)}
+          </select>
         </div>
       )}
       {preview && <p className="text-sm text-muted-foreground">Branch name: <strong className="text-foreground">{preview}</strong></p>}

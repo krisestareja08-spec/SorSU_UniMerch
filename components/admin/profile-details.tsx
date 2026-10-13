@@ -3,6 +3,7 @@ import { VerifiedBadge } from "@/components/verified-badge"
 import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation, type Campus } from "@/lib/roles"
 import { type AdminProfile, formatDateTime } from "@/lib/admin"
 import { Download, FileText } from "lucide-react"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 /** Full profile information card used on the queue and user detail pages. */
 export function ProfileDetails({ profile, email }: { profile: AdminProfile; email?: string | null }) {
@@ -11,8 +12,8 @@ export function ProfileDetails({ profile, email }: { profile: AdminProfile; emai
     ["Email", email || "—"],
     ["Affiliation", profile.is_identity_verified ? AFFILIATION_LABELS[profile.affiliation as Affiliation] ?? "—" : "Guest (unverified)"],
     ["I.D. number", profile.student_employee_id || "—"],
-    ["Course / program", profile.course || "—"],
-    ["Department / college", profile.department || "—"],
+    ["Course / program", programLabel(profile.course) || "—"],
+    ["College / department", collegeLabel(profile.department) || "—"],
     ["Campus", CAMPUS_LABELS[profile.campus as Campus] ?? profile.campus ?? "—"],
     ["Contact number", profile.contact || "—"],
     ["Birthday", profile.birthday || "—"],

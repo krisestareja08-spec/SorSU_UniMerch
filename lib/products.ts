@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import type { Product } from "@/components/marketplace/product-card"
 import { withPriceRange } from "@/lib/variants"
+import { effectiveCampus } from "@/lib/campus-catalog"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
 
@@ -18,8 +19,10 @@ export type ProductFilters = {
   category?: string
   minPrice?: number
   maxPrice?: number
-  /** Only stores on this campus ("near me") */
+  /** Only stores on this campus ("near me"); Baribag counts as Main */
   campus?: string
+  /** Only stores of this college (seller_profiles.department, a catalog code) */
+  college?: string
   minRating?: number
   inStock?: boolean
   sort?: SortKey
@@ -40,8 +43,14 @@ export function cleanTerm(q: string) {
  */
 export async function findProducts(supabase: Supabase, f: ProductFilters): Promise<Product[]> {
   let sellerScope: string[] | null = null
-  if (f.campus) {
-    const { data } = await supabase.from("seller_profiles").select("id").eq("campus", f.campus)
+  if (f.campus || f.college) {
+    let q = supabase.from("seller_profiles").select("id")
+    const campus = effectiveCampus(f.campus)
+    // Baribag is part of the Main campus for stores
+    if (campus) q = campus === "sorsogon_city_main" ? q.in("campus", ["sorsogon_city_main", "sorsogon_city_baribag"]) : q.eq("campus", campus)
+    if (f.college) q = q.eq("department", f.college)
+    const { data, error } = await q
+    if (error && f.college && /department/.test(error.message)) return [] // college filter needs scripts/32
     sellerScope = (data ?? []).map((s) => s.id)
     if (sellerScope.length === 0) return []
   }

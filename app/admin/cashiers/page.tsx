@@ -13,6 +13,7 @@ import { CASHIER_SCOPE_LABELS, type CashierScope } from "@/lib/cashier-branches"
 import { storefrontHref } from "@/lib/storefront-theme"
 import { cn } from "@/lib/utils"
 import { ActionForm } from "@/components/ui/action-form"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 type Branch = {
   id: string; name: string; store_id: string | null; campus: string | null; scope: CashierScope | null; department: string | null
@@ -67,7 +68,7 @@ export default async function CashierBranchesPage({ searchParams }: { searchPara
                         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10"><Wallet className="size-5 text-primary" /></div>
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold">{b.name}</p>
-                          <p className="text-xs text-muted-foreground">{b.scope ? CASHIER_SCOPE_LABELS[b.scope] : "Whole campus branch"}{b.department ? ` · ${b.department}` : ""}</p>
+                          <p className="text-xs text-muted-foreground">{b.scope ? CASHIER_SCOPE_LABELS[b.scope] : "Whole campus branch"}{b.department ? ` · ${collegeLabel(b.department, { short: true })}` : ""}</p>
                         </div>
                       </div>
                       <p className="mt-3 flex items-center gap-1.5 text-xs">

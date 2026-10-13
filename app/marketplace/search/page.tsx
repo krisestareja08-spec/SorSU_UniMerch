@@ -7,9 +7,10 @@ import { ProductCard } from "@/components/marketplace/product-card"
 import { RatingSummary } from "@/components/reviews/stars"
 import { storefrontHref } from "@/lib/storefront-theme"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { STORE_CAMPUSES, collegeLabel, collegesFor, effectiveCampus, isCollegeCode } from "@/lib/campus-catalog"
 import { SORTS, cleanTerm, findProducts, type SortKey } from "@/lib/products"
 
-type Params = { q?: string; category?: string; min?: string; max?: string; campus?: string; rating?: string; sort?: string; stock?: string }
+type Params = { q?: string; category?: string; min?: string; max?: string; campus?: string; college?: string; rating?: string; sort?: string; stock?: string }
 
 const num = (v?: string) => (v && Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : undefined)
 const selectCls = "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -31,7 +32,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   // Only a "Near me" search needs the campus before the products can load; otherwise it loads alongside them
   const nearMe = params.campus === "near"
   const myCampusEarly = nearMe ? await loadMyCampus() : null
-  const campus = nearMe ? myCampusEarly ?? undefined : params.campus && params.campus in CAMPUS_LABELS ? params.campus : undefined
+  const campus = effectiveCampus(nearMe ? myCampusEarly : params.campus && params.campus in CAMPUS_LABELS ? params.campus : null) ?? undefined
+  const college = isCollegeCode(params.college) ? params.college : undefined
 
   const filters = {
     q: term || undefined,
@@ -39,6 +41,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     minPrice: num(params.min),
     maxPrice: num(params.max),
     campus,
+    college,
     minRating: num(params.rating),
     inStock: params.stock === "1",
     sort,
@@ -61,6 +64,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     filters.minPrice != null && { key: "min", label: `From ₱${filters.minPrice}` },
     filters.maxPrice != null && { key: "max", label: `Up to ₱${filters.maxPrice}` },
     params.campus && { key: "campus", label: params.campus === "near" ? "Near me" : CAMPUS_LABELS[params.campus as Campus] ?? params.campus },
+    college && { key: "college", label: collegeLabel(college, { short: true }) ?? college },
     filters.minRating && { key: "rating", label: `${filters.minRating}★ & up` },
     filters.inStock && { key: "stock", label: "In stock" },
   ].filter(Boolean) as { key: keyof Params; label: string }[]
@@ -116,7 +120,19 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 <select name="campus" defaultValue={params.campus ?? ""} className={selectCls}>
                   <option value="">All campuses</option>
                   {myCampus && <option value="near">Near me ({CAMPUS_LABELS[myCampus as Campus] ?? myCampus})</option>}
-                  {Object.entries(CAMPUS_LABELS).map(([k, label]) => <option key={k} value={k}>{label}</option>)}
+                  {STORE_CAMPUSES.map((k) => <option key={k} value={k}>{CAMPUS_LABELS[k]}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-medium text-muted-foreground">
+                College
+                <select name="college" defaultValue={college ?? ""} className={selectCls}>
+                  <option value="">All colleges</option>
+                  {/* Grouped by campus; once a campus is chosen, only its colleges */}
+                  {(campus ? [campus] : STORE_CAMPUSES).map((c) => (
+                    <optgroup key={c} label={CAMPUS_LABELS[c as Campus]}>
+                      {collegesFor(c, { forStores: true }).map((x) => <option key={x.code} value={x.code}>{x.abbr} — {x.name}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </label>
               <label className="space-y-1 text-xs font-medium text-muted-foreground">

@@ -5,7 +5,9 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation, type Campus } from "@/lib/roles"
+import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
+import { validateIdentity } from "@/lib/campus-catalog"
+import { CampusCollegeProgramFields, type CampusCollegeProgram } from "@/components/forms/campus-college-program"
 import { validateFullName } from "@/lib/profile-rules"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,7 +25,6 @@ import { GoogleSignInButton } from "@/components/auth/google-sign-in-button"
 import { termsAcceptance } from "@/lib/legal"
 
 const AFFILIATIONS = Object.entries(AFFILIATION_LABELS) as [Affiliation, string][]
-const CAMPUSES = Object.entries(CAMPUS_LABELS) as [Campus, string][]
 
 export function SignUpForm() {
   const router = useRouter()
@@ -32,8 +33,8 @@ export function SignUpForm() {
   const [email, setEmail] = useState("")
   const [affiliation, setAffiliation] = useState<Affiliation>("student")
   const [idNumber, setIdNumber] = useState("")
-  const [department, setDepartment] = useState("")
-  const [campus, setCampus] = useState<Campus | "">("")
+  // Campus → college → course/program, from the official catalog
+  const [place, setPlace] = useState<CampusCollegeProgram>({ campus: "", college: "", program: "" })
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -74,9 +75,12 @@ export function SignUpForm() {
         return
       }
     }
-    if (isUniversityMember && !campus) {
-      setError("Please select your campus.")
-      return
+    if (isUniversityMember) {
+      const placeError = place.campus ? validateIdentity(affiliation, place.campus, place.college, place.program) : "Please select your campus."
+      if (placeError) {
+        setError(placeError)
+        return
+      }
     }
 
     setLoading(true)
@@ -102,8 +106,9 @@ export function SignUpForm() {
           affiliation,
           student_or_employee_id: isUniversityMember ? idNumber.trim() : null,
           student_employee_id: isUniversityMember ? idNumber.trim() : null,
-          department: isUniversityMember ? department.trim() : null,
-          campus: isUniversityMember ? campus : null,
+          department: isUniversityMember ? place.college || null : null,
+          course: isUniversityMember ? place.program || null : null,
+          campus: isUniversityMember ? place.campus || null : null,
           // Accounts start unverified; the Verification Admin approves them via the Verification Queue.
           is_identity_verified: false,
           verification_status: "unverified",
@@ -142,8 +147,9 @@ export function SignUpForm() {
         full_name: fullName,
         affiliation,
         student_employee_id: isUniversityMember ? idNumber.trim() || null : null,
-        department: isUniversityMember ? department.trim() || null : null,
-        campus: isUniversityMember ? campus || null : null,
+        department: isUniversityMember ? place.college || null : null,
+        course: isUniversityMember ? place.program || null : null,
+        campus: isUniversityMember ? place.campus || null : null,
       }, { onConflict: "id" }).then(() => {}, () => {})
       router.push("/dashboard")
       return
@@ -236,34 +242,13 @@ export function SignUpForm() {
               onChange={(e) => setIdNumber(e.target.value)}
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="department">Department / College</Label>
-            <Input
-              id="department"
-              placeholder="e.g. CICT"
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-            />
-          </div>
         </div>
       )}
 
       {isUniversityMember && (
         <div className="flex flex-col gap-2">
-          <Label htmlFor="campus">Campus</Label>
-          <Select value={campus} onValueChange={(v) => setCampus(v as Campus)}>
-            <SelectTrigger id="campus">
-              <SelectValue placeholder="Select your campus" />
-            </SelectTrigger>
-            <SelectContent>
-              {CAMPUSES.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-xs text-muted-foreground">Identifies which SorSU campus you belong to.</p>
+          <CampusCollegeProgramFields value={place} onChange={setPlace} affiliation={affiliation} idPrefix="signup" />
+          <p className="text-xs text-muted-foreground">Your campus, college and program as listed by SorSU. Sellers can limit some items to a campus, college or program.</p>
         </div>
       )}
 

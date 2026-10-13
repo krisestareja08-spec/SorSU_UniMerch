@@ -1,5 +1,6 @@
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
+import { collegeLabel, programLabel } from "@/lib/campus-catalog"
 
 /**
  * Pre-order completion forms (Supply Office and its branches): one form per pre-ordered product,
@@ -99,7 +100,7 @@ export async function loadPreorderRecords(storeId: string): Promise<{ records: P
     const p = people.get(o.buyer_id)
     const rec = byKey.get(k) ?? {
       key: k, orderId: o.id, productId: l.product_id, productName: l.product_name,
-      buyerName: p?.full_name?.trim() || "Buyer", course: p?.course?.trim() || p?.department?.trim() || null, contact: p?.contact ?? null,
+      buyerName: p?.full_name?.trim() || "Buyer", course: programLabel(p?.course?.trim(), { short: true }) || collegeLabel(p?.department?.trim(), { short: true }) || null, contact: p?.contact ?? null,
       variation: "", parts: [] as string[], quantity: 0, amountPaid: 0, partial: o.status === "partially_paid",
       orderedAt: o.created_at,
       // A claimed order was paid at pick-up at the latest

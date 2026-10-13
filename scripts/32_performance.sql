@@ -404,6 +404,233 @@ drop trigger if exists log_email_change on auth.users;
 create trigger log_email_change after update of email on auth.users
   for each row execute procedure public.log_email_change();
 
+-- ── 3d. Official Campus → College → Program catalog ─────────────────────
+-- Profiles keep their campus / department / course columns, which now hold catalog codes
+-- (lib/campus-catalog.ts): department = college code ("bulan.cict"), course = program code ("bulan.bsit").
+-- Baribag Extension is part of the Main campus: shown separately only for a student's identity;
+-- for stores, product restrictions and filters it counts as Main.
+
+-- A store's college (optional: campus-wide organizations have none)
+alter table public.seller_profiles add column if not exists department text;
+
+-- Stores and branches on Baribag belong to the Main campus
+update public.seller_profiles set campus = 'sorsogon_city_main' where campus = 'sorsogon_city_baribag';
+update public.dashboards set campus = 'sorsogon_city_main' where campus = 'sorsogon_city_baribag';
+
+-- Restricted products: products.allowed_roles holds role tokens (student, faculty, staff, guest) and,
+-- optionally, "campus:<campus>", "college:<code>", "program:<code>". A buyer must match a role AND,
+-- when places are listed, be verified with a matching campus, college or program.
+create or replace function public.viewer_role_allowed(allowed text[])
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid()
+      and (
+        (coalesce(p.is_identity_verified, false) and p.affiliation = any(allowed))
+        or ('guest' = any(allowed) and (not coalesce(p.is_identity_verified, false) or p.affiliation = 'external'))
+      )
+      and (
+        not exists (select 1 from unnest(allowed) t where t like '%:%')
+        or (coalesce(p.is_identity_verified, false) and (
+             ('campus:' || case when p.campus = 'sorsogon_city_baribag' then 'sorsogon_city_main' else p.campus end) = any(allowed)
+          or ('college:' || p.department) = any(allowed)
+          or ('program:' || p.course) = any(allowed)
+        ))
+      )
+  );
+$$;
+
+-- Users can't change their own account standing; verified users change identity only through
+-- re-verification — except replacing old typed-in course / department text with the official
+-- catalog entry (a catalog code looks like "bulan.bsit"), which keeps them verified and is
+-- still recorded in profile_change_log.
+create or replace function public.guard_profile_verification()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  code_re constant text := '^[a-z]+\.[a-z0-9-]+$';
+begin
+  if auth.uid() is null or public.is_staff() then
+    return new;
+  end if;
+  if new.role is distinct from old.role then
+    raise exception 'Only an administrator can change account roles';
+  end if;
+  if new.account_status is distinct from old.account_status then
+    raise exception 'Only the Verification Admin can change account standing';
+  end if;
+  if new.is_identity_verified is distinct from old.is_identity_verified
+     or (new.verification_status = 'approved' and old.verification_status is distinct from 'approved') then
+    raise exception 'Only a Verification Admin can verify an account';
+  end if;
+  if coalesce(old.is_identity_verified, false) and (
+       new.affiliation is distinct from old.affiliation
+    or new.full_name is distinct from old.full_name
+    or new.student_employee_id is distinct from old.student_employee_id
+    or (new.course is distinct from old.course
+        and not (coalesce(old.course, '') !~ code_re and coalesce(new.course, '') ~ code_re))
+    or (new.department is distinct from old.department
+        and not (coalesce(old.department, '') !~ code_re and coalesce(new.department, '') ~ code_re))
+  ) then
+    raise exception 'Changing your name, I.D. number, course or department requires re-verification';
+  end if;
+  return new;
+end;
+$$;
+
+-- One-time match of old typed-in values to the catalog (only when exactly one entry fits;
+-- Main and Baribag count as one campus). Generated from lib/campus-catalog.ts.
+create temp table if not exists _catalog_colleges (code text, campus text, keys text[]);
+create temp table if not exists _catalog_programs (code text, college text, campus text, keys text[]);
+truncate _catalog_colleges;
+truncate _catalog_programs;
+insert into _catalog_colleges (code, campus, keys) values
+  ('main.coted', 'sorsogon_city_main', array['coted','collegeofteachereducation','collegeofteachereducationcoted','cotedcollegeofteachereducation']),
+  ('main.chs', 'sorsogon_city_main', array['chs','collegeofhealthsciences','collegeofhealthscienceschs','chscollegeofhealthsciences']),
+  ('main.cot', 'sorsogon_city_main', array['cot','collegeoftechnology','collegeoftechnologycot','cotcollegeoftechnology']),
+  ('main.cbm', 'sorsogon_city_main', array['cbm','collegeofbusinessandmanagement','collegeofbusinessandmanagementcbm','cbmcollegeofbusinessandmanagement']),
+  ('main.cs', 'sorsogon_city_main', array['cs','collegeofscience','collegeofsciencecs','cscollegeofscience']),
+  ('main.sgs', 'sorsogon_city_main', array['sgs','schoolofgraduatestudies','schoolofgraduatestudiessgs','sgsschoolofgraduatestudies']),
+  ('baribag.cea', 'sorsogon_city_baribag', array['cea','collegeofengineeringandarchitecture','collegeofengineeringandarchitecturecea','ceacollegeofengineeringandarchitecture']),
+  ('bulan.cict', 'bulan', array['cict','collegeofinformationandcommunicationstechnology','collegeofinformationandcommunicationstechnologycict','cictcollegeofinformationandcommunicationstechnology']),
+  ('bulan.cbme', 'bulan', array['cbme','collegeofbusinessmanagementandeducation','collegeofbusinessmanagementandeducationcbme','cbmecollegeofbusinessmanagementandeducation']),
+  ('castilla.ca', 'castilla', array['ca','collegeofagriculture','collegeofagricultureca','cacollegeofagriculture']),
+  ('magallanes.cfms', 'magallanes', array['cfms','collegeoffisheriesandmarinesciences','collegeoffisheriesandmarinesciencescfms','cfmscollegeoffisheriesandmarinesciences']),
+  ('magallanes.coed', 'magallanes', array['coed','collegeofeducation','collegeofeducationcoed','coedcollegeofeducation']);
+insert into _catalog_programs (code, college, campus, keys) values
+  ('main.beed', 'main.coted', 'sorsogon_city_main', array['beed','bachelorofelementaryeducation','bachelorofelementaryeducationbeed','belementaryeducation']),
+  ('main.bcaed', 'main.coted', 'sorsogon_city_main', array['bcaed','bachelorofcultureandartseducation','bachelorofcultureandartseducationbcaed','bcultureandartseducation']),
+  ('main.bped', 'main.coted', 'sorsogon_city_main', array['bped','bachelorofphysicaleducation','bachelorofphysicaleducationbped','bphysicaleducation']),
+  ('main.bsed-english', 'main.coted', 'sorsogon_city_main', array['bsedenglish','bachelorofsecondaryeducationmajorinenglish','bachelorofsecondaryeducationmajorinenglishbsedenglish','bsecondaryeducationmajorinenglish','bachelorofsecondaryeducationenglish']),
+  ('main.bsed-math', 'main.coted', 'sorsogon_city_main', array['bsedmath','bachelorofsecondaryeducationmajorinmathematics','bachelorofsecondaryeducationmajorinmathematicsbsedmath','bsecondaryeducationmajorinmathematics','bachelorofsecondaryeducationmathematics']),
+  ('main.bsed-science', 'main.coted', 'sorsogon_city_main', array['bsedscience','bachelorofsecondaryeducationmajorinscience','bachelorofsecondaryeducationmajorinsciencebsedscience','bsecondaryeducationmajorinscience','bachelorofsecondaryeducationscience']),
+  ('main.bsed-filipino', 'main.coted', 'sorsogon_city_main', array['bsedfilipino','bachelorofsecondaryeducationmajorinfilipino','bachelorofsecondaryeducationmajorinfilipinobsedfilipino','bsecondaryeducationmajorinfilipino','bachelorofsecondaryeducationfilipino']),
+  ('main.bsed-socstud', 'main.coted', 'sorsogon_city_main', array['bsedsocialstudies','bachelorofsecondaryeducationmajorinsocialstudies','bachelorofsecondaryeducationmajorinsocialstudiesbsedsocialstudies','bsecondaryeducationmajorinsocialstudies','bachelorofsecondaryeducationsocialstudies']),
+  ('main.bs-midwifery', 'main.coted', 'sorsogon_city_main', array['bsmidwifery','bachelorofscienceinmidwifery','bachelorofscienceinmidwiferybsmidwifery']),
+  ('main.bsn', 'main.chs', 'sorsogon_city_main', array['bsn','bachelorofscienceinnursing','bachelorofscienceinnursingbsn','bsnursing']),
+  ('main.btvte', 'main.cot', 'sorsogon_city_main', array['btvte','bacheloroftechnicalvocationalteachereducation','bacheloroftechnicalvocationalteachereducationbtvte','btechnicalvocationalteachereducation']),
+  ('main.bt-drafting', 'main.cot', 'sorsogon_city_main', array['btdrafting','bacheloroftechnologymajorinarchitecturaldrafting','bacheloroftechnologymajorinarchitecturaldraftingbtdrafting','btechnologymajorinarchitecturaldrafting','bacheloroftechnologyarchitecturaldrafting']),
+  ('main.bt-automotive', 'main.cot', 'sorsogon_city_main', array['btautomotive','bacheloroftechnologymajorinautomotivetechnology','bacheloroftechnologymajorinautomotivetechnologybtautomotive','btechnologymajorinautomotivetechnology','bacheloroftechnologyautomotivetechnology']),
+  ('main.bt-civil', 'main.cot', 'sorsogon_city_main', array['btcivil','bacheloroftechnologymajorinciviltechnology','bacheloroftechnologymajorinciviltechnologybtcivil','btechnologymajorinciviltechnology','bacheloroftechnologyciviltechnology']),
+  ('main.bt-electrical', 'main.cot', 'sorsogon_city_main', array['btelectrical','bacheloroftechnologymajorinelectricaltechnology','bacheloroftechnologymajorinelectricaltechnologybtelectrical','btechnologymajorinelectricaltechnology','bacheloroftechnologyelectricaltechnology']),
+  ('main.bt-electronics', 'main.cot', 'sorsogon_city_main', array['btelectronics','bacheloroftechnologymajorinelectronicstechnology','bacheloroftechnologymajorinelectronicstechnologybtelectronics','btechnologymajorinelectronicstechnology','bacheloroftechnologyelectronicstechnology']),
+  ('main.bt-garment', 'main.cot', 'sorsogon_city_main', array['btgarment','bacheloroftechnologymajoringarmenttechnology','bacheloroftechnologymajoringarmenttechnologybtgarment','btechnologymajoringarmenttechnology','bacheloroftechnologygarmenttechnology']),
+  ('main.bt-mechanical', 'main.cot', 'sorsogon_city_main', array['btmechanical','bacheloroftechnologymajorinmechanicaltechnology','bacheloroftechnologymajorinmechanicaltechnologybtmechanical','btechnologymajorinmechanicaltechnology','bacheloroftechnologymechanicaltechnology']),
+  ('main.bt-welding', 'main.cot', 'sorsogon_city_main', array['btwelding','bacheloroftechnologymajorinweldingfabrication','bacheloroftechnologymajorinweldingfabricationbtwelding','btechnologymajorinweldingfabrication','bacheloroftechnologyweldingfabrication']),
+  ('main.bsa', 'main.cbm', 'sorsogon_city_main', array['bsa','bachelorofscienceinaccountancy','bachelorofscienceinaccountancybsa','bsaccountancy']),
+  ('main.bs-entrep', 'main.cbm', 'sorsogon_city_main', array['bsentrep','bachelorofscienceinentrepreneurship','bachelorofscienceinentrepreneurshipbsentrep','bsentrepreneurship']),
+  ('main.bstm', 'main.cbm', 'sorsogon_city_main', array['bstm','bachelorofscienceintourismmanagement','bachelorofscienceintourismmanagementbstm','bstourismmanagement']),
+  ('main.bshm', 'main.cbm', 'sorsogon_city_main', array['bshm','bachelorofscienceinhospitalitymanagement','bachelorofscienceinhospitalitymanagementbshm','bshospitalitymanagement']),
+  ('main.bs-bio', 'main.cs', 'sorsogon_city_main', array['bsbiology','bachelorofscienceinbiology','bachelorofscienceinbiologybsbiology']),
+  ('main.dpa', 'main.sgs', 'sorsogon_city_main', array['dpa','doctorofpublicadministration','doctorofpublicadministrationdpa']),
+  ('main.edd-elm', 'main.sgs', 'sorsogon_city_main', array['eddelm','doctorofeducationmajorineducationalleadershipandmanagement','doctorofeducationmajorineducationalleadershipandmanagementeddelm','doctorofeducationeducationalleadershipandmanagement']),
+  ('main.phd-langed', 'main.sgs', 'sorsogon_city_main', array['phdlanguageed','doctorofphilosophymajorinlanguageeducation','doctorofphilosophymajorinlanguageeducationphdlanguageed','doctorofphilosophylanguageeducation']),
+  ('main.phd-filipino', 'main.sgs', 'sorsogon_city_main', array['phdfilipino','doctorofphilosophymajorinfilipino','doctorofphilosophymajorinfilipinophdfilipino','doctorofphilosophyfilipino']),
+  ('main.phd-mathed', 'main.sgs', 'sorsogon_city_main', array['phdmathed','doctorofphilosophymajorinmathematicseducation','doctorofphilosophymajorinmathematicseducationphdmathed','doctorofphilosophymathematicseducation']),
+  ('main.maed-math', 'main.sgs', 'sorsogon_city_main', array['maedmath','masterofartsineducationmajorinmathematics','masterofartsineducationmajorinmathematicsmaedmath','masterofartsineducationmathematics']),
+  ('main.maed-english', 'main.sgs', 'sorsogon_city_main', array['maedenglish','masterofartsineducationmajorinenglish','masterofartsineducationmajorinenglishmaedenglish','masterofartsineducationenglish']),
+  ('main.maed-filipino', 'main.sgs', 'sorsogon_city_main', array['maedfilipino','masterofartsineducationmajorinfilipino','masterofartsineducationmajorinfilipinomaedfilipino','masterofartsineducationfilipino']),
+  ('main.maed-science', 'main.sgs', 'sorsogon_city_main', array['maedscienceed','masterofartsineducationmajorinscienceeducation','masterofartsineducationmajorinscienceeducationmaedscienceed','masterofartsineducationscienceeducation']),
+  ('main.mat-tech', 'main.sgs', 'sorsogon_city_main', array['mattechnologyed','masterofartsinteachingmajorintechnologyeducation','masterofartsinteachingmajorintechnologyeducationmattechnologyed','masterofartsinteachingtechnologyeducation']),
+  ('main.mat-the', 'main.sgs', 'sorsogon_city_main', array['matthe','masterofartsinteachingmajorintechnologyandhomeeconomics','masterofartsinteachingmajorintechnologyandhomeeconomicsmatthe','masterofartsinteachingtechnologyandhomeeconomics']),
+  ('main.mpa', 'main.sgs', 'sorsogon_city_main', array['mpa','masterofpublicadministration','masterofpublicadministrationmpa']),
+  ('main.mam', 'main.sgs', 'sorsogon_city_main', array['mam','masterofartsinmanagement','masterofartsinmanagementmam']),
+  ('baribag.bs-archi', 'baribag.cea', 'sorsogon_city_baribag', array['bsarchi','bachelorofscienceinarchitecture','bachelorofscienceinarchitecturebsarchi','bsarchitecture']),
+  ('baribag.bsce', 'baribag.cea', 'sorsogon_city_baribag', array['bsce','bachelorofscienceincivilengineering','bachelorofscienceincivilengineeringbsce','bscivilengineering']),
+  ('baribag.bsee', 'baribag.cea', 'sorsogon_city_baribag', array['bsee','bachelorofscienceinelectricalengineering','bachelorofscienceinelectricalengineeringbsee','bselectricalengineering']),
+  ('baribag.bsece', 'baribag.cea', 'sorsogon_city_baribag', array['bsece','bachelorofscienceinelectronicsengineering','bachelorofscienceinelectronicsengineeringbsece','bselectronicsengineering']),
+  ('baribag.bsme', 'baribag.cea', 'sorsogon_city_baribag', array['bsme','bachelorofscienceinmechanicalengineering','bachelorofscienceinmechanicalengineeringbsme','bsmechanicalengineering']),
+  ('bulan.bscs', 'bulan.cict', 'bulan', array['bscs','bachelorofscienceincomputerscience','bachelorofscienceincomputersciencebscs','bscomputerscience']),
+  ('bulan.bsit', 'bulan.cict', 'bulan', array['bsit','bachelorofscienceininformationtechnology','bachelorofscienceininformationtechnologybsit','bsinformationtechnology']),
+  ('bulan.bsis', 'bulan.cict', 'bulan', array['bsis','bachelorofscienceininformationsystems','bachelorofscienceininformationsystemsbsis','bsinformationsystems']),
+  ('bulan.bsais', 'bulan.cict', 'bulan', array['bsais','bachelorofscienceinaccountinginformationsystem','bachelorofscienceinaccountinginformationsystembsais','bsaccountinginformationsystem']),
+  ('bulan.bsa', 'bulan.cbme', 'bulan', array['bsa','bachelorofscienceinaccountancy','bachelorofscienceinaccountancybsa','bsaccountancy']),
+  ('bulan.bpa', 'bulan.cbme', 'bulan', array['bpa','bachelorinpublicadministration','bachelorinpublicadministrationbpa']),
+  ('bulan.bsed', 'bulan.cbme', 'bulan', array['bsed','bachelorofsecondaryeducation','bachelorofsecondaryeducationbsed','bsecondaryeducation']),
+  ('castilla.bsa-crop', 'castilla.ca', 'castilla', array['bsacropscience','bachelorofscienceinagriculturemajorincropscience','bachelorofscienceinagriculturemajorincropsciencebsacropscience','bsagriculturemajorincropscience','bachelorofscienceinagriculturecropscience','bsagriculturecropscience']),
+  ('castilla.bsa-animal', 'castilla.ca', 'castilla', array['bsaanimalscience','bachelorofscienceinagriculturemajorinanimalscience','bachelorofscienceinagriculturemajorinanimalsciencebsaanimalscience','bsagriculturemajorinanimalscience','bachelorofscienceinagricultureanimalscience','bsagricultureanimalscience']),
+  ('castilla.bsa-aged', 'castilla.ca', 'castilla', array['bsaagrieducation','bachelorofscienceinagriculturemajorinagriculturaleducation','bachelorofscienceinagriculturemajorinagriculturaleducationbsaagrieducation','bsagriculturemajorinagriculturaleducation','bachelorofscienceinagricultureagriculturaleducation','bsagricultureagriculturaleducation']),
+  ('castilla.bsab', 'castilla.ca', 'castilla', array['bsab','bachelorofscienceinagribusiness','bachelorofscienceinagribusinessbsab','bsagribusiness']),
+  ('castilla.bsabe', 'castilla.ca', 'castilla', array['bsabe','bachelorofscienceinagriculturalandbiosystemsengineering','bachelorofscienceinagriculturalandbiosystemsengineeringbsabe','bsagriculturalandbiosystemsengineering']),
+  ('magallanes.bsfi', 'magallanes.cfms', 'magallanes', array['bsfi','bachelorofscienceinfisheries','bachelorofscienceinfisheriesbsfi','bsfisheries']),
+  ('magallanes.bs-marbio', 'magallanes.cfms', 'magallanes', array['bsmarinebiology','bachelorofscienceinmarinebiology','bachelorofscienceinmarinebiologybsmarinebiology']),
+  ('magallanes.bs-entrep-fish', 'magallanes.cfms', 'magallanes', array['bsentrepfisheriesbusiness','bachelorofscienceinentrepreneurshipfisheriesbusiness','bachelorofscienceinentrepreneurshipfisheriesbusinessbsentrepfisheriesbusiness','bsentrepreneurshipfisheriesbusiness']),
+  ('magallanes.beed', 'magallanes.coed', 'magallanes', array['beed','bachelorofelementaryeducation','bachelorofelementaryeducationbeed','belementaryeducation']),
+  ('magallanes.bsed-science', 'magallanes.coed', 'magallanes', array['bsedsciences','bachelorofsecondaryeducationmajorinsciences','bachelorofsecondaryeducationmajorinsciencesbsedsciences','bsecondaryeducationmajorinsciences','bachelorofsecondaryeducationsciences']);
+
+create or replace function pg_temp.norm(t text) returns text language sql immutable as
+  $$ select lower(regexp_replace(coalesce(t, ''), '[^a-zA-Z0-9]', '', 'g')) $$;
+create or replace function pg_temp.same_campus(a text, b text) returns boolean language sql immutable as
+  $$ select a is null or b is null
+            or replace(a, 'sorsogon_city_baribag', 'sorsogon_city_main') = replace(b, 'sorsogon_city_baribag', 'sorsogon_city_main') $$;
+
+-- Programs (and the campus that goes with them)
+with m as (
+  select p.id, min(c.code) as code, min(c.campus) as campus
+  from public.profiles p
+  join _catalog_programs c on pg_temp.norm(p.course) = any(c.keys) and pg_temp.same_campus(p.campus, c.campus)
+  where p.course is not null and p.course !~ '^[a-z]+\.[a-z0-9-]+$'
+  group by p.id having count(*) = 1
+)
+update public.profiles p set course = m.code, campus = m.campus from m where p.id = m.id;
+
+-- Colleges: typed name/abbreviation, or the college of the matched program
+with m as (
+  select p.id, min(c.code) as code, min(c.campus) as campus
+  from public.profiles p
+  join _catalog_colleges c on pg_temp.norm(p.department) = any(c.keys) and pg_temp.same_campus(p.campus, c.campus)
+  where p.department is not null and p.department !~ '^[a-z]+\.[a-z0-9-]+$'
+  group by p.id having count(*) = 1
+)
+update public.profiles p set department = m.code, campus = m.campus from m where p.id = m.id;
+update public.profiles p set department = c.college
+from _catalog_programs c
+where c.code = p.course and (p.department is null or p.department !~ '^[a-z]+\.[a-z0-9-]+$');
+
+-- Verification requests (shown to the Verification Admin) — matched within the applicant's campus
+with m as (
+  select r.id, min(c.code) as code
+  from public.verification_requests r
+  join public.profiles p on p.id = r.user_id
+  join _catalog_programs c on pg_temp.norm(r.course) = any(c.keys) and pg_temp.same_campus(p.campus, c.campus)
+  where r.course is not null and r.course !~ '^[a-z]+\.[a-z0-9-]+$'
+  group by r.id having count(*) = 1
+)
+update public.verification_requests r set course = m.code from m where r.id = m.id;
+with m as (
+  select r.id, min(c.code) as code
+  from public.verification_requests r
+  join public.profiles p on p.id = r.user_id
+  join _catalog_colleges c on pg_temp.norm(r.department) = any(c.keys) and pg_temp.same_campus(p.campus, c.campus)
+  where r.department is not null and r.department !~ '^[a-z]+\.[a-z0-9-]+$'
+  group by r.id having count(*) = 1
+)
+update public.verification_requests r set department = m.code from m where r.id = m.id;
+
+-- Supply Office branches that serve one department
+with m as (
+  select d.id, min(c.code) as code
+  from public.dashboards d
+  join _catalog_colleges c on pg_temp.norm(d.department) = any(c.keys) and pg_temp.same_campus(d.campus, c.campus)
+  where d.department is not null and d.department !~ '^[a-z]+\.[a-z0-9-]+$'
+  group by d.id having count(*) = 1
+)
+update public.dashboards d set department = m.code from m where d.id = m.id;
+
+-- Everyone whose identity still isn't on the official list is asked (once) to update it
+insert into public.notifications (user_id, kind, title, body, href)
+select p.id, 'info', 'Update your campus, college and course',
+       'SorSU''s official list of campuses, colleges and programs is now used for your identity and for items limited to a campus, college or program. Please choose yours in My Account.',
+       '/marketplace/account'
+from public.profiles p
+where p.affiliation in ('student', 'faculty', 'staff')
+  and not (
+    p.campus in ('sorsogon_city_main', 'sorsogon_city_baribag', 'bulan', 'castilla', 'magallanes')
+    and exists (select 1 from _catalog_colleges c where c.code = p.department and c.campus = p.campus)
+    and (p.affiliation <> 'student' or exists (select 1 from _catalog_programs c where c.code = p.course and c.college = p.department))
+  )
+  and not exists (select 1 from public.notifications n where n.user_id = p.id and n.title = 'Update your campus, college and course');
+
 -- ── 4. Faster security checks for every policy ───────────────
 
 -- Rewrites one policy expression (temporary helper, gone when this run ends)
