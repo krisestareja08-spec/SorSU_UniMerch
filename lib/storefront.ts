@@ -110,7 +110,7 @@ export type StorefrontProduct = Product & { category: string }
 /** Only this seller's approved products; paginated + optional category filter so it scales. */
 export async function getStorefrontProducts(
   supabase: Supabase,
-  storefront: Pick<Storefront, "id" | "name">,
+  storefront: Pick<Storefront, "id" | "name" | "campus">,
   { category, page = 1 }: { category?: string | null; page?: number },
 ) {
   const from = (page - 1) * STOREFRONT_PAGE_SIZE
@@ -130,6 +130,7 @@ export async function getStorefrontProducts(
     price: Number(p.price),
     seller: storefront.name,
     sellerId: storefront.id,
+    campus: storefront.campus,
     image: p.image_url ?? "/placeholder.jpg",
     badge: p.badge as Product["badge"],
     stock: p.stock,

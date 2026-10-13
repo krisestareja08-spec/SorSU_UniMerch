@@ -74,9 +74,10 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
 
   const sellerIds = [...new Set(rows.map((p) => p.seller_id))]
   const { data: sellers } = sellerIds.length
-    ? await supabase.from("seller_profiles").select("id, org_name").in("id", sellerIds)
-    : { data: [] as { id: string; org_name: string }[] }
+    ? await supabase.from("seller_profiles").select("id, org_name, campus").in("id", sellerIds)
+    : { data: [] as { id: string; org_name: string; campus: string | null }[] }
   const names = new Map((sellers ?? []).map((s) => [s.id, s.org_name]))
+  const campuses = new Map((sellers ?? []).map((s) => [s.id, (s.campus as string | null) ?? null]))
 
   const products = rows.map((p) => ({
     id: p.id,
@@ -84,6 +85,7 @@ export async function findProducts(supabase: Supabase, f: ProductFilters): Promi
     price: Number(p.price),
     seller: names.get(p.seller_id) ?? "Campus Seller",
     sellerId: p.seller_id,
+    campus: campuses.get(p.seller_id) ?? null,
     image: p.image_url ?? "/placeholder.jpg",
     badge: p.badge as Product["badge"],
     stock: p.stock,
