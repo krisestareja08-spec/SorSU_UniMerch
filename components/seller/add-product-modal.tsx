@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils"
 import { unwrap } from "@/lib/action-result"
 import { compressImage } from "@/lib/image-compress"
 import { VariantEditor, draftsToInputs, validateDrafts, type VariantDraft } from "@/components/seller/variant-editor"
+import { RestrictionPicker } from "@/components/seller/restriction-picker"
+import { parseAllowed } from "@/lib/campus-catalog"
 
 export const CATEGORIES = ["Shirts & Uniforms", "Accessories", "Merch & Souvenirs", "Events & Tickets", "Office Supplies", "Food & Beverages", "Lace & ID Accessories", "Other"]
 export const BADGES = ["Available", "Pre-Order", "Interest Check"]
@@ -26,14 +28,6 @@ export const PAYMENT_CHOICES: { value: string; modes: PaymentMode[]; label: stri
   { value: "both",    modes: ["walk_in", "online"], label: "Both",         hint: "Buyer chooses at checkout" },
 ]
 
-// Verified affiliations are unlocked when the Verification Admin approves a user's ID/COR.
-// "Guest" = any signed-in user who isn't a verified university member (scripts/30).
-export const RESTRICTABLE: { value: string; label: string }[] = [
-  { value: "student", label: "Verified Student" },
-  { value: "faculty", label: "Verified Faculty (teaching)" },
-  { value: "staff",   label: "Verified Staff (non-teaching)" },
-  { value: "guest",   label: "Guest (not verified)" },
-]
 
 export function AddProductModal({ sellerId, module = "seller" }: { sellerId: string; module?: "seller" | "cashier" | "supply_office" }) {
   const [open, setOpen] = useState(false)
@@ -103,9 +97,6 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   const paymentModes: PaymentMode[] = PAYMENT_CHOICES.find((c) => c.value === payment)!.modes
   const effectiveModes: PaymentMode[] = paymentModes
 
-  function toggleAllowedRole(role: string) {
-    setAllowedRoles((prev) => prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role])
-  }
 
   async function handleSubmit(e: React.FormEvent, draft: boolean) {
     e.preventDefault()
@@ -122,7 +113,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     const stockNum = hasVariants ? variantRows.reduce((n, r) => n + parseInt(r.stock, 10), 0) : parseInt(stock, 10)
     if (isNaN(stockNum) || stockNum < 0) { setError("Enter a valid stock quantity."); return }
     if (imageFiles.length === 0) { setError("At least one product image is required."); return }
-    if (isRestricted && allowedRoles.length === 0) { setError("Select who can buy this restricted product."); return }
+    if (isRestricted && !parseAllowed(allowedRoles).some((t) => !t.includes(":"))) { setError("Select who can buy this restricted product."); return }
 
     setLoading(true)
     try {
@@ -160,7 +151,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
       formData.set("images", imageUrls.join(","))
       formData.set("draft", String(draft))
       formData.set("is_restricted", String(isRestricted))
-      if (isRestricted) formData.set("allowed_roles", JSON.stringify(allowedRoles))
+      if (isRestricted) formData.set("allowed_roles", JSON.stringify(parseAllowed(allowedRoles)))
       formData.set("has_logo", String(hasLogo))
       formData.set("supply_office_collab", String(canCollab && hasLogo && supplyOfficeCollab))
 
@@ -336,27 +327,12 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
               ))}
             </div>
             {isPreOrder && (
-              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-orders aren't paid online: the buyer uploads an I.D. and picks a pick-up date, you check the I.D., and they pay at your counter on pick-up.</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-orders aren&apos;t paid online: the buyer uploads an I.D. and picks a pick-up date, you check the I.D., and they pay at your counter on pick-up.</p>
             )}
           </div>
 
-          {/* Restricted access */}
-          <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/20 p-3">
-            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <input type="checkbox" checked={isRestricted} onChange={(e) => setIsRestricted(e.target.checked)} />
-              Restrict who can buy this product
-            </label>
-            {isRestricted && (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {RESTRICTABLE.map(({ value: r, label }) => (
-                  <label key={r} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors ${allowedRoles.includes(r) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
-                    <input type="checkbox" checked={allowedRoles.includes(r)} onChange={() => toggleAllowedRole(r)} className="sr-only" />
-                    {label}
-                  </label>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Restricted access: roles + campus / college / program */}
+          <RestrictionPicker restricted={isRestricted} onRestrictedChange={setIsRestricted} tokens={allowedRoles} onChange={setAllowedRoles} />
 
           {/* Logo royalty */}
           <div className="flex flex-col gap-2 rounded-xl border border-gold/30 bg-gold/5 p-3">

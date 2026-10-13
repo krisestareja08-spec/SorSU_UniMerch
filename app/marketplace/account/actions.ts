@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { createClient } from "@/lib/supabase/server"
 import { CAMPUS_LABELS } from "@/lib/roles"
+import { isCollegeCode, isProgramCode, validateIdentity } from "@/lib/campus-catalog"
 import {
   STRICT_FIELD_LABELS, changedStrictFields, normalizeName, validateFullName,
   type ProfileInput, type StrictField,
@@ -48,6 +49,11 @@ export async function saveMyProfile(input: ProfileInput, confirmReverification =
   const nameError = validateFullName(next.full_name)
   if (nameError) return { ok: false, error: nameError }
   if (next.campus && !(next.campus in CAMPUS_LABELS)) return { ok: false, error: "Select your campus from the list." }
+  // Campus, college and program come from the official catalog (lib/campus-catalog.ts)
+  if (next.campus || next.department || next.course) {
+    const placeError = next.campus ? validateIdentity(current?.affiliation ?? "student", next.campus, next.department, next.course) : "Select your campus."
+    if (placeError) return { ok: false, error: placeError }
+  }
   if (next.student_employee_id && !/^[0-9][0-9-]{3,19}$/.test(next.student_employee_id)) return { ok: false, error: "Your I.D. number may only contain digits and hyphens." }
   if (next.birthday && Number.isNaN(Date.parse(next.birthday))) return { ok: false, error: "Enter a valid birthday." }
 
@@ -60,7 +66,12 @@ export async function saveMyProfile(input: ProfileInput, confirmReverification =
     full_name: current?.full_name ?? "", student_employee_id: current?.student_employee_id ?? "",
     course: current?.course ?? "", department: current?.department ?? "",
   }
-  const strictChanges: StrictField[] = changedStrictFields(before, next)
+  // Replacing old typed-in text with the matching catalog entry isn't a change of identity, so a
+  // verified person keeps their status (the change is still recorded in the profile history)
+  const normalizing = (f: StrictField) =>
+    (f === "course" && !isProgramCode(before.course) && isProgramCode(next.course)) ||
+    (f === "department" && !isCollegeCode(before.department) && isCollegeCode(next.department))
+  const strictChanges: StrictField[] = changedStrictFields(before, next).filter((f) => !normalizing(f))
   const verified = !!current?.is_identity_verified
 
   const row = {

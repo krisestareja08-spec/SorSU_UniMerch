@@ -5,6 +5,8 @@ import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation } from "@/lib/roles"
+import { getCollege, getProgram, validateIdentity } from "@/lib/campus-catalog"
+import { CampusCollegeProgramFields, type CampusCollegeProgram } from "@/components/forms/campus-college-program"
 import { validateFullName } from "@/lib/profile-rules"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -62,9 +64,15 @@ export function VerifyForm({
   )
   const [fullName, setFullName] = useState(defaultFullName ?? "")
   const [studentId, setStudentId] = useState(defaultStudentId ?? "")
-  const [department, setDepartment] = useState(defaultDepartment ?? "")
-  const [course, setCourse] = useState(defaultCourse ?? "")
-  const [campus, setCampus] = useState(defaultCampus ?? "")
+  // Campus → college → program from the official catalog. Old free-text values aren't on the list,
+  // so they start empty and the person picks the matching entry.
+  const [place, setPlace] = useState<CampusCollegeProgram>(() => {
+    const campus = defaultCampus && defaultCampus in CAMPUS_LABELS ? defaultCampus : ""
+    const college = getCollege(defaultDepartment)?.campus === campus ? defaultDepartment ?? "" : ""
+    const program = college && getProgram(defaultCourse)?.college === college ? defaultCourse ?? "" : ""
+    return { campus, college, program }
+  })
+  const { campus, college: department, program: course } = place
   const [birthday, setBirthday] = useState(defaultBirthday ?? "")
   const [confirmed, setConfirmed] = useState(false)
   const [idFile, setIdFile] = useState<File | null>(null)
@@ -95,16 +103,9 @@ export function VerifyForm({
       setError("Please enter your student / employee ID.")
       return
     }
-    if (affiliation === "student" && !course.trim()) {
-      setError("Please enter your course / program.")
-      return
-    }
-    if (!department.trim()) {
-      setError("Please enter your department / college.")
-      return
-    }
-    if (!campus) {
-      setError("Please select your campus.")
+    const placeError = campus ? validateIdentity(affiliation, campus, department, course) : "Please select your campus."
+    if (placeError) {
+      setError(placeError)
       return
     }
     if (!idFile) {
@@ -225,41 +226,8 @@ export function VerifyForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="course">Course / program{affiliation === "student" ? "" : " (optional)"}</Label>
-        <input
-          id="course"
-          value={course}
-          onChange={(e) => setCourse(e.target.value)}
-          placeholder="e.g. BS Information Technology"
-          className="h-9 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="department">Department / college</Label>
-        <input
-          id="department"
-          value={department}
-          onChange={(e) => setDepartment(e.target.value)}
-          placeholder="e.g. CICT"
-          className="h-9 rounded-lg border border-input bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="campus">Campus</Label>
-        <Select value={campus} onValueChange={(v) => setCampus(v ?? "")}>
-          <SelectTrigger id="campus">
-            <SelectValue placeholder="Select your campus" />
-          </SelectTrigger>
-          <SelectContent>
-            {Object.entries(CAMPUS_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CampusCollegeProgramFields value={place} onChange={setPlace} affiliation={affiliation} idPrefix="verify" />
+        <p className="text-xs text-muted-foreground">Choose exactly as on your COR / School ID.</p>
       </div>
 
       <div className="flex flex-col gap-2">

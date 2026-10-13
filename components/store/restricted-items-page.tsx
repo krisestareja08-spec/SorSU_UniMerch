@@ -5,8 +5,8 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ShieldCheck } from "lucide-react"
-import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { peso } from "@/lib/analytics"
+import { describeAllowed } from "@/lib/campus-catalog"
 
 /** What a buyer must show for each eligible group (matches the verification rules). */
 function requirement(groups: string[]) {
@@ -51,7 +51,7 @@ export async function RestrictedItemsPage({ ctx }: { ctx: DashboardCtx }) {
                   return (
                     <tr key={p.id} className="border-b border-border/60 last:border-0">
                       <td className="py-2 pr-3"><p className="font-medium">{p.name}</p><p className="text-xs text-muted-foreground">{p.category}</p></td>
-                      <td className="py-2 pr-3">{groups.map((r) => AFFILIATION_LABELS[r as Affiliation] ?? r).join(", ") || "—"}</td>
+                      <td className="py-2 pr-3">{describeAllowed(groups)}</td>
                       <td className="py-2 pr-3 text-xs text-muted-foreground">{requirement(groups)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{peso(Number(p.price))}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{p.stock}</td>

@@ -4,6 +4,8 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { redirect } from "next/navigation"
 import { assertDashboard } from "@/lib/dashboards"
 import { logAudit } from "@/lib/admin"
+import { STORE_CAMPUSES, effectiveCampus, getCollege } from "@/lib/campus-catalog"
+import type { Campus } from "@/lib/roles"
 
 /**
  * Creates a seller ORGANIZATION: its store (storefront), its Seller Dashboard, and appoints the
@@ -28,13 +30,18 @@ async function insertOrganization(formData: FormData) {
   const orgName = (formData.get("org_name") as string)?.trim()
   const description = (formData.get("description") as string) || null
   const category = formData.get("category") as string
-  const campus = formData.get("campus") as string
+  const campus = effectiveCampus(formData.get("campus") as string) ?? ""
+  const department = ((formData.get("department") as string | null) ?? "").trim() || null
   const adminMode = formData.get("admin_mode") === "new" ? "new" : "existing"
   const email = (formData.get("email") as string)?.trim()
   const password = formData.get("password") as string
   const adminName = (formData.get("admin_name") as string)?.trim()
 
   if (!orgName || !category || !campus || !email) throw new Error("Please fill in every required field.")
+  if (!STORE_CAMPUSES.includes(campus as Campus)) throw new Error("Select the organization's campus.")
+  const college = department ? getCollege(department) : null
+  if (department && !college) throw new Error("Select the college from the list.")
+  if (college && effectiveCampus(college.campus) !== campus) throw new Error("That college isn't on the selected campus.")
 
   // ── Resolve the Main Admin account ───────────────────────────────────────
   let mainAdminId: string
@@ -74,7 +81,7 @@ async function insertOrganization(formData: FormData) {
   try {
     const { data: store, error: storeError } = await supabase
       .from("seller_profiles")
-      .insert({ org_name: orgName, description, category, campus, created_by: actorId, status: "active" })
+      .insert({ org_name: orgName, description, category, campus, ...(department ? { department } : {}), created_by: actorId, status: "active" })
       .select("id")
       .single()
     if (storeError || !store) throw new Error(storeError?.message ?? "Failed to create the organization's store.")

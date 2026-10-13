@@ -31,6 +31,7 @@ import { submitOrder } from "./actions"
 import { validateFullName } from "@/lib/profile-rules"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { unwrap } from "@/lib/action-result"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 const BADGE_STYLES: Record<string, string> = {
   "Available":    "bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300",
@@ -367,8 +368,8 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
               {[
                 ["Full Name", buyer?.full_name],
                 ["I.D. Number", buyer?.student_employee_id],
-                ["Course", buyer?.course],
-                ["Department", buyer?.department],
+                ["Course", programLabel(buyer?.course)],
+                ["College", collegeLabel(buyer?.department)],
                 ["Contact", buyer?.contact],
                 ["Campus", buyer?.campus],
                 ["Pickup Method", "Walk-in (SSU Campus)"],

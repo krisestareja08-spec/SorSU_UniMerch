@@ -7,6 +7,7 @@ import { AlertTriangle, ChevronRight, FileText, ShieldCheck } from "lucide-react
 import { findDuplicateGroups, formatDateTime } from "@/lib/admin"
 import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { cn } from "@/lib/utils"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 const TABS = [
   { key: "pending",  label: "Pending",  statuses: ["pending", "under_review"] },
@@ -83,7 +84,7 @@ export default async function VerificationQueuePage({ searchParams }: { searchPa
                 )}
               </p>
               <p className="text-xs text-muted-foreground">
-                {AFFILIATION_LABELS[r.claimed_affiliation as Affiliation] ?? r.claimed_affiliation} · I.D. {r.student_employee_id} · {r.department || "No department"}
+                {AFFILIATION_LABELS[r.claimed_affiliation as Affiliation] ?? r.claimed_affiliation} · I.D. {r.student_employee_id} · {collegeLabel(r.department, { short: true }) || "No college"}
               </p>
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <FileText className="size-3" />

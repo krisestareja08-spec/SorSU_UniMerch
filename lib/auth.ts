@@ -48,6 +48,8 @@ type ProfileRow = {
   is_identity_verified: boolean | null
   campus: string | null
   account_status: string | null
+  department: string | null
+  course: string | null
 }
 
 /** The user's profiles row (one query per request, shared by every caller). */
@@ -55,7 +57,7 @@ export const getProfileRow = cache(async (userId: string): Promise<ProfileRow | 
   const supabase = await createClient()
   const { data, error } = await supabase
     .from("profiles")
-    .select("full_name, role, affiliation, verification_status, is_identity_verified, campus, account_status")
+    .select("full_name, role, affiliation, verification_status, is_identity_verified, campus, account_status, department, course")
     .eq("id", userId)
     .maybeSingle()
   return error ? null : (data as ProfileRow | null)

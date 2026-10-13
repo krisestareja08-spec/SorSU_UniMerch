@@ -8,6 +8,7 @@ import { assertDashboard } from "@/lib/dashboards"
 import { logAudit } from "@/lib/admin"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
 import { cashierBranchName, type CashierScope } from "@/lib/cashier-branches"
+import { STORE_CAMPUSES, getCollege } from "@/lib/campus-catalog"
 
 /**
  * Verification Admin creates a Cashier branch: its dashboard + store (the store is created
@@ -26,7 +27,8 @@ async function createCashierBranchImpl(formData: FormData) {
 
   if (!(campus in CAMPUS_LABELS)) throw new Error("Choose the campus this Supply Office branch belongs to.")
   if (!["campus", "department", "centralized"].includes(scope)) throw new Error("Choose what the branch serves.")
-  if (scope === "department" && department.length < 2) throw new Error("Enter the department this branch serves.")
+  if (scope === "department" && !getCollege(department)) throw new Error("Select the college this branch serves.")
+  if (!STORE_CAMPUSES.includes(campus as Campus)) throw new Error("Choose the branch's campus.")
   if (!email) throw new Error("Enter the Main Admin's email.")
 
   const name = cashierBranchName(campus, scope, department)

@@ -15,7 +15,9 @@ import { compressImage } from "@/lib/image-compress"
 import type { ModuleKey } from "@/lib/modules"
 import type { PaymentMode } from "@/lib/product-pricing"
 import { cn } from "@/lib/utils"
-import { BADGES, CATEGORIES, MAX_IMAGES, PAYMENT_CHOICES, RESTRICTABLE } from "@/components/seller/add-product-modal"
+import { BADGES, CATEGORIES, MAX_IMAGES, PAYMENT_CHOICES } from "@/components/seller/add-product-modal"
+import { RestrictionPicker } from "@/components/seller/restriction-picker"
+import { parseAllowed } from "@/lib/campus-catalog"
 
 /** The product row as the store's Products page loads it (select *) */
 export type EditableProduct = {
@@ -86,7 +88,7 @@ export function EditProductButton({ product, storeId, module }: { product: Edita
     name.trim() !== product.name || description.trim() !== (product.description ?? "") || category !== product.category
     || !sameList(photos.map((p) => p.url), initialPhotos().map((p) => p.url))
     || hasLogo !== !!product.has_logo || (canCollab && hasLogo && collab) !== !!product.supply_office_collab
-    || isRestricted !== !!product.is_restricted || !sameList(isRestricted ? allowedRoles : [], product.is_restricted ? product.allowed_roles ?? [] : [])
+    || isRestricted !== !!product.is_restricted || !sameList(isRestricted ? parseAllowed(allowedRoles) : [], product.is_restricted ? product.allowed_roles ?? [] : [])
 
   function openForm() {
     // Start from the saved product every time
@@ -114,7 +116,7 @@ export function EditProductButton({ product, storeId, module }: { product: Edita
     setError(null)
     if (!name.trim()) { setError("Product name is required."); return }
     if (photos.length === 0) { setError("Keep at least one photo."); return }
-    if (isRestricted && allowedRoles.length === 0) { setError("Select who can buy this restricted product."); return }
+    if (isRestricted && !parseAllowed(allowedRoles).some((t) => !t.includes(":"))) { setError("Select who can buy this restricted product."); return }
     if (!hasSizes && (isNaN(parseFloat(price)) || parseFloat(price) < 0)) { setError("Enter a valid price."); return }
     setSaving(true)
     try {
@@ -144,7 +146,7 @@ export function EditProductButton({ product, storeId, module }: { product: Edita
       fd.set("payment_modes", JSON.stringify(PAYMENT_CHOICES.find((c) => c.value === payment)?.modes ?? (["walk_in", "online"] as PaymentMode[])))
       fd.set("images", urls.join(","))
       fd.set("is_restricted", String(isRestricted))
-      if (isRestricted) fd.set("allowed_roles", JSON.stringify(allowedRoles))
+      if (isRestricted) fd.set("allowed_roles", JSON.stringify(parseAllowed(allowedRoles)))
       fd.set("has_logo", String(hasLogo))
       fd.set("supply_office_collab", String(canCollab && hasLogo && collab))
 
@@ -280,24 +282,8 @@ export function EditProductButton({ product, storeId, module }: { product: Edita
                   </div>
                 </div>
 
-                {/* Restriction */}
-                <div className="space-y-2 rounded-xl border border-border p-3">
-                  <label className="flex items-center gap-2 text-sm font-medium">
-                    <input type="checkbox" className="size-4 accent-primary" checked={isRestricted} onChange={(e) => setIsRestricted(e.target.checked)} />
-                    Restrict who can buy this product
-                  </label>
-                  {isRestricted && (
-                    <div className="flex flex-wrap gap-2">
-                      {RESTRICTABLE.map(({ value, label }) => (
-                        <button key={value} type="button" aria-pressed={allowedRoles.includes(value)}
-                          onClick={() => setAllowedRoles((prev) => prev.includes(value) ? prev.filter((r) => r !== value) : [...prev, value])}
-                          className={cn("rounded-lg border px-2.5 py-1.5 text-xs", allowedRoles.includes(value) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground")}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {/* Restriction: roles + campus / college / program */}
+                <RestrictionPicker restricted={isRestricted} onRestrictedChange={setIsRestricted} tokens={allowedRoles} onChange={setAllowedRoles} />
 
                 {/* Logo royalty */}
                 <div className="space-y-2 rounded-xl border border-gold/30 bg-gold/5 p-3">

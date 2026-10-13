@@ -8,8 +8,8 @@ import { ColumnChart } from "@/components/analytics/charts"
 import { AlertTriangle, ArrowUpDown, Boxes, ClipboardList, PackageX, ShieldCheck, TrendingDown } from "lucide-react"
 import { byMonth, loadSales } from "@/lib/analytics"
 import { formatDateTime } from "@/lib/admin"
-import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { cn } from "@/lib/utils"
+import { describeAllowed } from "@/lib/campus-catalog"
 
 const LOW_STOCK = 5
 
@@ -115,7 +115,7 @@ export async function OfficeHome({ ctx, title, description }: { ctx: DashboardCt
                 {restricted.map((p) => (
                   <li key={p.id} className="flex justify-between gap-3 py-2">
                     <span className="font-medium">{p.name}</span>
-                    <span className="text-muted-foreground">{(p.allowed_roles ?? []).map((r) => AFFILIATION_LABELS[r as Affiliation] ?? r).join(", ") || "—"}</span>
+                    <span className="text-muted-foreground">{describeAllowed(p.allowed_roles)}</span>
                   </li>
                 ))}
               </ul>

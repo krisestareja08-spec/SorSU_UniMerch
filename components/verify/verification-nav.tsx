@@ -1,16 +1,24 @@
 "use client"
 
 import Link from "next/link"
-import { BadgeCheck, ChevronRight, Clock, RotateCcw } from "lucide-react"
+import { BadgeCheck, ChevronRight, Clock, GraduationCap, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { identityOnCatalog } from "@/lib/campus-catalog"
 
 /**
  * Where a buyer stands with identity verification (profiles.verification_status / is_identity_verified):
  *   none — never applied · pending — under review · redo — declined, can reapply · verified — done
+ *   update — applied/verified, but campus, college or course isn't on the official catalog yet
  */
-export type VerificationState = "none" | "pending" | "redo" | "verified"
+export type VerificationState = "none" | "pending" | "redo" | "verified" | "update"
 
-export function verificationState(p: { is_identity_verified?: boolean | null; verification_status?: string | null } | null): VerificationState {
+export function verificationState(p: {
+  is_identity_verified?: boolean | null; verification_status?: string | null
+  affiliation?: string | null; campus?: string | null; department?: string | null; course?: string | null
+} | null): VerificationState {
+  const applied = p?.is_identity_verified || p?.verification_status === "pending" || p?.verification_status === "rejected"
+  // Already applied or verified, but their details predate the official catalog → ask them to update
+  if (p && applied && !identityOnCatalog(p)) return "update"
   if (p?.is_identity_verified) return "verified"
   if (p?.verification_status === "pending") return "pending"
   if (p?.verification_status === "rejected") return "redo"
@@ -24,6 +32,21 @@ export function verificationState(p: { is_identity_verified?: boolean | null; ve
 export function VerificationNavItem({ state, layout, onNavigate }: { state: VerificationState; layout: "sidebar" | "drawer"; onNavigate?: () => void }) {
   if (state === "verified") return null
   const drawer = layout === "drawer"
+
+  if (state === "update") {
+    return (
+      <Link href="/marketplace/account" onClick={onNavigate}
+        className={cn("group flex items-center gap-3 rounded-xl bg-gold px-3 py-2.5 text-primary shadow-sm transition-colors hover:bg-gold/90",
+          drawer ? "mx-4 mb-2" : "mx-2 mb-1")}>
+        <GraduationCap className="size-5 shrink-0" />
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-sm font-semibold">Update your college &amp; course</span>
+          <span className="block text-[11px] text-primary/75">Pick from SorSU&apos;s official list</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 opacity-60 group-hover:opacity-100" />
+      </Link>
+    )
+  }
 
   if (state === "pending") {
     return (

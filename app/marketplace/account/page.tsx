@@ -16,6 +16,8 @@ import { VerifiedBadge } from "@/components/verified-badge"
 import { PhoneVerification } from "@/components/account/phone-verification"
 import { Bone, LoadingRegion } from "@/components/skeletons"
 import { CAMPUS_LABELS, type Campus } from "@/lib/roles"
+import { collegeLabel, getCollege, getProgram, identityOnCatalog, programLabel } from "@/lib/campus-catalog"
+import { CampusCollegeProgramFields } from "@/components/forms/campus-college-program"
 import { STRICT_FIELD_LABELS, validateFullName } from "@/lib/profile-rules"
 import { saveMyProfile } from "./actions"
 import { PenaltyCharges } from "@/components/account/penalty-charges"
@@ -125,10 +127,10 @@ export default function AccountPage() {
         <div className="flex-1 min-w-0">
           <p className="font-serif text-lg font-semibold text-primary-foreground">{profile?.full_name || "Loading…"}</p>
           <VerifiedBadge verified={verify.verified} affiliation={profile?.affiliation} className="mt-1" />
-          {profile?.department && <p className="mt-1 text-sm text-primary-foreground/70">{profile.department}</p>}
+          {profile?.department && <p className="mt-1 text-sm text-primary-foreground/70">{collegeLabel(profile.department, { short: true })}{profile.course ? ` · ${programLabel(profile.course, { short: true })}` : ""}</p>}
           <p className="mt-0.5 text-xs text-gold/80">{profile?.email}</p>
         </div>
-        <button onClick={() => { setForm(profile ?? {}); setEditing(true); setSaveNotice(null) }} className="shrink-0 rounded-lg p-2 text-primary-foreground/70 hover:bg-primary-foreground/10">
+        <button onClick={() => { setForm(editableForm(profile)); setEditing(true); setSaveNotice(null) }} className="shrink-0 rounded-lg p-2 text-primary-foreground/70 hover:bg-primary-foreground/10">
           <Edit2 className="size-4" />
         </button>
       </div>
@@ -153,8 +155,6 @@ export default function AccountPage() {
             {([
               { label: "Full name", key: "full_name", placeholder: "First and last name, as on your I.D." },
               { label: "Student / Employee I.D. number", key: "student_employee_id", placeholder: "e.g. 20210123" },
-              { label: "Course / program", key: "course", placeholder: "e.g. BS Information Technology" },
-              { label: "Department / college", key: "department", placeholder: "e.g. CICT" },
             ] as { label: string; key: EditableKey; placeholder: string }[]).map(({ label, key, placeholder }) => {
               const strict = key in STRICT_FIELD_LABELS
               return (
@@ -167,14 +167,14 @@ export default function AccountPage() {
                 </div>
               )
             })}
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="campus">Campus</Label>
-              <select id="campus" value={form.campus ?? ""} onChange={(e) => setForm((f) => ({ ...f, campus: e.target.value }))}
-                className="h-9 rounded-lg border border-input bg-background px-3 text-sm">
-                <option value="">Select campus</option>
-                {Object.entries(CAMPUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </div>
+            {profile.affiliation !== "external" && (
+              <div className="flex flex-col gap-1.5">
+                <CampusCollegeProgramFields idPrefix="account" affiliation={profile.affiliation}
+                  value={{ campus: form.campus ?? "", college: form.department ?? "", program: form.course ?? "" }}
+                  onChange={(v) => setForm((f) => ({ ...f, campus: v.campus, department: v.college, course: v.program }))} />
+                {verify.verified && <p className="text-xs text-amber-700 dark:text-amber-300">Changing your college or program requires re-verification — except when you&apos;re just picking the official entry for what you typed before.</p>}
+              </div>
+            )}
             <div className="flex flex-col gap-1.5">
               <p className="text-sm font-medium">Contact number</p>
               {PHONE_OTP_ENABLED && <p className="text-xs text-muted-foreground">Changing your number requires a code sent to it by SMS.</p>}
@@ -195,7 +195,16 @@ export default function AccountPage() {
           <div className="space-y-2">
             {saveNotice && <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">{saveNotice}</p>}
             {profile && profile.account_status !== "active" && <AccountStatusNotice status={profile.account_status} />}
-            {profile && <PersonalInfoCard profile={profile} verified={verify.verified} onEdit={() => { setForm(profile); setEditing(true); setSaveNotice(null) }} />}
+            {profile && !identityOnCatalog(profile) && (
+              <div className="flex gap-2 rounded-xl border border-gold/40 bg-gold/10 p-3 text-sm">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-gold" />
+                <p className="flex-1">
+                  <strong>Update your campus, college and course.</strong> SorSU&apos;s official list is now used for your identity and for items limited to a campus, college or program.
+                  <button onClick={() => { setForm(editableForm(profile)); setEditing(true); setSaveNotice(null) }} className="ml-1 font-semibold text-primary underline-offset-2 hover:underline dark:text-gold">Update now</button>
+                </p>
+              </div>
+            )}
+            {profile && <PersonalInfoCard profile={profile} verified={verify.verified} onEdit={() => { setForm(editableForm(profile)); setEditing(true); setSaveNotice(null) }} />}
             <PenaltyCharges />
             {[
               { label: "My Orders", icon: PackageSearch, href: "/marketplace/orders", desc: "Track and review past orders" },
@@ -238,12 +247,19 @@ export default function AccountPage() {
   )
 }
 
+/** The editable copy of the profile: old typed-in college / program text starts empty so the person picks from the list. */
+function editableForm(p: Profile): Partial<Profile> {
+  const college = getCollege(p.department)?.campus === p.campus ? p.department : ""
+  const course = college && getProgram(p.course)?.college === college ? p.course : ""
+  return { ...p, department: college, course }
+}
+
 function PersonalInfoCard({ profile, verified, onEdit }: { profile: Profile; verified: boolean; onEdit: () => void }) {
   const rows: [string, string, boolean][] = [
     ["Full name", profile.full_name, true],
     ["I.D. number", profile.student_employee_id, true],
-    ["Course / program", profile.course, true],
-    ["Department / college", profile.department, true],
+    ["Course / program", programLabel(profile.course) ?? "", true],
+    ["College / department", collegeLabel(profile.department) ?? "", true],
     ["Campus", CAMPUS_LABELS[profile.campus as Campus] ?? profile.campus, false],
     ["Contact number", profile.contact, false],
     ["Birthday", profile.birthday, false],

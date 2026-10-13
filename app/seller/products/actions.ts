@@ -9,6 +9,7 @@ import { computeRoyalty } from "@/lib/access"
 import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
 import { parsePaymentModes } from "@/lib/product-pricing"
 import { loadVariants, parseVariantInputs, variantName, variantRow } from "@/lib/variants"
+import { parseAllowed } from "@/lib/campus-catalog"
 
 const NEEDS_SCRIPT_28 = "Sizes with their own price and stock need scripts/28_product_variants.sql. Ask the admin to run it in Supabase."
 
@@ -51,7 +52,8 @@ async function addProductImpl(formData: FormData) {
   const draft = formData.get("draft") === "true"
   const isRestricted = formData.get("is_restricted") === "true"
   const allowedRolesRaw = formData.get("allowed_roles") as string | null
-  const allowedRoles = isRestricted && allowedRolesRaw ? JSON.parse(allowedRolesRaw) as string[] : []
+  // Roles + optional campus / college / program tokens, checked against the catalog
+  const allowedRoles = isRestricted && allowedRolesRaw ? parseAllowed(JSON.parse(allowedRolesRaw)) : []
   const hasLogo = formData.get("has_logo") === "true"
   // Organization sellers' logo products made with the Main Supply Office: the Supply Office pays the royalty
   const supplyOfficeCollab = mod === "seller" && hasLogo && formData.get("supply_office_collab") === "true"
@@ -60,7 +62,7 @@ async function addProductImpl(formData: FormData) {
   if (isNaN(price) || price < 0) throw new Error("Enter a valid price.")
   if (isNaN(stock) || stock < 0) throw new Error("Enter a valid stock quantity.")
   if (images.length === 0) throw new Error("At least one product image is required.")
-  if (isRestricted && allowedRoles.length === 0) throw new Error("Select who can buy this restricted product.")
+  if (isRestricted && !allowedRoles.some((t) => !t.includes(":"))) throw new Error("Select who can buy this restricted product.")
 
   const royaltyPercentage = hasLogo ? await getGlobalRoyaltyPercentage() : 0
   const { royaltyAmount, finalPrice, isRoyaltyProduct } = computeRoyalty(price, hasLogo, royaltyPercentage)
@@ -166,7 +168,7 @@ async function updateProductImpl(formData: FormData) {
   const tags = String(formData.get("tags") ?? "").split(",").map((t) => t.trim()).filter(Boolean)
   const paymentModes = parsePaymentModes(JSON.parse((formData.get("payment_modes") as string | null) ?? "[]"))
   const isRestricted = formData.get("is_restricted") === "true"
-  const allowedRoles = isRestricted ? (JSON.parse((formData.get("allowed_roles") as string | null) ?? "[]") as string[]) : []
+  const allowedRoles = isRestricted ? parseAllowed(JSON.parse((formData.get("allowed_roles") as string | null) ?? "[]")) : []
   const hasLogo = formData.get("has_logo") === "true"
   const supplyOfficeCollab = mod === "seller" && hasLogo && formData.get("supply_office_collab") === "true"
 
@@ -174,7 +176,7 @@ async function updateProductImpl(formData: FormData) {
   if (!category) throw new Error("Please select a category.")
   if (!["Available", "Pre-Order", "Interest Check", "Sold Out"].includes(badge)) throw new Error("Choose a valid availability.")
   if (images.length === 0) throw new Error("At least one product image is required.")
-  if (isRestricted && allowedRoles.length === 0) throw new Error("Select who can buy this restricted product.")
+  if (isRestricted && !allowedRoles.some((t) => !t.includes(":"))) throw new Error("Select who can buy this restricted product.")
 
   // With sizes, prices live on each size (Sizes & Prices); otherwise the product has one price
   const variants = await loadVariants(supabase, [productId])

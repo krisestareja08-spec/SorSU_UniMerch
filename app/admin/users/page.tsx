@@ -8,6 +8,7 @@ import { DeleteUserButton } from "@/components/admin/delete-user-button"
 import { ChevronRight, Search } from "lucide-react"
 import { PROFILE_COLUMNS, type AdminProfile } from "@/lib/admin"
 import { cn } from "@/lib/utils"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 const FILTERS = [
   { key: "all",        label: "All" },
@@ -93,7 +94,7 @@ export default async function UsersPage({ searchParams }: { searchParams: Promis
                   <Link href={`/admin/users/${u.id}`} className="font-medium text-foreground hover:text-primary hover:underline">{u.full_name || "Unnamed user"}</Link>
                   <div><VerifiedBadge verified={u.is_identity_verified} affiliation={u.affiliation} className="mt-0.5" /></div>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">{u.student_employee_id || "—"} · {u.department || "—"}</td>
+                <td className="px-4 py-2.5 text-muted-foreground">{u.student_employee_id || "—"} · {collegeLabel(u.department, { short: true }) || "—"}</td>
                 <td className="px-4 py-2.5 text-xs">{membershipsByUser.get(u.id)?.join(", ") ?? <span className="text-muted-foreground">—</span>}</td>
                 <td className="px-4 py-2.5">
                   <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize", ACCOUNT_STYLES[u.account_status ?? "active"])}>{u.account_status ?? "active"}</span>

@@ -9,6 +9,7 @@ import { resolveAccountReport } from "../verification-actions"
 import { formatDateTime, profilesById } from "@/lib/admin"
 import { cn } from "@/lib/utils"
 import { ActionForm } from "@/components/ui/action-form"
+import { collegeLabel, describeAllowed, programLabel } from "@/lib/campus-catalog"
 
 const REASON_LABELS: Record<string, string> = {
   dummy_account: "Dummy / fake account",
@@ -102,7 +103,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Prom
                     {r.order_id ? ` · order #${r.order_id.slice(0, 8)}` : ""} · {formatDateTime(r.created_at)}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Profile: I.D. {user?.student_employee_id || "—"} · {user?.department || "no department"} · {user?.contact || "no contact"}
+                    Profile: I.D. {user?.student_employee_id || "—"} · {collegeLabel(user?.department, { short: true }) || "no college"} · {user?.contact || "no contact"}
                   </p>
                 </div>
 

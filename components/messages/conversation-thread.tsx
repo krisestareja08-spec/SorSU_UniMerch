@@ -15,6 +15,7 @@ import {
   CLOSED_REASON, MESSAGE_COLUMNS, STATUS_LABEL, STATUS_STYLE, chatSetupError, chatTime,
   type ChatMessage, type ConversationDetails,
 } from "@/lib/messages"
+import { programLabel } from "@/lib/campus-catalog"
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
@@ -240,7 +241,7 @@ export function ConversationThread({ conversationId, perspective, onActivity, on
           {details && (
             <p className="truncate text-xs text-muted-foreground">
               {asStore
-                ? [AFFILIATION_LABELS[details.buyer.affiliation as Affiliation] ?? details.buyer.affiliation, details.buyer.course, details.buyer.campus].filter(Boolean).join(" · ") || "Buyer"
+                ? [AFFILIATION_LABELS[details.buyer.affiliation as Affiliation] ?? details.buyer.affiliation, programLabel(details.buyer.course, { short: true }), details.buyer.campus].filter(Boolean).join(" · ") || "Buyer"
                 : "Seller"}
             </p>
           )}
