@@ -9,7 +9,7 @@ import { getMyMemberships } from "@/lib/dashboards"
 import { getCurrentUser, getProfileRow } from "@/lib/auth"
 import type { DashboardSummary } from "@/lib/modules"
 import { VerificationPrompt } from "@/components/verify/verification-prompt"
-import { verificationState, type VerificationState } from "@/components/verify/verification-nav"
+import { verificationState, type VerificationState } from "@/lib/verification-state"
 
 /**
  * Buyer-facing chrome (header, user sidebar with "My dashboards", bottom tabs, cart).
