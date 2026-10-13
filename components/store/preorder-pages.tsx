@@ -18,7 +18,7 @@ export async function PreorderFormsPage({ ctx }: { ctx: DashboardCtx }) {
   const forms = error ? [] : await summarizeForms(records, ctx.storeId ?? "")
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Pre-order Forms"
+      <PageHeading title="Pre-order Completion Forms"
         description="One form per pre-ordered product, listing every buyer whose pre-order is purchased and/or claimed. Search a product or a buyer to find a record." />
       {error ? <SetupNotice message={error} /> : <PreorderFormsIndex forms={forms} records={records} basePath={MODULES[ctx.module].basePath} />}
     </ManagementShell>
@@ -35,7 +35,7 @@ export async function PreorderFormPage({ ctx, formId, query }: { ctx: DashboardC
   return (
     <ManagementShell ctx={ctx}>
       <div className="print:hidden"><BackLink href={`${base}/preorders`} className="mb-3" /></div>
-      <PageHeading title={mine[0]?.productName ?? "Pre-order Form"} description="Pre-order completion form: who bought, what size, how much was paid, and whether it's been claimed." />
+      <PageHeading title={mine[0]?.productName ?? "Pre-order Completion Form"} description="Pre-order completion form: who bought, what size, how much was paid, and whether it's been claimed." />
       {error
         ? <SetupNotice message={error} />
         : <PreorderFormView productName={mine[0].productName} storeName={ctx.dashboardName} records={mine} initialQuery={query} />}
