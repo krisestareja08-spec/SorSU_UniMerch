@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/lib/auth"
 import { getBuyerOrders } from "@/lib/orders"
 import { OrderHeader, OrderProductCard, OrderStepper, OrderTimeline, PickupLocationCard } from "@/components/orders/order-parts"
 import { OrderChat } from "@/components/orders/order-chat"
+import { PreorderPickup } from "@/components/orders/preorder-pickup"
 import { ReorderButton } from "@/components/orders/reorder-button"
 import { ReviewForm } from "@/components/reviews/review-form"
 import { Button } from "@/components/ui/button"
@@ -24,7 +25,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const originalTotal = order.items.reduce((sum, i) => sum + i.originalPrice * i.quantity, 0)
   const discount = Math.max(0, originalTotal - order.total)
-  const isPast = order.status === "completed" || order.status === "cancelled"
+  const isPast = ["completed", "cancelled", "refunded"].includes(order.status)
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
@@ -52,6 +53,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </section>
 
         <div className="space-y-4">
+          {order.isPreorder && <PreorderPickup order={order} />}
           <PickupLocationCard location={order.pickupLocation} notes={order.pickupNotes} storeHours={order.storeHours} deadline={order.pickupDeadline} />
 
           {/* Product summary */}
@@ -79,6 +81,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <h2 className="mb-2 font-serif text-base font-semibold">Payment</h2>
             <dl className="space-y-1">
               <div className="flex justify-between"><dt className="text-muted-foreground">Method</dt><dd>{PAYMENT_LABELS[order.paymentMethod] ?? order.paymentMethod}</dd></div>
+              {order.paymentPlan === "half" && <div className="flex justify-between"><dt className="text-muted-foreground">Plan</dt><dd>Half now, balance before pick-up</dd></div>}
+              {order.isPreorder && order.amountPaid != null && order.amountPaid > 0 && (
+                <div className="flex justify-between"><dt className="text-muted-foreground">Paid so far</dt><dd>{peso(order.amountPaid)} of {peso(order.total)}</dd></div>
+              )}
               {order.referenceNumber && <div className="flex justify-between"><dt className="text-muted-foreground">Reference no.</dt><dd>{order.referenceNumber}</dd></div>}
             </dl>
             {order.receiptUrl && (

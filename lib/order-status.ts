@@ -1,7 +1,7 @@
-import { CheckCircle2, Clock, CreditCard, MapPin, Package, XCircle, type LucideIcon } from "lucide-react"
+import { CheckCircle2, Clock, CreditCard, MapPin, Package, RotateCcw, XCircle, type LucideIcon } from "lucide-react"
 
 /** Order lifecycle for campus pickup orders. Shared by buyer pages, receipts and store dashboards. */
-export type OrderStatus = "pending" | "partially_paid" | "paid" | "ready_for_pickup" | "completed" | "cancelled"
+export type OrderStatus = "pending" | "partially_paid" | "paid" | "ready_for_pickup" | "completed" | "cancelled" | "refunded"
 
 type StatusDef = { label: string; badge: string; description: string; icon: LucideIcon }
 
@@ -27,7 +27,7 @@ const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
   ready_for_pickup: {
     label: "For Pick Up",
     badge: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-500/30",
-    description: "Ready for you. Claim it at the pickup location with your I.D. (pre-orders: pay at the counter by your pick-up date).",
+    description: "Ready for you. Claim it at the pickup location with your I.D. (pre-orders: choose your pick-up day and settle any balance).",
     icon: MapPin,
   },
   completed: {
@@ -42,7 +42,16 @@ const ORDER_STATUS: Record<OrderStatus, StatusDef> = {
     description: "This order was cancelled.",
     icon: XCircle,
   },
+  refunded: {
+    label: "Returned / Refunded",
+    badge: "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-500/15 dark:text-orange-300 dark:border-orange-500/30",
+    description: "The items were returned and the payment refunded.",
+    icon: RotateCcw,
+  },
 }
+
+/** Orders that have ended without being completed */
+export const isClosedUnfulfilled = (status: string) => status === "cancelled" || status === "refunded"
 
 /** The normal path an order moves through (cancelled can happen at any point). */
 export const ORDER_FLOW: OrderStatus[] = ["pending", "paid", "ready_for_pickup", "completed"]
@@ -64,7 +73,7 @@ export function buildTimeline(current: string, history: { status: string; create
 
   // Collapse consecutive duplicates
   const steps = recorded.filter((s, i) => i === 0 || s.status !== recorded[i - 1].status)
-  if (current === "cancelled") return { done: steps, upcoming: [] as OrderStatus[] }
+  if (isClosedUnfulfilled(current)) return { done: steps, upcoming: [] as OrderStatus[] }
 
   const reachedIndex = Math.max(ORDER_FLOW.indexOf(current as OrderStatus), current === "partially_paid" ? 0 : -1)
   const upcoming = ORDER_FLOW.slice(reachedIndex + 1).filter((s) => !steps.some((d) => d.status === s))

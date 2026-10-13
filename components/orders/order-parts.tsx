@@ -1,7 +1,7 @@
 import Image from "next/image"
 import Link from "next/link"
 import { CheckCircle2, Circle, Clock3, MapPin, Package, Store } from "lucide-react"
-import { buildTimeline, formatOrderTime, ORDER_FLOW, peso, statusDef, type OrderStatus } from "@/lib/order-status"
+import { buildTimeline, formatOrderTime, isClosedUnfulfilled, ORDER_FLOW, peso, statusDef, type OrderStatus } from "@/lib/order-status"
 import type { BuyerOrder, BuyerOrderItem } from "@/lib/orders"
 import { storefrontHref } from "@/lib/storefront-theme"
 import { cn } from "@/lib/utils"
@@ -46,7 +46,8 @@ export function OrderHeader({ order }: { order: BuyerOrder }) {
  * A cancelled order shows the steps it reached, then a red Cancelled step.
  */
 export function OrderStepper({ order }: { order: BuyerOrder }) {
-  const cancelled = order.status === "cancelled"
+  // Cancelled or returned / refunded: the steps reached, then that final step in red
+  const cancelled = isClosedUnfulfilled(order.status)
   const reachedAt = (s: string) => order.history.find((h) => h.status === s)?.created_at ?? null
   // How far along the normal flow the order got (partially paid still counts as the first step)
   const lastReached = cancelled
@@ -55,7 +56,7 @@ export function OrderStepper({ order }: { order: BuyerOrder }) {
   const steps: { status: string; state: "done" | "current" | "upcoming" | "cancelled"; at: string | null }[] = cancelled
     ? [
         ...ORDER_FLOW.slice(0, lastReached + 1).map((s) => ({ status: s, state: "done" as const, at: reachedAt(s) })),
-        { status: "cancelled", state: "cancelled", at: reachedAt("cancelled") },
+        { status: order.status, state: "cancelled", at: reachedAt(order.status) },
       ]
     : ORDER_FLOW.map((s, i) => ({
         status: i === 0 && order.status === "partially_paid" ? "partially_paid" : s,
@@ -109,7 +110,7 @@ export function OrderTimeline({ order }: { order: BuyerOrder }) {
       {steps.map((step, i) => {
         const def = statusDef(step.status)
         const last = i === steps.length - 1
-        const cancelled = step.status === "cancelled"
+        const cancelled = isClosedUnfulfilled(step.status)
         return (
           <li key={`${step.status}-${i}`} className="relative flex gap-3">
             {!last && (

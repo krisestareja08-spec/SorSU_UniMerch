@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 const TABS = [
   { id: "active", label: "Active", statuses: ["pending", "partially_paid", "paid", "ready_for_pickup"], empty: "No orders in progress." },
   { id: "completed", label: "Completed", statuses: ["completed"], empty: "No completed purchases yet." },
-  { id: "cancelled", label: "Cancelled", statuses: ["cancelled"], empty: "No cancelled orders." },
+  { id: "cancelled", label: "Cancelled", statuses: ["cancelled", "refunded"], empty: "No cancelled or refunded orders." },
 ] as const
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {

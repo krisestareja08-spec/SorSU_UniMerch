@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client"
 
 /**
  * Pre-order I.D. check (scripts/29): the shop opens the photo the buyer uploaded at checkout, then
- * approves it (the order becomes "For Pick Up") or rejects it (the order is cancelled).
+ * approves it (the shop can then record the payment) or rejects it (the order is cancelled).
  */
 export function PreorderIdReview({ orderId, idPath, onDone }: { orderId: string; idPath: string | null; onDone: () => void }) {
   const [url, setUrl] = useState<string | null>(null)
@@ -29,7 +29,7 @@ export function PreorderIdReview({ orderId, idPath, onDone }: { orderId: string;
     setBusy(approve ? "approve" : "reject")
     setError(null)
     const { error: err } = await createClient().from("orders")
-      .update(approve ? { id_status: "approved", status: "ready_for_pickup" } : { id_status: "rejected", status: "cancelled" })
+      .update(approve ? { id_status: "approved" } : { id_status: "rejected", status: "cancelled" })
       .eq("id", orderId)
     setBusy(null)
     if (err) setError(err.message)
@@ -54,7 +54,7 @@ export function PreorderIdReview({ orderId, idPath, onDone }: { orderId: string;
       {error && <p role="alert" className="mt-2 text-xs text-destructive">{error}</p>}
       <div className="mt-3 flex flex-wrap gap-2">
         <Button size="sm" disabled={busy !== null || !url} onClick={() => decide(true)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-          {busy === "approve" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Approve — For Pick Up
+          {busy === "approve" ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Approve I.D.
         </Button>
         <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => decide(false)} className="gap-1 border-destructive/30 text-destructive hover:bg-destructive/5">
           {busy === "reject" ? <Loader2 className="size-3 animate-spin" /> : <X className="size-3" />}Reject

@@ -25,9 +25,9 @@ async function submitOrderImpl(args: {
   paymentMethod: string
   receiptUrl?: string
   total: number
-  /** Pre-orders: the buyer's pick-up date (YYYY-MM-DD) and their uploaded I.D. (preorder-ids bucket) */
-  pickupDate?: string
+  /** Pre-orders: the buyer's uploaded I.D. (preorder-ids bucket) and, paying online, full or half now */
   idPath?: string
+  paymentPlan?: "full" | "half"
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -85,32 +85,25 @@ async function submitOrderImpl(args: {
     throw new Error(`You have an unpaid ₱${owed.toLocaleString()} penalty with this shop. Pay it from your account page to order again.`)
   }
 
-  // Pre-orders: checked out on their own, no upfront payment (paid at the counter on pick-up),
-  // the buyer's I.D. for the shop to check, and a pick-up date within the shop's 3–7 day window.
+  // Each product allows walk-in payment, online payment or both; the chosen method must suit every item.
+  const mode = PAYMENT_METHOD_MODE[args.paymentMethod]
+  if (!mode) throw new Error("Choose a payment method.")
+  const notAllowed = products.find((product) => !parsePaymentModes(product.payment_modes).includes(mode))
+  if (notAllowed) {
+    throw new Error(`${notAllowed.name} can only be paid ${mode === "online" ? "at the store (walk-in)" : "online"}.`)
+  }
+
+  // Pre-orders (scripts/29): checked out on their own, with the buyer's I.D. for the shop to check.
+  // Paid online in full or half (paid pre-orders are served first), or walk-in at the counter.
+  // The pick-up day is chosen later, once the shop marks the pre-order ready.
   const isPreOrder = products.some((product) => product.badge === "Pre-Order")
-  let preOrder: { pickupDate: string; idPath: string } | null = null
+  let preOrder: { idPath: string; plan: "full" | "half" | null } | null = null
   if (isPreOrder) {
     if (products.some((product) => product.badge !== "Pre-Order")) throw new Error("Check out pre-order items on their own.")
-    const store = shopIds[0]
-    const { data: shop } = await supabase.from("seller_profiles").select("claim_window_days").eq("id", store).maybeSingle()
-    const windowDays = Math.min(7, Math.max(3, Number(shop?.claim_window_days ?? 7)))
-    // Dates in Philippine time
-    const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })
-    const date = (args.pickupDate ?? "").trim()
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date < day(1) || date > day(windowDays)) {
-      throw new Error(`Choose a pick-up date from tomorrow up to ${windowDays} days from today.`)
-    }
     const idPath = (args.idPath ?? "").trim()
-    if (!idPath.startsWith(`${store}/${user.id}/`)) throw new Error("Upload a photo of your I.D. so the shop can check it.")
-    preOrder = { pickupDate: date, idPath }
-  } else {
-    // Each product allows walk-in payment, online payment or both; the chosen method must suit every item.
-    const mode = PAYMENT_METHOD_MODE[args.paymentMethod]
-    if (!mode) throw new Error("Choose a payment method.")
-    const notAllowed = products.find((product) => !parsePaymentModes(product.payment_modes).includes(mode))
-    if (notAllowed) {
-      throw new Error(`${notAllowed.name} can only be paid ${mode === "online" ? "at the store (walk-in)" : "online"}.`)
-    }
+    if (!idPath.startsWith(`${shopIds[0]}/${user.id}/`)) throw new Error("Upload a photo of your I.D. so the shop can check it.")
+    const plan = mode === "online" ? (args.paymentPlan === "half" ? "half" : "full") : null
+    preOrder = { idPath, plan }
   }
 
   const productById = new Map(products.map((product) => [product.id, product]))
@@ -180,14 +173,13 @@ async function submitOrderImpl(args: {
       buyer_id: user.id,
       status: "pending",
       total,
-      // Pre-orders are paid in cash at the counter on pick-up
-      payment_method: preOrder ? "cash" : args.paymentMethod,
-      receipt_url: preOrder ? null : args.receiptUrl ?? null,
+      payment_method: args.paymentMethod,
+      receipt_url: args.receiptUrl ?? null,
     }
     const pickup = { seller_id: storeId, pickup_location: store?.pickup_location ?? null, pickup_notes: store?.pickup_notes ?? null }
-    // Pre-order: picked up by the end of the chosen date (Philippine time); the shop checks the I.D. first
+    // Pre-order: the shop checks the I.D. first; no pick-up deadline until it's ready
     const attempts = preOrder
-      ? [{ ...base, ...pickup, pickup_date: preOrder.pickupDate, pickup_deadline: `${preOrder.pickupDate}T23:59:59+08:00`, buyer_id_path: preOrder.idPath, id_status: "pending" }]
+      ? [{ ...base, ...pickup, is_preorder: true, payment_plan: preOrder.plan, buyer_id_path: preOrder.idPath, id_status: "pending" }]
       // Older databases lack scripts/13 (pickup columns): retry with fewer columns.
       : [{ ...base, ...pickup }, base]
     let order: { id: string } | null = null
