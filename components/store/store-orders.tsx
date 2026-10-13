@@ -11,7 +11,7 @@ import { PageHeading } from "@/components/management/dashboard-ui"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
-import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle, Banknote, Search } from "lucide-react"
+import { ShoppingCart, Package, Receipt, Check, Loader2, AlertTriangle, Bell, BadgeCheck, MessageCircle, Banknote, Search, CalendarClock, RotateCcw } from "lucide-react"
 import { OrderChat } from "@/components/orders/order-chat"
 import { PreorderIdReview } from "@/components/store/preorder-id-review"
 import { StorePenalties } from "@/components/store/store-penalties"
@@ -25,8 +25,10 @@ type Order = {
   created_at: string; receipt_url: string | null; reference_number: string | null
   amount_paid: number | null; buyer_id: string
   items: OrderLine[]
-  /** Pre-orders (scripts/29): buyer's pick-up date, I.D. photo and the shop's I.D. check */
-  pickup_date?: string | null; id_status?: string | null; buyer_id_path?: string | null
+  /** Pre-orders (scripts/29): pick-up day the buyer chose and its deadline, I.D. photo and the
+   *  shop's I.D. check, and full / half online payment */
+  is_preorder?: boolean; pickup_date?: string | null; pickup_deadline?: string | null
+  id_status?: string | null; buyer_id_path?: string | null; payment_plan?: string | null
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -36,15 +38,23 @@ const STATUS_COLORS: Record<string, string> = {
   ready_for_pickup: "bg-primary/10 text-primary",
   completed:        "bg-muted text-muted-foreground",
   cancelled:        "bg-destructive/10 text-destructive",
+  refunded:         "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
 }
 const STATUS_LABELS: Record<string, string> = {
-  pending: "Pending", paid: "Paid", partially_paid: "Partially Paid",
-  ready_for_pickup: "For Pick Up", completed: "Completed", cancelled: "Cancelled",
+  pending: "Pending", paid: "Payment Received", partially_paid: "Partially Paid",
+  ready_for_pickup: "For Pick Up", completed: "Completed", cancelled: "Cancelled", refunded: "Returned / Refunded",
 }
 
 const PAYMENT_LABELS: Record<string, string> = { cash: "Walk-in (cash)", gcash: "GCash", bank: "Bank transfer" }
 
 const peso = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+
+const balanceOf = (o: Order) => Math.max(0, o.total - (o.amount_paid ?? 0))
+/** A pre-order counts as paid (served first) once any payment is recorded */
+const preorderPaid = (o: Order) => (o.amount_paid ?? 0) > 0 || o.status === "paid" || o.status === "partially_paid"
+const pickupMissed = (o: Order) => o.status === "ready_for_pickup" && !!o.pickup_deadline && new Date(o.pickup_deadline) < new Date()
+const shortDay = (ymd: string) => new Date(`${ymd}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
+const deadlineDay = (iso: string) => new Date(iso).toLocaleDateString(undefined, { timeZone: "Asia/Manila", weekday: "short", month: "short", day: "numeric" })
 
 const orderDate = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
@@ -76,7 +86,7 @@ function ThumbStack({ items }: { items: OrderLine[] }) {
 /** What the store should do next with an order, shown above its buttons */
 function nextStep(o: Order, needsId: boolean): string | null {
   if (needsId) return "This order has restricted items — check the buyer's I.D. before confirming it."
-  if (o.pickup_date && o.status === "pending" && o.id_status !== "approved") return "Pre-order: review the buyer's I.D. to accept it."
+  if (o.is_preorder) return preorderStep(o)
   const balance = o.total - (o.amount_paid ?? 0)
   switch (o.status) {
     case "pending": return o.payment_method === "cash" ? "Waiting for the buyer to pay at the counter." : "Check the payment receipt, then mark the order paid."
@@ -84,6 +94,27 @@ function nextStep(o: Order, needsId: boolean): string | null {
     case "paid": return "Prepare the items, then mark the order for pick up."
     case "ready_for_pickup": return o.pickup_date && o.payment_method === "cash" && balance > 0
       ? `Collect ${peso(balance)} when the buyer picks up.` : "Hand the items over when the buyer arrives, then mark it completed."
+  }
+  return null
+}
+
+/** Pre-orders: I.D. → payment → ready → buyer's pick-up day → completed */
+function preorderStep(o: Order): string | null {
+  const balance = balanceOf(o)
+  switch (o.status) {
+    case "pending":
+      if (o.id_status !== "approved") return "Check the buyer's I.D. first."
+      return o.payment_method === "cash"
+        ? "Walk-in: record the payment when the buyer pays at the counter, or mark it ready once the items arrive."
+        : `Check the receipt (${o.payment_plan === "half" ? `half: ${peso(Math.round(o.total * 50) / 100)}` : `full: ${peso(o.total)}`}), then record the payment.`
+    case "partially_paid": return `Balance of ${peso(balance)}. Mark it ready for pick up once the items arrive.`
+    case "paid": return "Paid in full. Mark it ready for pick up once the items arrive. The buyer is notified."
+    case "ready_for_pickup":
+      if (pickupMissed(o)) return "The buyer missed their pick-up day. Give a new day, or return / refund the payment."
+      if (!o.pickup_date) return `Waiting for the buyer to choose a pick-up day${o.pickup_deadline ? ` (by ${deadlineDay(o.pickup_deadline)})` : ""}.`
+      return balance > 0
+        ? `Pick-up on ${shortDay(o.pickup_date)}. Collect the ${peso(balance)} balance and mark it fully paid before completing.`
+        : `Pick-up on ${shortDay(o.pickup_date)}. Hand the items over, then mark it completed.`
   }
   return null
 }
@@ -158,6 +189,81 @@ function CounterPayment({ order, busy, blocked, onPaid }: {
   )
 }
 
+/**
+ * Pre-order payments: cash handed over at the counter, or an online transfer checked against the
+ * receipt. Full → Payment Received (or, once ready, fully paid / released); less → Partially Paid.
+ */
+function RecordPayment({ order, busy, blocked, onRecord }: {
+  order: Order
+  busy: boolean
+  blocked: boolean
+  onRecord: (status: "completed" | "paid" | "partially_paid" | "ready_for_pickup", amountPaid: number) => void
+}) {
+  const online = order.payment_method !== "cash"
+  const ready = order.status === "ready_for_pickup"
+  const due = balanceOf(order)
+  // An online "half now" pre-order: the receipt should show half the total
+  const suggested = online && order.status === "pending" && order.payment_plan === "half" ? Math.round(order.total * 50) / 100 : due
+  const [open, setOpen] = useState(false)
+  const [amount, setAmount] = useState("")
+  const received = amount === "" ? suggested : Number.parseFloat(amount)
+  const valid = Number.isFinite(received) && received > 0
+  const full = valid && received >= due
+  const paidTotal = Math.min(order.total, (order.amount_paid ?? 0) + (valid ? received : 0))
+
+  if (!open) {
+    return (
+      <Button size="sm" disabled={busy || blocked} onClick={() => setOpen(true)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+        <Banknote className="size-3.5" />{online ? "Record Payment" : "Receive Payment"}
+      </Button>
+    )
+  }
+  return (
+    <div className="w-full rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 dark:border-emerald-500/20 dark:bg-emerald-500/5">
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <p className="text-[11px] text-muted-foreground">Balance</p>
+          <p className="font-serif text-lg font-bold text-foreground">{peso(due)}</p>
+        </div>
+        <label className="block">
+          <span className="text-[11px] text-muted-foreground">{online ? "Amount on receipt" : "Cash received"}</span>
+          <Input type="number" inputMode="decimal" min="0" step="0.01" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder={String(suggested)} className="mt-0.5 h-8 text-sm font-semibold" />
+        </label>
+        <div>
+          <p className="text-[11px] text-muted-foreground">{full ? (online ? "Fully paid" : "Change") : "Balance after"}</p>
+          <p className={cn("font-serif text-lg font-bold", full ? "text-emerald-700 dark:text-emerald-400" : "text-blue-600 dark:text-blue-400")}>
+            {!valid ? "—" : full ? (online ? "✓" : peso(received - due)) : peso(order.total - paidTotal)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {!valid ? (
+          <p className="text-xs text-muted-foreground">Enter the amount {online ? "on the receipt" : "the buyer handed over"}.</p>
+        ) : full && ready ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onRecord("completed", order.total)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+              {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Fully Paid &amp; Release Items
+            </Button>
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => onRecord("ready_for_pickup", order.total)} className="gap-1">
+              Mark Fully Paid
+            </Button>
+          </>
+        ) : full ? (
+          <Button size="sm" disabled={busy} onClick={() => onRecord("paid", order.total)} className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+            {busy ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Payment Received
+          </Button>
+        ) : (
+          <Button size="sm" variant="outline" disabled={busy} onClick={() => onRecord(ready ? "ready_for_pickup" : "partially_paid", paidTotal)} className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
+            Partially Paid ({peso(paidTotal)} of {peso(order.total)})
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" disabled={busy} onClick={() => { setOpen(false); setAmount("") }} className="ml-auto text-xs">Close</Button>
+      </div>
+    </div>
+  )
+}
+
 const DATE_FILTERS = [
   { label: "Today", days: 0 },
   { label: "This Week", days: 7 },
@@ -212,10 +318,13 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       map.set(o.id, cur)
     }
     // Pre-order details in a separate query so older databases still list orders
-    const { data: pre } = await supabase.from("orders").select("id, pickup_date, id_status, buyer_id_path").in("id", [...map.keys()])
-    for (const p of (pre ?? []) as { id: string; pickup_date: string | null; id_status: string | null; buyer_id_path: string | null }[]) {
+    type Pre = { id: string; pickup_date: string | null; pickup_deadline?: string | null; id_status: string | null; buyer_id_path: string | null; is_preorder?: boolean; payment_plan?: string | null }
+    const preFor = (columns: string) => supabase.from("orders").select(columns).in("id", [...map.keys()]) as unknown as Promise<{ data: Pre[] | null; error: unknown }>
+    let { data: pre, error: preError } = await preFor("id, pickup_date, pickup_deadline, id_status, buyer_id_path, is_preorder, payment_plan")
+    if (preError) ({ data: pre } = await preFor("id, pickup_date, id_status, buyer_id_path")) // before the latest scripts/29
+    for (const p of pre ?? []) {
       const o = map.get(p.id)
-      if (o) Object.assign(o, { pickup_date: p.pickup_date, id_status: p.id_status, buyer_id_path: p.buyer_id_path })
+      if (o) Object.assign(o, { ...p, is_preorder: !!p.is_preorder || !!p.pickup_date || !!p.buyer_id_path })
     }
     // Newest first (order ids are random, so they can't be used for ordering)
     setOrders([...map.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)))
@@ -224,7 +333,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     if (chatOrder) {
       chatParamHandled.current = true
       setChatOpen(chatOrder.id)
-      if (chatOrder.status === "completed" || chatOrder.status === "cancelled") { setTab("history"); setHistoryDays(3650) }
+      if (["completed", "cancelled", "refunded"].includes(chatOrder.status)) { setTab("history"); setHistoryDays(3650) }
       setTimeout(() => document.getElementById(`order-${chatOrder.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100)
     }
     const ids = [...map.keys()]
@@ -243,23 +352,38 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     })
   }, [])
 
-  async function setStatus(orderId: string, status: string, refNum?: string, amountPaid?: number) {
+  async function updateOrder(orderId: string, update: Record<string, unknown>) {
     setUpdating(orderId)
-    const supabase = createClient()
-    const update: Record<string, unknown> = { status }
-    if (refNum !== undefined) update.reference_number = refNum || null
-    if (amountPaid !== undefined) update.amount_paid = amountPaid
-    const { error: err } = await supabase.from("orders").update(update).eq("id", orderId)
+    const { error: err } = await createClient().from("orders").update(update).eq("id", orderId)
     if (err) alert(err.message)
     else await load()
     setUpdating(null)
   }
 
+  function setStatus(orderId: string, status: string, refNum?: string, amountPaid?: number) {
+    const update: Record<string, unknown> = { status }
+    if (refNum !== undefined) update.reference_number = refNum || null
+    if (amountPaid !== undefined) update.amount_paid = amountPaid
+    return updateOrder(orderId, update)
+  }
+
+  function refund(o: Order) {
+    if (!window.confirm(`Mark order #${o.id.slice(0, 8)} as returned / refunded? Give the buyer back ${peso(o.amount_paid ?? 0)}. The items go back to stock.`)) return
+    return setStatus(o.id, "refunded")
+  }
+
   if (!profile) return <div className="flex min-h-screen items-center justify-center"><Loader2 className="size-6 animate-spin text-primary" /></div>
 
   const activeStatuses = ["pending", "paid", "partially_paid", "ready_for_pickup"]
-  const historyStatuses = ["completed", "cancelled"]
+  const historyStatuses = ["completed", "cancelled", "refunded"]
   const now = new Date()
+
+  // Pre-order queue: paid (full or half) first, then unpaid walk-ins — each in the order placed
+  const queue = new Map(
+    orders.filter((o) => o.is_preorder && activeStatuses.includes(o.status))
+      .sort((a, b) => Number(preorderPaid(b)) - Number(preorderPaid(a)) || a.created_at.localeCompare(b.created_at))
+      .map((o, i) => [o.id, i + 1]),
+  )
 
   const query = search.trim().toLowerCase().replace(/^#/, "")
   const filteredOrders = orders.filter((o) => {
@@ -267,6 +391,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       && !o.items.some((l) => l.name.toLowerCase().includes(query))) return false
     if (tab === "active") {
       if (!activeStatuses.includes(o.status)) return false
+      if (statusFilter === "preorders") return !!o.is_preorder
       if (statusFilter !== "all" && o.status !== statusFilter) return false
       return true
     } else {
@@ -275,6 +400,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       return historyDays === 0 ? diff < 1 : diff <= historyDays
     }
   })
+
+  if (tab === "active" && statusFilter === "preorders") filteredOrders.sort((a, b) => (queue.get(a.id) ?? 0) - (queue.get(b.id) ?? 0))
 
   const readyOrders = orders.filter((o) => o.status === "ready_for_pickup")
 
@@ -327,11 +454,15 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                 </div>
                 <div className="ml-auto flex items-center gap-2">
                   <span className="text-sm font-bold text-gold">₱{o.total.toLocaleString()}</span>
-                  <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
-                    className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-                    {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
-                    Complete
-                  </Button>
+                  {o.is_preorder && balanceOf(o) > 0 ? (
+                    <span className="rounded-full bg-blue-100 px-2 py-1 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">{peso(balanceOf(o))} due</span>
+                  ) : (
+                    <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
+                      className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+                      {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
+                      Complete
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -361,7 +492,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       {/* Active filter pills */}
       {tab === "active" && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {[["all", "All"], ["pending", "Pending"], ["paid", "Paid"], ["partially_paid", "Partially Paid"], ["ready_for_pickup", "For Pick Up"]].map(([s, l]) => (
+          {[["all", "All"], ["preorders", `Pre-orders${queue.size ? ` (${queue.size})` : ""}`], ["pending", "Pending"], ["paid", "Payment Received"], ["partially_paid", "Partially Paid"], ["ready_for_pickup", "For Pick Up"]].map(([s, l]) => (
             <button key={s} onClick={() => setStatusFilter(s)}
               className={cn("rounded-full border px-3 py-1 text-xs font-medium transition-colors", statusFilter === s ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground")}>
               {l}
@@ -395,8 +526,10 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
           filteredOrders.map((o) => {
             const buyer = buyers[o.id]
             const itemCount = o.items.reduce((n, l) => n + l.quantity, 0)
-            const balance = o.total - (o.amount_paid ?? 0)
-            const editRef = tab === "active" && o.payment_method !== "cash" && ["pending", "paid", "partially_paid"].includes(o.status)
+            const balance = balanceOf(o)
+            const partlyPaid = (o.amount_paid ?? 0) > 0 && balance > 0
+            const editRef = tab === "active" && o.payment_method !== "cash"
+              && (["pending", "paid", "partially_paid"].includes(o.status) || (!!o.is_preorder && o.status === "ready_for_pickup"))
             const hint = tab === "active" ? nextStep(o, needsIdCheck(o.id)) : null
             return (
             <div key={o.id} id={`order-${o.id}`} className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm">
@@ -408,15 +541,19 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", STATUS_COLORS[o.status] ?? STATUS_COLORS.pending)}>
                       {STATUS_LABELS[o.status] ?? o.status}
                     </span>
-                    {o.pickup_date && (
+                    {o.is_preorder && (
                       <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Pre-order</span>
+                    )}
+                    {queue.has(o.id) && (
+                      <span title={preorderPaid(o) ? "Paid: served first" : "Unpaid: served after paid pre-orders"}
+                        className="rounded-full border border-primary/20 px-2 py-0.5 text-[10px] font-bold text-primary">Queue #{queue.get(o.id)}</span>
                     )}
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">{orderDate(o.created_at)} · {itemCount} item{itemCount === 1 ? "" : "s"}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="font-serif text-lg font-bold leading-tight text-gold">{peso(o.total)}</p>
-                  {o.status === "partially_paid" && o.amount_paid != null && (
+                  {partlyPaid && !["cancelled", "refunded"].includes(o.status) && (
                     <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400">{peso(balance)} left</p>
                   )}
                 </div>
@@ -468,8 +605,11 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
 
                 <div className="min-w-0">
                   <SectionLabel>Payment</SectionLabel>
-                  <p className="text-sm font-medium text-foreground">{PAYMENT_LABELS[o.payment_method] ?? o.payment_method}</p>
-                  {o.amount_paid != null && o.status === "partially_paid" && (
+                  <p className="text-sm font-medium text-foreground">
+                    {PAYMENT_LABELS[o.payment_method] ?? o.payment_method}
+                    {o.payment_plan === "half" && <span className="font-normal text-muted-foreground"> · half now</span>}
+                  </p>
+                  {o.amount_paid != null && partlyPaid && (
                     <p className="text-xs text-blue-600 dark:text-blue-400">Paid {peso(o.amount_paid)} of {peso(o.total)}</p>
                   )}
                   {!editRef && o.reference_number && <p className="text-xs text-muted-foreground">Ref # {o.reference_number}</p>}
@@ -508,13 +648,22 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
               )}
 
               {/* 4 · Pick-up and I.D. checks */}
-              {(o.pickup_date || restricted.has(o.id)) && (
+              {(o.is_preorder || restricted.has(o.id)) && (
                 <div className="space-y-2 border-t border-border px-4 py-3">
-                  {o.pickup_date && (
+                  {o.is_preorder && (
                     <p className="flex flex-wrap items-center gap-x-2 text-xs">
-                      <span className="font-medium text-amber-700 dark:text-amber-300">
-                        Pick up on {new Date(`${o.pickup_date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                      </span>
+                      <CalendarClock className="size-3.5 text-amber-600 dark:text-amber-300" />
+                      {o.status === "ready_for_pickup" ? (
+                        pickupMissed(o)
+                          ? <span className="font-semibold text-destructive">Missed pick-up day{o.pickup_date ? ` (${shortDay(o.pickup_date)})` : ""}</span>
+                          : o.pickup_date
+                            ? <span className="font-semibold text-emerald-700 dark:text-emerald-400">Buyer picks up on {shortDay(o.pickup_date)}</span>
+                            : <span className="font-medium text-amber-700 dark:text-amber-300">Buyer hasn&apos;t chosen a pick-up day{o.pickup_deadline ? ` (by ${deadlineDay(o.pickup_deadline)})` : ""}</span>
+                      ) : o.pickup_date ? (
+                        <span className="font-medium text-amber-700 dark:text-amber-300">Pick-up day {shortDay(o.pickup_date)}</span>
+                      ) : (
+                        <span className="text-muted-foreground">The buyer chooses a pick-up day once it&apos;s ready</span>
+                      )}
                       {o.id_status === "pending" && <span className="text-muted-foreground">· I.D. not checked yet</span>}
                       {o.id_status === "approved" && <span className="text-emerald-700 dark:text-emerald-400">· I.D. approved</span>}
                     </p>
@@ -531,7 +680,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
               )}
 
               {/* 5 · Next step */}
-              {tab === "active" && o.status !== "cancelled" && o.status !== "completed" && (
+              {tab === "active" && activeStatuses.includes(o.status) && (
                 <div className="border-t border-border bg-muted/20 px-4 py-3">
                   {hint && (
                     <p className={cn("mb-2 text-xs", needsIdCheck(o.id) ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")}>
@@ -539,44 +688,86 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                     </p>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    {o.pickup_date && o.status === "pending" && (
-                      <PreorderIdReview orderId={o.id} idPath={o.buyer_id_path ?? null} onDone={load} />
-                    )}
-                    {/* Walk-in: paid in cash at the counter, like a register (pre-orders: on pick-up) */}
-                    {o.payment_method === "cash" && ((o.status === "pending" && !o.pickup_date) || o.status === "partially_paid"
-                      || (o.pickup_date && o.status === "ready_for_pickup" && (o.amount_paid ?? 0) < o.total)) && (
-                      <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
-                        onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
-                    )}
-                    {o.status === "pending" && o.payment_method !== "cash" && (
+                    {o.is_preorder ? (
                       <>
-                        <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "paid")}
-                          className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-                          {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Paid
-                        </Button>
-                        <Button size="sm" variant="outline" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "partially_paid")}
-                          className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
-                          Partially Paid
-                        </Button>
+                        {o.status === "pending" && o.id_status !== "approved" && (
+                          <PreorderIdReview orderId={o.id} idPath={o.buyer_id_path ?? null} onDone={load} />
+                        )}
+                        {(o.status !== "pending" || o.id_status === "approved") && balance > 0 && (
+                          <RecordPayment key={`${o.status}-${o.amount_paid}`} order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
+                            onRecord={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
+                        )}
+                        {(o.status === "paid" || o.status === "partially_paid" || (o.status === "pending" && o.payment_method === "cash" && o.id_status === "approved")) && (
+                          <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
+                            className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
+                            {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark Ready for Pick Up
+                          </Button>
+                        )}
+                        {o.status === "ready_for_pickup" && balance <= 0 && (
+                          <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
+                            className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+                            {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
+                          </Button>
+                        )}
+                        {o.status === "ready_for_pickup" && (o.pickup_date || pickupMissed(o)) && (
+                          <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => updateOrder(o.id, { pickup_date: null, pickup_deadline: null })}
+                            title="The buyer chooses a pick-up day again, within your claim window" className="gap-1">
+                            <CalendarClock className="size-3" />Give New Pick-up Day
+                          </Button>
+                        )}
+                        {preorderPaid(o) && (
+                          <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => refund(o)}
+                            className="gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:text-orange-300">
+                            <RotateCcw className="size-3" />Return / Refund
+                          </Button>
+                        )}
                       </>
-                    )}
-                    {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
-                      <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
-                        className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
-                        {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark For Pick Up
-                      </Button>
-                    )}
-                    {o.status === "ready_for_pickup" && !(o.pickup_date && o.payment_method === "cash" && (o.amount_paid ?? 0) < o.total) && (
-                      <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
-                        className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-                        {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
-                      </Button>
+                    ) : (
+                      <>
+                        {/* Walk-in: paid in cash at the counter, like a register */}
+                        {o.payment_method === "cash" && (o.status === "pending" || o.status === "partially_paid") && (
+                          <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
+                            onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
+                        )}
+                        {o.status === "pending" && o.payment_method !== "cash" && (
+                          <>
+                            <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "paid")}
+                              className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+                              {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Payment Received
+                            </Button>
+                            <Button size="sm" variant="outline" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "partially_paid")}
+                              className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
+                              Partially Paid
+                            </Button>
+                          </>
+                        )}
+                        {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
+                          <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
+                            className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
+                            {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark For Pick Up
+                          </Button>
+                        )}
+                        {o.status === "ready_for_pickup" && (
+                          <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
+                            className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+                            {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
+                          </Button>
+                        )}
+                      </>
                     )}
                     <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => setStatus(o.id, "cancelled")}
                       className="gap-1 border-destructive/30 text-destructive hover:bg-destructive/5 ml-auto">
                       Cancel
                     </Button>
                   </div>
+                </div>
+              )}
+              {tab === "history" && o.is_preorder && o.status === "completed" && (
+                <div className="flex justify-end border-t border-border px-4 py-2.5">
+                  <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => refund(o)}
+                    className="gap-1 border-orange-300 text-orange-700 hover:bg-orange-50 dark:text-orange-300">
+                    <RotateCcw className="size-3" />Return / Refund
+                  </Button>
                 </div>
               )}
             </div>

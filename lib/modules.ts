@@ -105,6 +105,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "storefront", label: "Banners",     href: "/seller/banners",   icon: Megaphone },
       { perm: "products",   label: "Products",    href: "/seller/products",  icon: Tag },
       { perm: "orders",     label: "Orders",      href: "/seller/orders",    icon: ReceiptText },
+      { perm: "orders",     label: "Pre-order Completion Forms", short: "Pre-orders", href: "/seller/preorders", icon: ClipboardCheck },
       { perm: "inventory",  label: "Inventory",   href: "/seller/inventory", icon: Boxes },
       { perm: "analytics",  label: "Analytics",   href: "/seller/analytics", icon: BarChart2 },
       { perm: "reports",    label: "Sales Reports", short: "Reports", href: "/seller/reports", icon: FileText },

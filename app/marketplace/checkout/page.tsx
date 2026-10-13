@@ -66,11 +66,11 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
   // One shop per checkout, so the buyer pays one seller one amount
   const shopCount = new Set(items.map(shopKey)).size
   const hasPreOrder = items.some((i) => i.badge === "Pre-Order")
-  // Pre-orders are checked out on their own: no upfront payment, an I.D. check and a pick-up date
+  // Pre-orders are checked out on their own, with an I.D. check; paid online (full or half) or walk-in
   const mixedPreOrder = hasPreOrder && items.some((i) => i.badge !== "Pre-Order")
   const [paymentChoice, setPayment] = useState("gcash")
   // Each product says how it may be paid (walk-in at the counter, online, or both — scripts/27);
-  // checkout offers only the methods every item allows. Pre-orders are paid at the counter on pick-up.
+  // checkout offers only the methods every item allows.
   const [productModes, setProductModes] = useState<Record<string, PaymentMode[]>>({})
   const productIdsKey = [...new Set(items.map((i) => i.id))].sort().join(",")
   useEffect(() => {
@@ -82,12 +82,12 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
     })
   }, [productIdsKey])
   const allowedModes = commonPaymentModes(items.map((i) => productModes[i.id] ?? PAYMENT_MODES))
-  const methodAllowed = (id: string) => (hasPreOrder ? id === "cash" : allowedModes.includes(PAYMENT_METHOD_MODE[id]))
+  const methodAllowed = (id: string) => allowedModes.includes(PAYMENT_METHOD_MODE[id])
   const availableMethods = PAYMENT_METHODS.filter((m) => methodAllowed(m.id))
   const payment = methodAllowed(paymentChoice) ? paymentChoice : availableMethods[0]?.id ?? "cash"
   const [preOrderStores, setPreOrderStores] = useState<{ id: string; name: string; storeHours: string | null; claimDays: number; location: string | null; penalty: number }[]>([])
-  // Pre-order: the date the buyer will pick it up, and a photo of their I.D. for the shop to check
-  const [pickupDate, setPickupDate] = useState("")
+  // Pre-order paid online: the full amount or half now (paid pre-orders are served first)
+  const [paymentPlan, setPaymentPlan] = useState<"full" | "half">("full")
   const [idFile, setIdFile] = useState<File | null>(null)
   const [idPreview, setIdPreview] = useState<string | null>(null)
   const idRef = useRef<HTMLInputElement>(null)
@@ -183,20 +183,14 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
     })
   }, [items])
 
-  // Pick-up date: from tomorrow up to the shop's window (3–7 days after ordering)
   const preOrderShop = preOrderStores[0]
-  const localDate = (offsetDays: number) => {
-    const d = new Date()
-    d.setDate(d.getDate() + offsetDays)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
-  }
-  const minPickup = localDate(1)
-  const maxPickup = localDate(preOrderShop?.claimDays ?? 7)
-  const pickupValid = !hasPreOrder || (!!pickupDate && pickupDate >= minPickup && pickupDate <= maxPickup)
-  const preOrderReady = !hasPreOrder || (pickupValid && !!idFile)
-  const prettyPickup = pickupDate ? new Date(`${pickupDate}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "long", day: "numeric" }) : null
+  const preOrderReady = !hasPreOrder || !!idFile
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0)
+  // What the buyer sends now: half of a pre-order when they chose to pay half online
+  const payOnline = payment !== "cash"
+  const halfNow = hasPreOrder && payOnline && paymentPlan === "half"
+  const dueNow = halfNow ? Math.round(subtotal * 50) / 100 : subtotal
 
   function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -236,7 +230,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
           receiptUrl = urlData.publicUrl
         }
       }
-      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant, variantId: i.variantId })), paymentMethod: payment, receiptUrl, total: subtotal, ...(hasPreOrder ? { pickupDate, idPath } : {}) }))
+      const { orderIds } = unwrap(await submitOrder({ items: items.map((i) => ({ id: i.id, sellerId: i.sellerId, name: i.name, seller: i.seller, price: i.price, image: i.image, quantity: i.quantity, variant: i.variant, variantId: i.variantId })), paymentMethod: payment, receiptUrl, total: subtotal, ...(hasPreOrder ? { idPath, paymentPlan: payOnline ? paymentPlan : undefined } : {}) }))
       setPlaced(true)
       if (buyMode) clearBuyNowItem()
       else removeItems(items.map(lineKey))
@@ -435,16 +429,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                 </dl>
               )}
 
-              {/* 1. Pick-up date */}
-              <div className="mt-4">
-                <label htmlFor="pickup-date" className="text-sm font-medium text-foreground">Pick-up date *</label>
-                <p className="text-xs text-muted-foreground">Any day from tomorrow up to {preOrderShop?.claimDays ?? 7} days from today.</p>
-                <Input id="pickup-date" type="date" min={minPickup} max={maxPickup} value={pickupDate}
-                  onChange={(e) => setPickupDate(e.target.value)} className="mt-1.5 w-48" aria-invalid={!!pickupDate && !pickupValid} />
-                {pickupDate && !pickupValid && <p className="mt-1 text-xs text-destructive">Choose a date between {minPickup} and {maxPickup}.</p>}
-              </div>
-
-              {/* 2. I.D. */}
+              {/* 1. I.D. */}
               <div className="mt-4">
                 <p className="text-sm font-medium text-foreground">Your I.D. *</p>
                 <p className="text-xs text-muted-foreground">A clear photo of your School ID or any valid I.D. The shop checks it before confirming your pre-order. Only this shop can see it.</p>
@@ -472,24 +457,25 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                 )}
               </div>
 
-              {/* 3. How it works + penalty warning */}
-              <ul className="mt-4 list-disc space-y-1.5 pl-5 text-sm text-muted-foreground">
-                <li><span className="font-medium text-foreground">No payment now.</span> Pay in cash at the shop&apos;s counter when you pick it up.</li>
-                <li>The shop checks your I.D. When it&apos;s approved, your pre-order is marked <span className="font-medium text-foreground">For Pick Up</span>.</li>
-                <li>Bring the same I.D. and your order number on your pick-up date.</li>
-              </ul>
+              {/* 2. How it works + penalty warning */}
+              <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+                <li>Pay the <span className="font-medium text-foreground">full amount or half</span> online now, or pay at the shop&apos;s counter (walk-in).{" "}
+                  <span className="font-medium text-foreground">Paid pre-orders are served first</span>, in the order they were placed.</li>
+                <li>The shop checks your I.D. and confirms your payment.</li>
+                <li>When your items arrive, the shop marks your pre-order <span className="font-medium text-foreground">Ready for Pick Up</span> and you&apos;re notified to choose your pick-up day: today or within {preOrderShop?.claimDays ?? 7} days.</li>
+                <li>Settle any balance before you claim it. Bring the same I.D. and your order number.</li>
+              </ol>
               <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  If you don&apos;t pick it up by the end of {prettyPickup ?? "your pick-up date"}, the pre-order is <span className="font-semibold">discarded</span> and a{" "}
+                  Paying at the counter? If you don&apos;t pick it up by the end of the pick-up day you choose, the pre-order is <span className="font-semibold">cancelled</span> and a{" "}
                   <span className="font-semibold">₱{(preOrderShop?.penalty ?? 10).toLocaleString()} penalty</span> is added to your account. You won&apos;t be able to buy from {preOrderShop?.name ?? "this shop"} until it&apos;s paid.
                 </span>
               </p>
             </section>
           )}
 
-          {/* Payment method (pre-orders: paid at the counter on pick-up — no online payment) */}
-          {!hasPreOrder && (
+          {/* Payment method */}
           <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
             <h2 className="flex items-center gap-2 font-serif text-sm font-semibold text-foreground sm:text-base">
               <CreditCard className="size-4 text-primary" />
@@ -527,14 +513,29 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             {!allowedModes.includes("online") && (
               <p className="mt-3 text-xs text-muted-foreground">This store accepts walk-in payment only for these items.</p>
             )}
+            {/* Pre-order paid online: full or half now */}
+            {hasPreOrder && payOnline && (
+              <div role="radiogroup" aria-label="How much to pay now" className="mt-4 grid gap-2 sm:grid-cols-2">
+                {([["full", "Pay in full", subtotal], ["half", "Pay half now", Math.round(subtotal * 50) / 100]] as const).map(([id, label, amount]) => (
+                  <button key={id} type="button" role="radio" aria-checked={paymentPlan === id} onClick={() => setPaymentPlan(id)}
+                    className={cn("rounded-xl border p-3 text-left transition-all",
+                      paymentPlan === id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30 hover:bg-muted/50")}>
+                    <span className="block text-sm font-medium text-foreground">{label}</span>
+                    <span className="block font-serif text-lg font-bold text-gold">₱{amount.toLocaleString()}</span>
+                    <span className="block text-[11px] text-muted-foreground">{id === "half" ? "Pay the balance before you claim it" : "Nothing left to pay on pick-up"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {payment === "cash" && (
               <p className="mt-3 flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
                 <Banknote className="mt-0.5 size-4 shrink-0 text-primary" />
-                <span>Your order is reserved. Pay in cash at the store&apos;s counter, and the staff will mark it paid and hand over your items. Bring your I.D. and order number.</span>
+                <span>{hasPreOrder
+                  ? "Pay in cash at the store's counter, in full or half, any time before you pick it up. Paid pre-orders are served first."
+                  : "Your order is reserved. Pay in cash at the store's counter, and the staff will mark it paid and hand over your items. Bring your I.D. and order number."}</span>
               </p>
             )}
           </section>
-          )}
 
           {/* GCash QR + receipt upload */}
           {payment === "gcash" && (
@@ -571,7 +572,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                 {[
                   "Open GCash on your phone",
                   'Tap "Pay QR" and scan the code above',
-                  "Enter the exact total amount",
+                  `Enter exactly ₱${dueNow.toLocaleString()}${halfNow ? " (half of your pre-order)" : ""}`,
                   "Take a screenshot of the confirmation",
                   "Upload your receipt below",
                 ].map((step, i) => (
@@ -653,6 +654,12 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                     <span className="font-bold text-foreground">Total</span>
                     <span className="text-xl font-bold text-gold">₱{subtotal.toLocaleString()}</span>
                   </div>
+                  {halfNow && (
+                    <div className="mt-1.5 flex justify-between text-xs">
+                      <span className="text-muted-foreground">Pay now (half)</span>
+                      <span className="font-semibold text-foreground">₱{dueNow.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -672,7 +679,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
               </Button>
 
               <p className="mt-3 text-center text-[11px] text-muted-foreground">
-                {hasPreOrder ? "The shop checks your I.D., then marks your pre-order For Pick Up." : "Your order will be reviewed by the seller."}
+                {hasPreOrder ? "The shop checks your I.D. and payment. You'll choose your pick-up day once it's ready." : "Your order will be reviewed by the seller."}
               </p>
             </div>
           </div>
