@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition, type ReactNode } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { ManagementShell } from "@/components/management/management-shell"
 import type { DashboardCtx } from "@/lib/modules"
@@ -17,11 +17,14 @@ import { PreorderIdReview } from "@/components/store/preorder-id-review"
 import { StorePenalties } from "@/components/store/store-penalties"
 import { unwrap } from "@/lib/action-result"
 
+/** One product line of an order, with the photo and price saved at checkout */
+type OrderLine = { name: string; variant: string | null; quantity: number; unitPrice: number; image: string | null }
+
 type Order = {
   id: string; status: string; total: number; payment_method: string
   created_at: string; receipt_url: string | null; reference_number: string | null
   amount_paid: number | null; buyer_id: string
-  items: string
+  items: OrderLine[]
   /** Pre-orders (scripts/29): buyer's pick-up date, I.D. photo and the shop's I.D. check */
   pickup_date?: string | null; id_status?: string | null; buyer_id_path?: string | null
 }
@@ -42,6 +45,51 @@ const STATUS_LABELS: Record<string, string> = {
 const PAYMENT_LABELS: Record<string, string> = { cash: "Walk-in (cash)", gcash: "GCash", bank: "Bank transfer" }
 
 const peso = (n: number) => `₱${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+
+const orderDate = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+
+/** Small product photo; a box icon when the item has none */
+function ItemThumb({ item, className }: { item: OrderLine; className?: string }) {
+  return (
+    <div className={cn("flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted", className)}>
+      {item.image
+        // eslint-disable-next-line @next/next/no-img-element
+        ? <img src={item.image} alt={item.name} loading="lazy" className="size-full object-cover" />
+        : <Package className="size-1/2 text-muted-foreground/50" />}
+    </div>
+  )
+}
+
+/** Overlapping photos of the first few items, for compact lists */
+function ThumbStack({ items }: { items: OrderLine[] }) {
+  return (
+    <div className="flex shrink-0 -space-x-3">
+      {items.slice(0, 3).map((item, i) => <ItemThumb key={i} item={item} className="size-10 ring-2 ring-card" />)}
+      {items.length > 3 && (
+        <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-xs font-semibold text-muted-foreground ring-2 ring-card">+{items.length - 3}</span>
+      )}
+    </div>
+  )
+}
+
+/** What the store should do next with an order, shown above its buttons */
+function nextStep(o: Order, needsId: boolean): string | null {
+  if (needsId) return "This order has restricted items — check the buyer's I.D. before confirming it."
+  if (o.pickup_date && o.status === "pending" && o.id_status !== "approved") return "Pre-order: review the buyer's I.D. to accept it."
+  const balance = o.total - (o.amount_paid ?? 0)
+  switch (o.status) {
+    case "pending": return o.payment_method === "cash" ? "Waiting for the buyer to pay at the counter." : "Check the payment receipt, then mark the order paid."
+    case "partially_paid": return `Balance of ${peso(balance)} still due.`
+    case "paid": return "Prepare the items, then mark the order for pick up."
+    case "ready_for_pickup": return o.pickup_date && o.payment_method === "cash" && balance > 0
+      ? `Collect ${peso(balance)} when the buyer picks up.` : "Hand the items over when the buyer arrives, then mark it completed."
+  }
+  return null
+}
+
+const SectionLabel = ({ children }: { children: ReactNode }) =>
+  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</p>
 
 /**
  * Walk-in counter, like a cash register: the buyer comes to the counter with their order number,
@@ -149,7 +197,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
 
     const { data, error: err } = await supabase
       .from("order_items")
-      .select("order_id, product_name, variant, quantity, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
+      .select("order_id, product_name, product_image_url, variant, quantity, unit_price, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
       .eq("seller_id", ctx.storeId ?? "")
       .order("order_id", { ascending: false })
 
@@ -159,10 +207,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     for (const item of data ?? []) {
       const o = Array.isArray(item.orders) ? item.orders[0] : item.orders
       if (!o) continue
-      const cur: Order = map.get(o.id) ?? { ...o, total: Number(o.total), amount_paid: o.amount_paid ? Number(o.amount_paid) : null, items: "" }
-      // The exact size bought, e.g. "Dept Shirt (M) ×2"
-      const line = `${item.product_name}${item.variant ? ` (${item.variant})` : ""} ×${item.quantity}`
-      cur.items = cur.items ? `${cur.items}, ${line}` : line
+      const cur: Order = map.get(o.id) ?? { ...o, total: Number(o.total), amount_paid: o.amount_paid ? Number(o.amount_paid) : null, items: [] }
+      cur.items.push({ name: item.product_name, variant: item.variant, quantity: item.quantity, unitPrice: Number(item.unit_price), image: item.product_image_url })
       map.set(o.id, cur)
     }
     // Pre-order details in a separate query so older databases still list orders
@@ -171,7 +217,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       const o = map.get(p.id)
       if (o) Object.assign(o, { pickup_date: p.pickup_date, id_status: p.id_status, buyer_id_path: p.buyer_id_path })
     }
-    setOrders([...map.values()])
+    // Newest first (order ids are random, so they can't be used for ordering)
+    setOrders([...map.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)))
     const chatParam = new URLSearchParams(window.location.search).get("chat")
     const chatOrder = chatParam && !chatParamHandled.current ? map.get(chatParam) : undefined
     if (chatOrder) {
@@ -216,7 +263,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
 
   const query = search.trim().toLowerCase().replace(/^#/, "")
   const filteredOrders = orders.filter((o) => {
-    if (query && !o.id.toLowerCase().startsWith(query) && !(buyers[o.id]?.name ?? "").toLowerCase().includes(query)) return false
+    if (query && !o.id.toLowerCase().startsWith(query) && !(buyers[o.id]?.name ?? "").toLowerCase().includes(query)
+      && !o.items.some((l) => l.name.toLowerCase().includes(query))) return false
     if (tab === "active") {
       if (!activeStatuses.includes(o.status)) return false
       if (statusFilter !== "all" && o.status !== statusFilter) return false
@@ -266,12 +314,18 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
           </div>
           <div className="space-y-2">
             {readyOrders.map((o) => (
-              <div key={o.id} className="flex items-center justify-between gap-3 rounded-xl bg-card border border-border px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium">Order #{o.id.slice(0, 8)}</p>
-                  <p className="text-xs text-muted-foreground">{o.items}</p>
+              <div key={o.id} className="flex flex-wrap items-center gap-3 rounded-xl bg-card border border-border px-4 py-3">
+                <ThumbStack items={o.items} />
+                <div className="min-w-[9rem] flex-1">
+                  <p className="text-sm font-medium">
+                    <span className="font-mono">#{o.id.slice(0, 8)}</span>
+                    {buyers[o.id]?.name && <span className="text-muted-foreground"> · {buyers[o.id].name}</span>}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {o.items.map((l) => `${l.name}${l.variant ? ` (${l.variant})` : ""} ×${l.quantity}`).join(", ")}
+                  </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-2">
                   <span className="text-sm font-bold text-gold">₱{o.total.toLocaleString()}</span>
                   <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
                     className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
@@ -300,8 +354,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       {/* Counter search */}
       <div className="relative mt-3">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find an order — order # or buyer name"
-          aria-label="Find an order by number or buyer name" className="h-9 pl-9" />
+        <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find an order — order #, buyer or item"
+          aria-label="Find an order by number, buyer name or item" className="h-9 pl-9" />
       </div>
 
       {/* Active filter pills */}
@@ -338,144 +392,196 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
             <p className="mt-3 text-sm text-muted-foreground">No orders to show.</p>
           </div>
         ) : (
-          filteredOrders.map((o) => (
-            <div key={o.id} id={`order-${o.id}`} className="rounded-2xl border border-primary/10 bg-card shadow-sm overflow-hidden">
-              {/* Order header */}
-              <div className="flex items-start justify-between gap-3 p-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-semibold text-foreground">#{o.id.slice(0, 8)}</p>
+          filteredOrders.map((o) => {
+            const buyer = buyers[o.id]
+            const itemCount = o.items.reduce((n, l) => n + l.quantity, 0)
+            const balance = o.total - (o.amount_paid ?? 0)
+            const editRef = tab === "active" && o.payment_method !== "cash" && ["pending", "paid", "partially_paid"].includes(o.status)
+            const hint = tab === "active" ? nextStep(o, needsIdCheck(o.id)) : null
+            return (
+            <div key={o.id} id={`order-${o.id}`} className="overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-sm">
+              {/* 1 · Which order: number, status, when, total */}
+              <div className="flex items-start justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-mono text-sm font-semibold text-foreground">#{o.id.slice(0, 8)}</p>
                     <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold", STATUS_COLORS[o.status] ?? STATUS_COLORS.pending)}>
                       {STATUS_LABELS[o.status] ?? o.status}
                     </span>
+                    {o.pickup_date && (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">Pre-order</span>
+                    )}
                   </div>
-                  <p className="mt-0.5 text-sm text-muted-foreground line-clamp-1">{o.items}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{orderDate(o.created_at)} · {itemCount} item{itemCount === 1 ? "" : "s"}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="font-serif text-lg font-bold leading-tight text-gold">{peso(o.total)}</p>
+                  {o.status === "partially_paid" && o.amount_paid != null && (
+                    <p className="text-[11px] font-medium text-blue-600 dark:text-blue-400">{peso(balance)} left</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 2 · What was ordered */}
+              <ul className="divide-y divide-border px-4">
+                {o.items.map((l, i) => (
+                  <li key={i} className="flex items-center gap-3 py-2.5">
+                    <ItemThumb item={l} className="size-12" />
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-2 text-sm font-medium leading-snug text-foreground">{l.name}</p>
+                      <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                        {l.variant && <span className="rounded bg-muted px-1.5 py-px font-medium text-foreground">{l.variant}</span>}
+                        <span>{l.quantity} × {peso(l.unitPrice)}</span>
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-sm font-semibold tabular-nums">{peso(l.unitPrice * l.quantity)}</p>
+                  </li>
+                ))}
+              </ul>
+
+              {/* 3 · Who ordered it and how they pay */}
+              <div className="grid gap-4 border-t border-border px-4 py-3 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <SectionLabel>Buyer</SectionLabel>
+                  {buyer ? (
+                    <>
+                      <p className="flex items-center gap-1 text-sm font-medium text-foreground">
+                        <span className="truncate">{buyer.name || "No name"}</span>
+                        {buyer.verified && <BadgeCheck className="size-3.5 shrink-0 text-emerald-600" aria-label="Verified" />}
+                        {buyer.accountStatus !== "active" && (
+                          <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-destructive">{buyer.accountStatus}</span>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{buyer.contact || "No contact number"}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button onClick={() => setChatOpen(chatOpen === o.id ? null : o.id)} aria-expanded={chatOpen === o.id}
+                          className="inline-flex items-center gap-1 rounded-lg border border-primary/30 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/5">
+                          <MessageCircle className="size-3" />{chatOpen === o.id ? "Hide chat" : "Chat"}
+                        </button>
+                        <ReportBuyerButton orderId={o.id} module={ctx.module} buyerName={buyer.name} />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Loading buyer…</p>
+                  )}
+                </div>
+
+                <div className="min-w-0">
+                  <SectionLabel>Payment</SectionLabel>
+                  <p className="text-sm font-medium text-foreground">{PAYMENT_LABELS[o.payment_method] ?? o.payment_method}</p>
+                  {o.amount_paid != null && o.status === "partially_paid" && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400">Paid {peso(o.amount_paid)} of {peso(o.total)}</p>
+                  )}
+                  {!editRef && o.reference_number && <p className="text-xs text-muted-foreground">Ref # {o.reference_number}</p>}
+                  {editRef && (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <Input placeholder="Reference # from receipt" defaultValue={o.reference_number ?? ""} className="h-8 flex-1 text-xs"
+                        aria-label="Reference number" onChange={(e) => setRefNums((r) => ({ ...r, [o.id]: e.target.value }))} />
+                      <Button size="sm" variant="outline" className="h-8 text-xs" disabled={updating === o.id}
+                        onClick={() => setStatus(o.id, o.status, refNums[o.id] ?? o.reference_number ?? "")}>
+                        Save
+                      </Button>
+                    </div>
+                  )}
+                  {o.receipt_url && (
+                    <button onClick={() => setReceiptOpen(receiptOpen === o.id ? null : o.id)}
+                      className="mt-1.5 flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
+                      <Receipt className="size-3.5" />{receiptOpen === o.id ? "Hide" : "View"} payment receipt
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {receiptOpen === o.id && o.receipt_url && (
+                <div className="px-4 pb-3">
+                  <div className="max-h-64 overflow-hidden rounded-xl border border-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={o.receipt_url} alt="Receipt" className="max-h-64 w-full object-contain" />
+                  </div>
+                </div>
+              )}
+
+              {chatOpen === o.id && (
+                <div className="border-t border-border px-4 py-3">
+                  <OrderChat orderId={o.id} asStore otherParty={buyer?.name || "Buyer"} />
+                </div>
+              )}
+
+              {/* 4 · Pick-up and I.D. checks */}
+              {(o.pickup_date || restricted.has(o.id)) && (
+                <div className="space-y-2 border-t border-border px-4 py-3">
                   {o.pickup_date && (
-                    <p className="mt-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                      Pre-order · pick up on {new Date(`${o.pickup_date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
-                      {o.id_status === "pending" && " · I.D. not checked yet"}
-                      {o.id_status === "approved" && " · I.D. approved"}
+                    <p className="flex flex-wrap items-center gap-x-2 text-xs">
+                      <span className="font-medium text-amber-700 dark:text-amber-300">
+                        Pick up on {new Date(`${o.pickup_date}T00:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
+                      </span>
+                      {o.id_status === "pending" && <span className="text-muted-foreground">· I.D. not checked yet</span>}
+                      {o.id_status === "approved" && <span className="text-emerald-700 dark:text-emerald-400">· I.D. approved</span>}
                     </p>
                   )}
-                  {buyers[o.id] && (
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                      <span className="font-medium text-foreground">
-                        Buyer: {buyers[o.id].name || "No name"}{buyers[o.id].verified && <BadgeCheck className="ml-1 inline size-3.5 text-emerald-600" aria-label="Verified" />}
-                      </span>
-                      <span className="text-muted-foreground">{buyers[o.id].contact || "No contact number"}</span>
-                      {buyers[o.id].accountStatus !== "active" && (
-                        <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-semibold capitalize text-destructive">{buyers[o.id].accountStatus}</span>
-                      )}
-                      <ReportBuyerButton orderId={o.id} module={ctx.module} buyerName={buyers[o.id].name} />
-                    </div>
-                  )}
-                  <p className="text-xs text-muted-foreground">{PAYMENT_LABELS[o.payment_method] ?? o.payment_method} · {new Date(o.created_at).toLocaleDateString()}</p>
                   {restricted.has(o.id) && (
-                    <div className="mt-2">
-                      <BuyerIdCheck
-                        orderId={o.id}
-                        module={ctx.module}
-                        checked={idChecked.has(o.id)}
-                        onChecked={() => setIdChecked((prev) => new Set(prev).add(o.id))}
-                      />
-                    </div>
-                  )}
-                  {o.amount_paid != null && o.status === "partially_paid" && (
-                    <p className="text-xs text-blue-600">Paid: ₱{o.amount_paid.toLocaleString()} of ₱{o.total.toLocaleString()}</p>
-                  )}
-                </div>
-                <p className="shrink-0 text-base font-bold text-gold">₱{o.total.toLocaleString()}</p>
-              </div>
-
-              {/* Receipt preview */}
-              {o.receipt_url && (
-                <div className="px-4 pb-3">
-                  <button onClick={() => setReceiptOpen(receiptOpen === o.id ? null : o.id)}
-                    className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-                    <Receipt className="size-3.5" />{receiptOpen === o.id ? "Hide" : "View"} Payment Receipt
-                  </button>
-                  {receiptOpen === o.id && (
-                    <div className="mt-2 max-h-64 overflow-hidden rounded-xl border border-border">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={o.receipt_url} alt="Receipt" className="max-h-64 w-full object-contain" />
-                    </div>
+                    <BuyerIdCheck
+                      orderId={o.id}
+                      module={ctx.module}
+                      checked={idChecked.has(o.id)}
+                      onChecked={() => setIdChecked((prev) => new Set(prev).add(o.id))}
+                    />
                   )}
                 </div>
               )}
 
-              {/* Buyer chat */}
-              <div className="border-t border-border px-4 py-2.5">
-                <button onClick={() => setChatOpen(chatOpen === o.id ? null : o.id)} aria-expanded={chatOpen === o.id}
-                  className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline">
-                  <MessageCircle className="size-3.5" />{chatOpen === o.id ? "Hide chat" : "Chat with Buyer"}
-                </button>
-                {chatOpen === o.id && <OrderChat orderId={o.id} asStore otherParty={buyers[o.id]?.name || "Buyer"} className="mt-2" />}
-              </div>
-
-              {/* Reference number */}
-              {tab === "active" && o.payment_method !== "cash" && ["pending", "paid", "partially_paid"].includes(o.status) && (
-                <div className="flex items-center gap-2 border-t border-border px-4 py-3">
-                  <Input
-                    placeholder="Reference # from receipt"
-                    defaultValue={o.reference_number ?? ""}
-                    className="h-8 flex-1 text-xs"
-                    onChange={(e) => setRefNums((r) => ({ ...r, [o.id]: e.target.value }))}
-                  />
-                  <Button size="sm" variant="outline" className="h-8 text-xs"
-                    disabled={updating === o.id}
-                    onClick={() => setStatus(o.id, o.status, refNums[o.id] ?? o.reference_number ?? "")}>
-                    Save Ref
-                  </Button>
-                </div>
-              )}
-
-              {/* Action buttons */}
+              {/* 5 · Next step */}
               {tab === "active" && o.status !== "cancelled" && o.status !== "completed" && (
-                <div className="flex flex-wrap gap-2 border-t border-border px-4 py-3">
-                  {needsIdCheck(o.id) && (
-                    <p className="w-full text-xs text-amber-700 dark:text-amber-300">This order has restricted items — check the buyer&apos;s I.D. before confirming it.</p>
+                <div className="border-t border-border bg-muted/20 px-4 py-3">
+                  {hint && (
+                    <p className={cn("mb-2 text-xs", needsIdCheck(o.id) ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground")}>
+                      <span className="font-semibold">Next:</span> {hint}
+                    </p>
                   )}
-                  {o.pickup_date && o.status === "pending" && (
-                    <PreorderIdReview orderId={o.id} idPath={o.buyer_id_path ?? null} onDone={load} />
-                  )}
-                  {/* Walk-in: paid in cash at the counter, like a register (pre-orders: on pick-up) */}
-                  {o.payment_method === "cash" && ((o.status === "pending" && !o.pickup_date) || o.status === "partially_paid"
-                    || (o.pickup_date && o.status === "ready_for_pickup" && (o.amount_paid ?? 0) < o.total)) && (
-                    <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
-                      onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
-                  )}
-                  {o.status === "pending" && o.payment_method !== "cash" && (
-                    <>
-                      <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "paid")}
+                  <div className="flex flex-wrap gap-2">
+                    {o.pickup_date && o.status === "pending" && (
+                      <PreorderIdReview orderId={o.id} idPath={o.buyer_id_path ?? null} onDone={load} />
+                    )}
+                    {/* Walk-in: paid in cash at the counter, like a register (pre-orders: on pick-up) */}
+                    {o.payment_method === "cash" && ((o.status === "pending" && !o.pickup_date) || o.status === "partially_paid"
+                      || (o.pickup_date && o.status === "ready_for_pickup" && (o.amount_paid ?? 0) < o.total)) && (
+                      <CounterPayment order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
+                        onPaid={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
+                    )}
+                    {o.status === "pending" && o.payment_method !== "cash" && (
+                      <>
+                        <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "paid")}
+                          className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
+                          {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Paid
+                        </Button>
+                        <Button size="sm" variant="outline" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "partially_paid")}
+                          className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
+                          Partially Paid
+                        </Button>
+                      </>
+                    )}
+                    {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
+                      <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
+                        className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
+                        {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark For Pick Up
+                      </Button>
+                    )}
+                    {o.status === "ready_for_pickup" && !(o.pickup_date && o.payment_method === "cash" && (o.amount_paid ?? 0) < o.total) && (
+                      <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
                         className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-                        {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Paid
+                        {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
                       </Button>
-                      <Button size="sm" variant="outline" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "partially_paid")}
-                        className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50">
-                        Partially Paid
-                      </Button>
-                    </>
-                  )}
-                  {(o.status === "paid" || (o.status === "partially_paid" && o.payment_method !== "cash")) && (
-                    <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
-                      className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
-                      {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark For Pick Up
+                    )}
+                    <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => setStatus(o.id, "cancelled")}
+                      className="gap-1 border-destructive/30 text-destructive hover:bg-destructive/5 ml-auto">
+                      Cancel
                     </Button>
-                  )}
-                  {o.status === "ready_for_pickup" && !(o.pickup_date && o.payment_method === "cash" && (o.amount_paid ?? 0) < o.total) && (
-                    <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "completed")}
-                      className="gap-1 bg-emerald-600 text-white hover:bg-emerald-700">
-                      {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}Mark Completed
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" disabled={updating === o.id} onClick={() => setStatus(o.id, "cancelled")}
-                    className="gap-1 border-destructive/30 text-destructive hover:bg-destructive/5 ml-auto">
-                    Cancel
-                  </Button>
+                  </div>
                 </div>
               )}
             </div>
-          ))
+            )
+          })
         )}
       </div>
     </ManagementShell>
