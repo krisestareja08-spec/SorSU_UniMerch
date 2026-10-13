@@ -3,11 +3,12 @@
 import Image from "next/image"
 import Link from "next/link"
 import { useState } from "react"
-import { ShoppingCart, Zap, CheckCircle2 } from "lucide-react"
+import { ShoppingCart, Zap, CheckCircle2, MapPin } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ProductOptionsSheet } from "@/components/marketplace/product-options-sheet"
 import { RatingSummary } from "@/components/reviews/stars"
 import { priceRangeLabel } from "@/lib/variants"
+import { CAMPUS_LABELS, CAMPUS_SHORT_LABELS, type Campus } from "@/lib/roles"
 
 export type ProductBadge = "Available" | "Pre-Order" | "Interest Check" | "Sold Out"
 
@@ -19,6 +20,8 @@ export type Product = {
   priceMax?: number | null
   seller: string
   sellerId?: string
+  /** Campus of the selling store (seller_profiles.campus) */
+  campus?: string | null
   image: string
   badge: ProductBadge
   rating?: number
@@ -82,6 +85,15 @@ export function ProductCard({ product, readOnly = false }: { product: Product; r
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         <Image src={product.image} alt={product.name} fill
           className="object-cover transition-transform duration-300 group-hover:scale-105" />
+        {/* Which campus the seller is from */}
+        {product.campus && (
+          <span title={CAMPUS_LABELS[product.campus as Campus] ?? product.campus}
+            className="absolute left-1.5 top-1.5 z-10 flex max-w-[calc(100%-0.75rem)] items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+            <MapPin className="size-3 shrink-0" aria-hidden />
+            <span className="truncate">{CAMPUS_SHORT_LABELS[product.campus as Campus] ?? product.campus}</span>
+            <span className="sr-only"> — {CAMPUS_LABELS[product.campus as Campus] ?? product.campus}</span>
+          </span>
+        )}
         {!readOnly && (
           <div className="absolute inset-0 hidden items-center justify-center bg-primary/30 opacity-0 transition-opacity group-hover:opacity-100 lg:flex">
             <span className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground shadow">

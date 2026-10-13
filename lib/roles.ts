@@ -31,3 +31,12 @@ export const CAMPUS_LABELS: Record<Campus, string> = {
   magallanes:             "Magallanes Campus",
   sorsogon_city_baribag:  "Sorsogon City Campus Extension \u2013 Baribag",
 }
+
+/** Short campus names for small spaces such as product cards (full name in CAMPUS_LABELS). */
+export const CAMPUS_SHORT_LABELS: Record<Campus, string> = {
+  sorsogon_city_main:     "Sorsogon City",
+  bulan:                  "Bulan",
+  castilla:               "Castilla",
+  magallanes:             "Magallanes",
+  sorsogon_city_baribag:  "Baribag",
+}
