@@ -25,6 +25,7 @@ export default async function SignUpPage() {
               alt="Sorsogon State University seal"
               width={40}
               height={40}
+              loading="eager"
               className="rounded-full ring-1 ring-border"
             />
             <span className="font-serif text-base font-semibold">SorSU Marketplace</span>

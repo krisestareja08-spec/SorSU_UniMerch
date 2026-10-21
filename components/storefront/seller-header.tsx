@@ -32,7 +32,7 @@ export function SellerHeader({
       {storefront.theme.showBanner && (
         <div className={cn("relative h-32 bg-linear-to-r sm:h-44", accent.banner)}>
           {storefront.bannerUrl && (
-            <Image src={storefront.bannerUrl} alt="" fill priority className="object-cover" sizes="(max-width: 1280px) 100vw, 1280px" />
+            <Image src={storefront.bannerUrl} alt="" fill loading="eager" className="object-cover" sizes="(max-width: 1280px) 100vw, 1280px" />
           )}
         </div>
       )}

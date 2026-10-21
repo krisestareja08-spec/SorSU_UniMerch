@@ -37,6 +37,7 @@ export function BrandPanel() {
           alt="Sorsogon State University seal"
           width={52}
           height={52}
+          loading="eager"
           className="rounded-full ring-2 ring-sidebar-primary/60"
         />
         <div className="leading-tight">

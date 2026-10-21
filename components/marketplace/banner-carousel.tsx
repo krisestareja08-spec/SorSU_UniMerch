@@ -68,7 +68,7 @@ export function BannerCarousel({ banners }: { banners: HomeBanner[] }) {
           >
             {b.image_url ? (
               <>
-                <Image src={b.image_url} alt="" fill priority={i === 0} className="object-cover" sizes="(max-width: 1280px) 100vw, 1280px" />
+                <Image src={b.image_url} alt="" fill loading={i === 0 ? "eager" : "lazy"} className="object-cover" sizes="(max-width: 1280px) 100vw, 1280px" />
                 <div className="absolute inset-0 bg-linear-to-t from-black/75 via-black/35 to-transparent" />
               </>
             ) : (

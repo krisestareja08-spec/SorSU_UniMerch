@@ -36,7 +36,7 @@ export default async function LoginPage() {
                 alt="Sorsogon State University seal"
                 width={92}
                 height={92}
-                priority
+                loading="eager"
                 className="size-18 rounded-full sm:size-23"
               />
             </div>

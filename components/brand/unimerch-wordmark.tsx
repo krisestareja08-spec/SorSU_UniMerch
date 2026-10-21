@@ -35,7 +35,7 @@ export function UniMerchWordmark({
             alt="Sorsogon State University seal"
             width={s}
             height={s}
-            priority
+            loading="eager"
             className="rounded-full"
           />
         </div>
