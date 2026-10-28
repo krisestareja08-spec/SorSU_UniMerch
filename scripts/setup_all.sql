@@ -5321,6 +5321,20 @@ end;
 $$;
 grant execute on function public.buyer_badges() to authenticated;
 
+-- ── 3f. Internal helpers can't be called from the app ─────────────────────────
+-- These run with the owner's rights and take their message / recipients as arguments, so called
+-- directly they would let anyone send any notification (with any link) to any user or dashboard.
+-- Only the database's own functions (all SECURITY DEFINER) call them, and those still can.
+revoke all on function public.notify_user(uuid, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.notify_dashboard(uuid, text, text, text, text, text) from public, anon, authenticated;
+revoke all on function public.wants_notification(uuid, text) from public, anon, authenticated;
+revoke all on function public.store_dashboard_path(uuid) from public, anon, authenticated;
+-- Housekeeping the app runs for signed-in people only
+revoke all on function public.expire_overdue_preorders() from public, anon;
+grant execute on function public.expire_overdue_preorders() to authenticated;
+revoke all on function public.close_inactive_conversations() from public, anon;
+grant execute on function public.close_inactive_conversations() to authenticated;
+
 -- ── 4. Faster security checks for every policy ───────────────
 
 -- Rewrites one policy expression (temporary helper, gone when this run ends)
