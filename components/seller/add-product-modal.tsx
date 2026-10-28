@@ -94,7 +94,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     setImagePreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Pre-orders aren't paid upfront: the buyer pays at the counter on pick-up, after the shop checks their I.D.
+  // Pre-orders (scripts/29): the buyer uploads an I.D. and pays half or in full, then waits on the Pre-order Form
   const isPreOrder = badge === "Pre-Order"
   const paymentModes: PaymentMode[] = PAYMENT_CHOICES.find((c) => c.value === payment)!.modes
   const effectiveModes: PaymentMode[] = paymentModes
@@ -331,7 +331,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
               ))}
             </div>
             {isPreOrder && (
-              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-orders aren&apos;t paid online: the buyer uploads an I.D. and picks a pick-up date, you check the I.D., and they pay at your counter on pick-up.</p>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">Pre-order buyers upload an I.D. and pay in full or half: online if this product allows it, or at your counter. They join your Pre-order Form waitlist; mark them ready when the stock arrives.</p>
             )}
           </div>
 
