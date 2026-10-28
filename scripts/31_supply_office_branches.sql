@@ -683,6 +683,130 @@ create policy "supply request files read" on storage.objects for select
   using (bucket_id = 'supply-requests' and (
     public.store_access(((storage.foldername(name))[1])::uuid, 'supply') or public.module_access('supply_office', 'supply')));
 
+-- ── Collaboration stock, from the Main Supply Office's side ───────────────
+-- (the collaboration flag itself is created in 32_performance.sql; added here too so this runs first)
+alter table public.products add column if not exists supply_office_collab boolean not null default false;
+-- The Main office sees every organization's collaboration products and their stock, sends a stock
+-- order (already quoted: cost + royalty per logo unit × units; the organization pays, the stock is
+-- added when it's completed) and can correct the count or take out damaged units.
+create or replace function public.collab_inventory()
+returns table (store_id uuid, store_name text, product_id uuid, product_name text, image_url text, product_status text,
+               price numeric, logo boolean, product_stock integer, variant_id uuid, variant_name text, variant_price numeric, variant_stock integer)
+language sql security definer set search_path = public stable as $$
+  select p.seller_id, sp.org_name, p.id, p.name, p.image_url, p.status, p.price, p.is_royalty_product, p.stock, v.id, v.name, v.price, v.stock
+  from public.products p
+  join public.seller_profiles sp on sp.id = p.seller_id
+  left join public.product_variants v on v.product_id = p.id
+  where p.supply_office_collab and p.status <> 'draft'
+    and (public.module_access('supply_office', 'inventory') or public.module_access('supply_office', 'supply'))
+  order by sp.org_name, p.name, v.position, v.name;
+$$;
+grant execute on function public.collab_inventory() to authenticated;
+
+create or replace function public.send_collab_stock_order(p_product uuid, p_lines jsonb, p_note text default null,
+                                                          p_fulfilment text default 'pickup', p_address text default null)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  p record;
+  ln jsonb;
+  vid uuid;
+  vname text;
+  rid uuid;
+  rate numeric;
+  pos integer := 0;
+begin
+  if not (public.module_access('supply_office', 'inventory') or public.module_access('supply_office', 'supply')) then
+    raise exception 'Only the Main Supply Office sends stock orders.';
+  end if;
+  select pr.id, pr.name, pr.seller_id, pr.is_royalty_product into p
+  from public.products pr where pr.id = p_product and pr.supply_office_collab;
+  if p.id is null then raise exception 'That isn''t a collaboration product.'; end if;
+  if not exists (select 1 from public.dashboards where store_id = p.seller_id and module = 'seller') then
+    raise exception 'Collaboration products belong to organizations.';
+  end if;
+  if jsonb_array_length(coalesce(p_lines, '[]'::jsonb)) = 0 then raise exception 'Enter the units to send.'; end if;
+  if p_fulfilment = 'delivery' and coalesce(trim(p_address), '') = '' then raise exception 'Add where it should be delivered.'; end if;
+  select coalesce(global_royalty_percentage, 0) into rate from public.bao_settings where id = 1;
+  rate := coalesce(rate, 0);
+
+  insert into public.supply_requests (requester_store_id, requester_module, title, description, fulfilment, delivery_address, status, main_note, quoted_at)
+  values (p.seller_id, 'seller', left('Stock for ' || p.name, 150), 'Stock order sent by the Main Supply Office.',
+          case when p_fulfilment = 'delivery' then 'delivery' else 'pickup' end,
+          case when p_fulfilment = 'delivery' then trim(p_address) end,
+          'approved', nullif(trim(p_note), ''), now())
+  returning id into rid;
+
+  for ln in select * from jsonb_array_elements(p_lines) loop
+    if coalesce((ln->>'quantity')::integer, 0) < 1 then continue; end if;
+    if coalesce((ln->>'unit_price')::numeric, -1) < 0 then raise exception 'Set the price per unit.'; end if;
+    vid := null; vname := null;
+    if nullif(ln->>'variant_id', '') is not null then
+      select pv.id, pv.name into vid, vname from public.product_variants pv where pv.id = (ln->>'variant_id')::uuid and pv.product_id = p.id;
+      if vid is null then raise exception 'A size of % was not found.', p.name; end if;
+    end if;
+    pos := pos + 1;
+    insert into public.supply_request_items (request_id, kind, product_id, variant_id, design_group, name, size, quantity,
+                                             uses_logo, unit_price, royalty_percentage, royalty_amount, position)
+    values (rid, 'collab_stock', p.id, vid, p.id::text, p.name, vname, (ln->>'quantity')::integer,
+            coalesce(p.is_royalty_product, false), round((ln->>'unit_price')::numeric, 2),
+            case when p.is_royalty_product then rate end,
+            case when p.is_royalty_product then round((ln->>'unit_price')::numeric * rate / 100, 2) else 0 end, pos);
+  end loop;
+  if pos = 0 then raise exception 'Enter the units to send.'; end if;
+
+  update public.supply_requests set
+    items_total   = (select sum(unit_price * quantity) from public.supply_request_items where request_id = rid),
+    royalty_total = (select sum(royalty_amount * quantity) from public.supply_request_items where request_id = rid),
+    delivery_fee = 0, royalty_percentage = rate
+  where id = rid;
+  update public.supply_requests set total = items_total + royalty_total where id = rid;
+  perform public.notify_supply_request(rid, 'requester', 'Stock order from the Main Supply Office — please pay',
+    p.name || ': ₱' || to_char((select total from public.supply_requests where id = rid), 'FM999,999,990.00') || ' including royalty.');
+  return rid;
+end;
+$$;
+grant execute on function public.send_collab_stock_order(uuid, jsonb, text, text, text) to authenticated;
+
+-- Corrections only: take out damaged units, or set the counted total
+create or replace function public.main_adjust_collab_stock(p_product uuid, p_variant uuid, p_mode text, p_quantity integer, p_note text default null)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  store uuid;
+  before_stock integer;
+  after_stock integer;
+  delta integer;
+  dash record;
+  pname text;
+begin
+  if not (public.module_access('supply_office', 'inventory') or public.module_access('supply_office', 'supply')) then
+    raise exception 'Only the Main Supply Office corrects collaboration stock.';
+  end if;
+  select seller_id, name into store, pname from public.products where id = p_product and supply_office_collab;
+  if store is null then raise exception 'That isn''t a collaboration product.'; end if;
+  select coalesce((select stock from public.product_variants where id = p_variant and product_id = p_product),
+                  (select stock from public.products where id = p_product)) into before_stock;
+  if p_mode = 'remove' then
+    if coalesce(p_quantity, 0) < 1 then raise exception 'Enter how many units to take out.'; end if;
+    delta := -p_quantity;
+  elsif p_mode = 'set' then
+    if coalesce(p_quantity, -1) < 0 then raise exception 'The counted total can''t be negative.'; end if;
+    delta := p_quantity - before_stock;
+  else
+    raise exception 'New stock is sent as a stock order. Here you can only take units out or set the count.';
+  end if;
+  if delta = 0 then return before_stock; end if;
+  after_stock := public.branch_stock_change(store, p_product, p_variant, delta, 'adjustment',
+    'Main Supply Office: ' || coalesce(nullif(trim(p_note), ''), case when p_mode = 'set' then 'stock count' else 'damaged / taken out' end));
+  select * into dash from public.store_dashboard_path(store);
+  if dash.dashboard_id is not null then
+    perform public.notify_dashboard(dash.dashboard_id, 'inventory', 'inventory', 'Stock corrected by the Main Supply Office',
+      pname || ': ' || before_stock || ' → ' || after_stock || coalesce(' — ' || nullif(trim(p_note), ''), ''), dash.base || '/inventory');
+  end if;
+  return after_stock;
+end;
+$$;
+grant execute on function public.main_adjust_collab_stock(uuid, uuid, text, integer, text) to authenticated;
+
 notify pgrst, 'reload schema';
 
 -- Check: every Supply Office branch and its store

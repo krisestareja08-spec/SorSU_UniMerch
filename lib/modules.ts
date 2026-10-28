@@ -69,7 +69,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "messages",   label: "Buyer Messages", short: "Messages",   href: "/supply-office/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",         href: "/supply-office/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",        href: "/supply-office/inventory",  icon: Boxes },
-      { perm: "inventory",  label: "Branch Inventory", short: "Branches", href: "/supply-office/branch-inventory", icon: Warehouse },
+      { perm: "inventory",  label: "Branch & Collab Inventory", short: "Branches", href: "/supply-office/branch-inventory", icon: Warehouse },
       { perm: "supply",     label: "Special Orders", short: "Special",   href: "/supply-office/special-orders", icon: Truck },
       { perm: "restricted", label: "Restricted Items", short: "Restricted", href: "/supply-office/restricted", icon: ShieldCheck },
       { perm: "reports",    label: "Sales Reports", short: "Reports",    href: "/supply-office/reports",    icon: FileText },

@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react"
 import { AlertCircle, Check, Loader2, PackagePlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { adjustStock } from "@/app/store-actions"
-import { adjustBranchStock } from "@/app/branch-stock-actions"
+import { adjustBranchStock, adjustCollabStock } from "@/app/branch-stock-actions"
 import { unwrap } from "@/lib/action-result"
 import { cn } from "@/lib/utils"
 
@@ -19,13 +19,16 @@ const MODES: { value: Mode; label: string; help: string; field: string; placehol
 /**
  * Updating the stock of a product (or one size) in plain terms: add units, remove units, or set the
  * counted total — with a preview of the new total before saving. With `branchStoreId`, the Main
- * Supply Office updates one of its branches' stock (app/branch-stock-actions.ts).
+ * Supply Office updates one of its branches' stock (app/branch-stock-actions.ts). With `collab`, it
+ * corrects an organization's collaboration product: take units out or set the count only — new
+ * stock is sent as a stock order.
  */
-export function StockControl({ module, productId, variantId, current, branchStoreId }: {
-  module: string; productId: string; variantId?: string; current: number; branchStoreId?: string
+export function StockControl({ module, productId, variantId, current, branchStoreId, collab = false }: {
+  module: string; productId: string; variantId?: string; current: number; branchStoreId?: string; collab?: boolean
 }) {
+  const modes = collab ? MODES.filter((m) => m.value !== "add") : MODES
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<Mode>("add")
+  const [mode, setMode] = useState<Mode>(collab ? "remove" : "add")
   const [quantity, setQuantity] = useState("")
   const [note, setNote] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -51,7 +54,7 @@ export function StockControl({ module, productId, variantId, current, branchStor
     : qty < 1 ? "Enter 1 or more." : null
 
   function close() {
-    setOpen(false); setQuantity(""); setNote(""); setError(null); setMode("add")
+    setOpen(false); setQuantity(""); setNote(""); setError(null); setMode(collab ? "remove" : "add")
   }
 
   function save(e: React.FormEvent) {
@@ -65,10 +68,11 @@ export function StockControl({ module, productId, variantId, current, branchStor
     fd.set("mode", mode)
     fd.set("quantity", String(qty))
     fd.set("note", note)
-    if (branchStoreId) { fd.set("branch_store_id", branchStoreId); fd.set("current", String(current)) }
+    if (branchStoreId) fd.set("branch_store_id", branchStoreId)
+    fd.set("current", String(current))
     start(async () => {
       try {
-        const r = unwrap(await (branchStoreId ? adjustBranchStock(fd) : adjustStock(fd)))
+        const r = unwrap(await (collab ? adjustCollabStock(fd) : branchStoreId ? adjustBranchStock(fd) : adjustStock(fd)))
         close()
         setDone(`Stock updated: ${r.before} → ${r.after}`)
       } catch (err) {
@@ -81,7 +85,7 @@ export function StockControl({ module, productId, variantId, current, branchStor
     return (
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => { setOpen(true); setDone(null) }}>
-          <PackagePlus className="size-3.5" />Update stock
+          <PackagePlus className="size-3.5" />{collab ? "Correct stock" : "Update stock"}
         </Button>
         {done && <span role="status" className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400"><Check className="size-3.5" />{done}</span>}
       </div>
@@ -90,8 +94,8 @@ export function StockControl({ module, productId, variantId, current, branchStor
 
   return (
     <form onSubmit={save} className="w-full max-w-sm space-y-2.5 rounded-xl border border-border bg-card p-3 shadow-sm">
-      <div role="group" aria-label="What do you want to do?" className="grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
-        {MODES.map((m) => (
+      <div role="group" aria-label="What do you want to do?" className={cn("grid gap-1 rounded-lg bg-muted/60 p-1", modes.length === 3 ? "grid-cols-3" : "grid-cols-2")}>
+        {modes.map((m) => (
           <button key={m.value} type="button" aria-pressed={mode === m.value} onClick={() => { setMode(m.value); setError(null) }}
             className={cn("rounded-md px-1.5 py-1.5 text-xs font-medium transition-colors",
               mode === m.value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>

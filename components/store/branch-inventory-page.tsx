@@ -5,9 +5,11 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Boxes, Inbox } from "lucide-react"
+import { Boxes, Handshake, Inbox } from "lucide-react"
 import { StockControl } from "@/components/store/stock-control"
 import { BranchRequestsList, type BranchRequest } from "@/components/store/branch-requests"
+import { CollabStockOrder } from "@/components/store/collab-stock-order"
+import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
 
@@ -17,14 +19,21 @@ type InvRow = {
   variant_id: string | null; variant_name: string | null; variant_stock: number | null
 }
 
+type CollabRow = {
+  store_id: string; store_name: string; product_id: string; product_name: string; image_url: string | null; product_status: string
+  price: number; logo: boolean; product_stock: number; variant_id: string | null; variant_name: string | null; variant_price: number | null; variant_stock: number | null
+}
+export type InventoryTab = "requests" | "stock" | "collab"
+
 const LOW = 5
 const tone = (n: number) => (n === 0 ? "text-destructive" : n <= LOW ? "text-amber-700" : "")
 
 /**
- * Main Supply Office: its branches' restock requests and damage / defect reports, and each
- * branch's stock (the Main office supplies the branches, so it adds and counts their stock).
+ * Main Supply Office: its branches' restock requests and damage / defect reports, each branch's
+ * stock (the Main office supplies the branches, so it adds and counts their stock), and the stock of
+ * organizations' collaboration products (sent as paid stock orders; corrections only otherwise).
  */
-export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: DashboardCtx; tab: "requests" | "stock"; branchId?: string }) {
+export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: DashboardCtx; tab: InventoryTab; branchId?: string }) {
   const supabase = await createClient()
   const [branchesRes, requestsRes] = await Promise.all([
     supabase.rpc("supply_branches"),
@@ -50,8 +59,20 @@ export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: Dashboa
     products.set(r.product_id, p)
   }
 
+  // Collaboration products of every organization, with their sizes
+  const [collabRes, rate] = tab === "collab" ? await Promise.all([supabase.rpc("collab_inventory"), getGlobalRoyaltyPercentage()]) : [{ data: null, error: null }, 0]
+  type CollabProduct = { store: string; name: string; image: string | null; status: string; price: number; logo: boolean; stock: number; sizes: { id: string; name: string; price: number; stock: number }[] }
+  const collab = new Map<string, Map<string, CollabProduct>>()
+  for (const r of (collabRes.data ?? []) as CollabRow[]) {
+    const org = collab.get(r.store_id) ?? new Map<string, CollabProduct>()
+    const p = org.get(r.product_id) ?? { store: r.store_name, name: r.product_name, image: r.image_url, status: r.product_status, price: Number(r.price), logo: r.logo, stock: r.product_stock, sizes: [] }
+    if (r.variant_id) p.sizes.push({ id: r.variant_id, name: r.variant_name ?? "", price: Number(r.variant_price ?? r.price), stock: r.variant_stock ?? 0 })
+    org.set(r.product_id, p)
+    collab.set(r.store_id, org)
+  }
+
   const base = "/supply-office/branch-inventory"
-  const tabLink = (t: "requests" | "stock", label: string) => (
+  const tabLink = (t: InventoryTab, label: string) => (
     <Link href={t === "stock" && selected ? `${base}?tab=stock&branch=${selected.store_id}` : `${base}?tab=${t}`} aria-current={tab === t ? "page" : undefined}
       className={cn("flex-1 rounded-lg py-1.5 text-center text-sm font-medium transition-colors", tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
       {label}
@@ -60,8 +81,8 @@ export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: Dashboa
 
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Branch Inventory"
-        description="The Main Supply Office supplies its branches: send the stock they ask for, take back damaged or defective items, and add to or count each branch's stock." />
+      <PageHeading title="Branch & Collab Inventory"
+        description="The Main Supply Office supplies its branches and organizations' collaboration products: send the stock they ask for, take back damaged or defective items, and keep each branch's and collaboration product's stock right." />
 
       {setupMissing ? (
         <p className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -72,9 +93,57 @@ export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: Dashboa
           <div className="mt-6 flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
             {tabLink("requests", `Requests${pending ? ` (${pending})` : ""}`)}
             {tabLink("stock", "Branch stock")}
+            {tabLink("collab", "Collaboration stock")}
           </div>
 
-          {tab === "requests" ? (
+          {tab === "collab" ? (
+            collabRes.error ? (
+              <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">Collaboration stock needs the latest <code>scripts/31_supply_office_branches.sql</code>. Ask the admin to run it in Supabase.</p>
+            ) : collab.size === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No organization has a collaboration product yet.</p>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  New stock goes out as a <strong className="text-foreground">stock order</strong>: the organization pays the cost plus the royalty per unit, and the stock is added when you complete it in{" "}
+                  <Link href="/supply-office/special-orders" className="font-medium text-primary hover:underline">Special Orders</Link>. Use Correct stock only for damaged units or a recount.
+                </p>
+                {[...collab].map(([storeId, org]) => (
+                  <Card key={storeId}>
+                    <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Handshake className="size-4 text-gold" />{[...org.values()][0]?.store}</CardTitle></CardHeader>
+                    <CardContent className="space-y-4">
+                      {[...org].map(([pid, p]) => {
+                        const sizes = p.sizes.length ? p.sizes : [{ id: null as string | null, name: "One size", price: p.price, stock: p.stock }]
+                        return (
+                          <div key={pid} className="space-y-2 border-b border-border pb-4 last:border-0 last:pb-0">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="relative size-10 shrink-0 overflow-hidden rounded-lg bg-muted">{p.image && <Image src={p.image} alt="" fill className="object-cover" sizes="40px" />}</div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-medium">{p.name}</p>
+                                <p className="text-xs capitalize text-muted-foreground">{p.status}{p.logo ? " · official logo" : ""} · {p.stock} in stock</p>
+                              </div>
+                              <CollabStockOrder productId={pid} productName={p.name} storeName={p.store} logo={p.logo} rate={rate}
+                                sizes={sizes.map((s) => ({ id: s.id, name: s.name, price: s.price }))} />
+                            </div>
+                            <table className="w-full text-sm">
+                              <tbody>
+                                {sizes.map((s) => (
+                                  <tr key={s.id ?? "one"} className="align-middle">
+                                    <td className="py-1 pl-13 pr-3 font-medium">{s.name}</td>
+                                    <td className={cn("py-1 pr-3 text-right font-semibold tabular-nums", tone(s.stock))}>{s.stock}</td>
+                                    <td className="py-1"><StockControl module="supply_office" productId={pid} variantId={s.id ?? undefined} current={s.stock} collab /></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )
+                      })}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )
+          ) : tab === "requests" ? (
             <Card className="mt-4">
               <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Inbox className="size-4 text-primary" />Restock requests &amp; damage reports</CardTitle></CardHeader>
               <CardContent><BranchRequestsList requests={requests} mode="main" branchNames={branchNames} /></CardContent>

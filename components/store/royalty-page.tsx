@@ -171,7 +171,10 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
 
       {isOffice && (
         <Card className="mt-4">
-          <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Handshake className="size-4 text-gold" />Collaboration products</CardTitle></CardHeader>
+          <CardHeader className="flex-row items-center justify-between gap-2">
+            <CardTitle className="flex items-center gap-2 font-serif text-base"><Handshake className="size-4 text-gold" />Collaboration products</CardTitle>
+            <Link href="/supply-office/branch-inventory?tab=collab" className="text-xs font-medium text-primary hover:underline">Manage their stock</Link>
+          </CardHeader>
           <CardContent className="text-sm">
             {collabProducts.length === 0 ? <p className="text-muted-foreground">No collaboration products are live.</p> : (
               <ul className="divide-y divide-border">
@@ -181,7 +184,7 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
                       <Link href={`/marketplace/product/${p.id}`} className="font-medium hover:text-primary hover:underline">{p.name}</Link>
                       <span className="ml-2 text-xs text-muted-foreground">{names.get(p.seller_id) ?? "Organization"}</span>
                     </span>
-                    <span className="text-xs text-muted-foreground">{peso(Number(p.price))} · royalty {peso(Number(p.royalty_amount))} per sale</span>
+                    <span className="text-xs text-muted-foreground">{peso(Number(p.price))} · royalty {peso(Number(p.royalty_amount))} per unit, paid in its stock orders</span>
                   </li>
                 ))}
               </ul>

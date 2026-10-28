@@ -67,6 +67,12 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
         ? "Your branch's stock comes from the Main Supply Office. Sales take items out automatically; use Request restock when you need more, or Report damaged / defective to send units back."
         : "Stock levels for your products. Sales take items out of stock automatically and cancelled orders put them back; use Update stock to add units you received, remove units that are lost or damaged, or set the total you counted."} />
       <div className="mt-6"><StatGrid stats={stats} /></div>
+      {ctx.module === "supply_office" && (
+        <p className="mt-4 rounded-xl border border-border bg-muted/30 px-4 py-2.5 text-sm text-muted-foreground">
+          Stock of your branches and of organizations&apos; collaboration products is managed in{" "}
+          <Link href="/supply-office/branch-inventory?tab=collab" className="font-medium text-primary hover:underline">Branch &amp; Collab Inventory</Link>.
+        </p>
+      )}
 
       {branch && (
         <Card className="mt-6">

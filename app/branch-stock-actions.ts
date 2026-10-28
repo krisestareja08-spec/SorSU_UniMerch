@@ -12,7 +12,7 @@ import { assertDashboard } from "@/lib/dashboards"
  */
 
 const SETUP = "Branch stock requests need the latest scripts/31_supply_office_branches.sql. Ask the admin to run it in Supabase."
-const setupError = (message: string) => (/branch_stock_requests|review_branch_request|main_adjust_branch_stock|function .* does not exist/i.test(message) ? SETUP : message)
+const setupError = (message: string) => (/branch_stock_requests|review_branch_request|main_adjust_branch_stock|collab_stock|function .* does not exist/i.test(message) ? SETUP : message)
 
 function refresh() {
   revalidatePath("/cashier/inventory")
@@ -68,6 +68,52 @@ async function adjustBranchStockImpl(formData: FormData): Promise<{ before: numb
   return { before, after: Number(data), label: "" }
 }
 
+/**
+ * Main office → an organization's collaboration product: a stock order, already quoted (cost +
+ * royalty per logo unit × units). The organization pays it; the stock is added when it's completed.
+ */
+async function sendCollabStockOrderImpl(args: {
+  productId: string; lines: { variantId?: string | null; quantity: number; unitPrice: number }[]
+  note?: string; fulfilment: "pickup" | "delivery"; address?: string
+}) {
+  const { supabase } = await assertDashboard("supply_office", "inventory")
+  const lines = args.lines.filter((l) => l.quantity > 0)
+  if (lines.length === 0) throw new Error("Enter the units to send.")
+  const { data, error } = await supabase.rpc("send_collab_stock_order", {
+    p_product: args.productId,
+    p_lines: lines.map((l) => ({ variant_id: l.variantId ?? null, quantity: l.quantity, unit_price: l.unitPrice })),
+    p_note: args.note?.trim() || null, p_fulfilment: args.fulfilment, p_address: args.address?.trim() || null,
+  })
+  if (error) throw new Error(setupError(error.message))
+  refresh()
+  revalidatePath("/supply-office/special-orders")
+  revalidatePath("/seller/supply-requests")
+  return { id: data as string }
+}
+
+/** Main office corrections on a collaboration product: take units out, or set the counted total. */
+async function adjustCollabStockImpl(formData: FormData): Promise<{ before: number; after: number; label: string }> {
+  const { supabase } = await assertDashboard("supply_office", "inventory")
+  const before = Number(formData.get("current"))
+  const { data, error } = await supabase.rpc("main_adjust_collab_stock", {
+    p_product: String(formData.get("product_id") ?? ""),
+    p_variant: (formData.get("variant_id") as string | null) || null,
+    p_mode: String(formData.get("mode") ?? ""),
+    p_quantity: Number(formData.get("quantity")),
+    p_note: ((formData.get("note") as string) ?? "").trim() || null,
+  })
+  if (error) throw new Error(setupError(error.message))
+  refresh()
+  revalidatePath("/seller/inventory")
+  return { before, after: Number(data), label: "" }
+}
+
+export async function sendCollabStockOrder(...args: Parameters<typeof sendCollabStockOrderImpl>) {
+  return attempt(() => sendCollabStockOrderImpl(...args))
+}
+export async function adjustCollabStock(...args: Parameters<typeof adjustCollabStockImpl>) {
+  return attempt(() => adjustCollabStockImpl(...args))
+}
 export async function sendBranchRequest(...args: Parameters<typeof sendRequestImpl>) {
   return attempt(() => sendRequestImpl(...args))
 }
