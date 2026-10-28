@@ -1,14 +1,21 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { createClient } from "@/lib/supabase/client"
+import { toast } from "@/components/ui/toaster"
 import { cn } from "@/lib/utils"
 
-export function PasswordChange() {
+/**
+ * New password + confirmation. Saving signs the account out everywhere else (a changed password
+ * usually means the old one shouldn't work anywhere). afterSave: where to go once it's saved.
+ */
+export function PasswordChange({ afterSave }: { afterSave?: string }) {
+  const router = useRouter()
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [busy, setBusy] = useState(false)
@@ -19,10 +26,20 @@ export function PasswordChange() {
     if (password.length < 8) { setMsg({ ok: false, text: "Password must be at least 8 characters." }); return }
     if (password !== confirm) { setMsg({ ok: false, text: "The passwords don't match." }); return }
     setBusy(true)
-    const { error } = await createClient().auth.updateUser({ password })
+    const supabase = createClient()
+    const { error } = await supabase.auth.updateUser({ password })
+    if (!error) await supabase.auth.signOut({ scope: "others" }).catch(() => {})
     setBusy(false)
-    setMsg(error ? { ok: false, text: error.message } : { ok: true, text: "Password updated." })
-    if (!error) { setPassword(""); setConfirm("") }
+    if (error) {
+      setMsg({ ok: false, text: /different from the old|same password/i.test(error.message) ? "Choose a password you haven't used before." : error.message })
+      return
+    }
+    setPassword(""); setConfirm("")
+    if (afterSave) {
+      toast({ title: "Password updated", variant: "success" })
+      router.replace(afterSave)
+      router.refresh()
+    } else setMsg({ ok: true, text: "Password updated. Other devices were signed out." })
   }
 
   return (

@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { safeNext } from '@/lib/legal'
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/'
+  // Only same-site paths: "?next=@evil.com" would otherwise send people to another site
+  const next = safeNext(searchParams.get('next'))
 
   if (code) {
     const supabase = await createClient()
@@ -26,5 +28,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // A password-reset link that no longer works: offer a new one right away
+  if (next === '/auth/update-password') return NextResponse.redirect(`${origin}/auth/forgot-password?expired=1`)
   return NextResponse.redirect(`${origin}/auth/error`)
 }

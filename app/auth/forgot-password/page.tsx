@@ -2,18 +2,27 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState } from "react"
-import { ArrowLeft, Loader2, MailCheck } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { use, useState } from "react"
+import { AlertTriangle, ArrowLeft, Loader2, MailCheck } from "lucide-react"
+import { createEmailLinkClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+/** Why sending failed, in words people can act on */
+function sendError(message: string) {
+  if (/rate|too many|security purposes/i.test(message)) return "Too many reset emails were asked for. Please wait a few minutes and try again."
+  if (/invalid.*email|email.*invalid/i.test(message)) return "That doesn't look like an email address."
+  return "The reset email couldn't be sent right now. Please try again in a few minutes."
+}
+
 /**
- * "Forgot password?" from the login page: emails a reset link. The link signs the person in
- * through /auth/callback and opens /auth/update-password to choose a new password.
+ * "Forgot password?" from the login page: emails a reset link. The link opens /auth/reset, which
+ * signs the person in and opens /auth/update-password to choose a new password. ?expired=1: they
+ * came back from a link that no longer works.
  */
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage({ searchParams }: { searchParams: Promise<{ expired?: string }> }) {
+  const expired = use(searchParams).expired === "1"
   const [email, setEmail] = useState("")
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
@@ -24,12 +33,12 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) return
     setBusy(true)
     setError(null)
-    const { error: err } = await createClient().auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
+    const { error: err } = await createEmailLinkClient().auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/auth/reset`,
     })
     setBusy(false)
-    // Same message whether or not the email has an account, so it can't be used to look up accounts
-    if (err && /rate|too many/i.test(err.message)) setError("Too many requests. Please wait a minute and try again.")
+    // Supabase answers the same whether or not the email has an account, so errors are safe to show
+    if (err) setError(sendError(err.message))
     else setSent(true)
   }
 
@@ -44,13 +53,21 @@ export default function ForgotPasswordPage() {
             </div>
             <h1 className="mt-6 font-serif text-2xl font-semibold tracking-tight">Check your email</h1>
             <p className="mt-3 text-pretty text-sm text-muted-foreground">
-              If an account uses <span className="font-medium text-foreground">{email.trim()}</span>, we sent a link to reset its password. The link works once and expires soon.
+              If an account uses <span className="font-medium text-foreground">{email.trim()}</span>, we sent it a link to reset the password.
+              It works once and expires in an hour.
             </p>
+            <p className="mt-3 text-pretty text-xs text-muted-foreground">Not there after a few minutes? Check your spam folder.</p>
+            <button type="button" onClick={() => setSent(false)} className="mt-4 text-sm font-medium text-primary hover:underline">Use a different email</button>
           </div>
         ) : (
           <>
             <h1 className="mt-8 text-center font-serif text-2xl font-semibold tracking-tight">Reset your password</h1>
             <p className="mt-2 text-center text-sm text-muted-foreground">Enter your account email and we&apos;ll send you a reset link.</p>
+            {expired && (
+              <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 size-4 shrink-0" />That reset link has expired or was already used. Send yourself a new one.
+              </p>
+            )}
             <form onSubmit={submit} className="mt-6 flex flex-col gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="email">Email</Label>

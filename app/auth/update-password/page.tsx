@@ -5,12 +5,12 @@ import { createClient } from "@/lib/supabase/server"
 import { PasswordChange } from "@/components/account/password-change"
 import { Button } from "@/components/ui/button"
 
-/** Opened from the password-reset email (signed in by /auth/callback): choose a new password. */
+/** Opened from the password-reset email (signed in by /auth/reset): choose a new password. */
 export default async function UpdatePasswordPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   // No session: the link was already used or has expired
-  if (!user) redirect("/auth/forgot-password")
+  if (!user) redirect("/auth/forgot-password?expired=1")
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-background px-6 py-12">
@@ -19,10 +19,10 @@ export default async function UpdatePasswordPage() {
         <h1 className="mt-8 text-center font-serif text-2xl font-semibold tracking-tight">Choose a new password</h1>
         <p className="mt-2 text-center text-sm text-muted-foreground">For {user.email}</p>
         <div className="mt-6 rounded-2xl border border-border bg-card p-5 shadow-sm">
-          <PasswordChange />
+          <PasswordChange afterSave="/" />
         </div>
-        <Button asChild variant="outline" className="mt-4 w-full">
-          <Link href="/">Continue to UniMerch</Link>
+        <Button asChild variant="ghost" className="mt-4 w-full">
+          <Link href="/">Not now</Link>
         </Button>
       </div>
     </main>

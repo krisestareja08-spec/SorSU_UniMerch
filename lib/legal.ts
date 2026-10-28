@@ -18,7 +18,7 @@ export function termsAcceptance() {
   return { terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() }
 }
 
-/** Only same-site paths are allowed as "continue to" targets. */
+/** Only same-site paths are allowed as "continue to" targets ("//x" and "/\x" lead to other sites). */
 export function safeNext(next: string | null | undefined, fallback = "/") {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : fallback
+  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : fallback
 }
