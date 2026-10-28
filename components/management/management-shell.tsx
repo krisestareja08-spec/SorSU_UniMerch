@@ -19,14 +19,14 @@ import {
 } from "@/lib/modules"
 
 // Mobile bottom tabs: each dashboard's most-used pages, in order (the rest are in the menu).
-// The seller's Storefront is the raised, highlighted button.
+// The Storefront of sellers and Supply Office branches is the raised, highlighted centre button.
 const BOTTOM_TABS: Partial<Record<ModuleKey, string[]>> = {
   seller: ["/seller", "/seller/orders", "/seller/shop", "/seller/inventory", "/seller/analytics"],
   bao: ["/bao", "/bao/approvals", "/bao/browse", "/bao/royalty", "/bao/reports"],
   supply_office: ["/supply-office", "/supply-office/orders", "/supply-office/products", "/supply-office/inventory", "/supply-office/shop"],
-  cashier: ["/cashier", "/cashier/orders", "/cashier/products", "/cashier/inventory", "/cashier/payments"],
+  cashier: ["/cashier", "/cashier/orders", "/cashier/shop", "/cashier/products", "/cashier/inventory"],
 }
-const HIGHLIGHT_TAB = "/seller/shop"
+const HIGHLIGHT_TABS = new Set(["/seller/shop", "/cashier/shop"])
 
 export function ManagementShell({
   ctx,
@@ -58,7 +58,6 @@ export function ManagementShell({
     ? preferred.map((href) => nav.find((n) => n.href === href)).filter((n): n is (typeof nav)[number] => !!n)
     : []
   const bottomTabs = pickedTabs.length >= 2 ? pickedTabs : nav.slice(0, 5)
-  const sellerTabs = ctx.module === "seller" ? pickedTabs : null
   const roleLabel = ctx.isMain ? "Main Admin" : "Member"
 
   async function signOut() {
@@ -284,7 +283,7 @@ export function ManagementShell({
                 )}
               >
                 {active && <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-gold" />}
-                {sellerTabs && tab.href === HIGHLIGHT_TAB ? (
+                {HIGHLIGHT_TABS.has(tab.href) ? (
                   <span className={cn(
                     "-mt-5 flex size-10 items-center justify-center rounded-2xl shadow-lg transition-all",
                     active ? "bg-primary" : "bg-primary/90",
@@ -294,7 +293,7 @@ export function ManagementShell({
                 ) : (
                   <Icon className="size-5" />
                 )}
-                <span className={cn("block max-w-full truncate px-0.5", sellerTabs && tab.href === HIGHLIGHT_TAB && "mt-1")}>{tab.short ?? tab.label}</span>
+                <span className={cn("block max-w-full truncate px-0.5", HIGHLIGHT_TABS.has(tab.href) && "mt-1")}>{tab.short ?? tab.label}</span>
               </Link>
             )
           })}
