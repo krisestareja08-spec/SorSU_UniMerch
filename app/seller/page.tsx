@@ -1,5 +1,6 @@
 import { requireDashboard } from "@/lib/dashboards"
 import { createClient } from "@/lib/supabase/server"
+import { loadSales } from "@/lib/analytics"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,22 +11,16 @@ export default async function SellerPage() {
   const sellerId = ctx.storeId ?? ""
   const supabase = await createClient()
 
-  const [{ data: products }, { data: orders }] = await Promise.all([
+  const [{ data: products }, lines] = await Promise.all([
     supabase.from("products").select("id, status").eq("seller_id", sellerId),
-    supabase.from("order_items").select("order_id, unit_price, quantity, orders(status, total)").eq("seller_id", sellerId),
+    loadSales(supabase, { storeId: sellerId }),
   ])
 
   const activeListings = (products ?? []).filter((p) => p.status === "approved").length
   const pendingProducts = (products ?? []).filter((p) => p.status === "pending").length
-  const allOrders = orders ?? []
-  const openOrders = allOrders.filter((o) => {
-    const s = (Array.isArray(o.orders) ? o.orders[0] : o.orders)?.status
-    return s === "pending" || s === "paid" || s === "partially_paid"
-  }).length
-  const totalRevenue = allOrders.reduce((sum, o) => {
-    const order = Array.isArray(o.orders) ? o.orders[0] : o.orders
-    return order?.status === "completed" ? sum + Number(order.total ?? 0) : sum
-  }, 0)
+  // Counted per order (an order has a line per item), revenue from what each line sold for
+  const openOrders = new Set(lines.filter((l) => ["pending", "paid", "partially_paid"].includes(l.status)).map((l) => l.orderId)).size
+  const totalRevenue = lines.reduce((sum, l) => (l.status === "completed" ? sum + l.unitPrice * l.quantity : sum), 0)
 
   const stats: Stat[] = [
     { label: "Total Revenue",    value: `₱${totalRevenue.toLocaleString()}`, icon: TrendingUp,   hint: "Completed orders",  accent: "gold" },

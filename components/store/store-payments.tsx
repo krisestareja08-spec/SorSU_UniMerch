@@ -8,12 +8,16 @@ import type { DashboardCtx } from "@/lib/modules"
 /** Cash and GCash payment log for a store. Shared by the seller and cashier dashboards. */
 export async function StorePayments({ ctx }: { ctx: DashboardCtx }) {
   const supabase = await createClient()
-  const { data: orderItems, error } = await supabase
-    .from("order_items")
-    .select("order_id, product_name, quantity, orders(id, status, total, payment_method, created_at)")
-    .eq("seller_id", ctx.storeId ?? "")
-    .order("order_id", { ascending: false })
-    .limit(300)
+  const lines = (newestFirst: boolean) => {
+    const q = supabase
+      .from("order_items")
+      .select("order_id, product_name, quantity, orders(id, status, total, payment_method, created_at)")
+      .eq("seller_id", ctx.storeId ?? "")
+    return (newestFirst ? q.order("orders(created_at)", { ascending: false }) : q.order("order_id", { ascending: false })).limit(300)
+  }
+  // Newest orders first; any database that can't sort by the order's date still gets a list
+  let { data: orderItems, error } = await lines(true)
+  if (error) ({ data: orderItems, error } = await lines(false))
 
   type OrderRow = { id: string; status: string; total: number; payment_method: string; created_at: string; items: string[] }
   const orders = new Map<string, OrderRow>()

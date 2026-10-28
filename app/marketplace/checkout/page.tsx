@@ -25,7 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { lineKey, useCart, type CartItem } from "@/lib/cart-context"
-import { clearBuyNowItem, readBuyNowItem, shopKey } from "@/lib/buy-now"
+import { clearBuyNowItem, shopKey, useBuyNowItem } from "@/lib/buy-now"
 import { PAYMENT_METHOD_MODE, PAYMENT_MODES, commonPaymentModes, parsePaymentModes, type PaymentMode } from "@/lib/product-pricing"
 import { submitOrder } from "./actions"
 import { validateFullName } from "@/lib/profile-rules"
@@ -50,13 +50,9 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
   const { items: cartItems, loaded: cartLoaded, removeItems } = useCart()
   // ?buy=1: "Buy" / "Buy Now" on one product — check out only that item, never the cart's
   const buyMode = use(searchParams).buy === "1"
-  const [buyItem, setBuyItem] = useState<CartItem | null>(null)
-  const [buyLoaded, setBuyLoaded] = useState(false)
-  useEffect(() => {
-    if (!buyMode) return
-    setBuyItem(readBuyNowItem())
-    setBuyLoaded(true)
-  }, [buyMode])
+  const heldItem = useBuyNowItem()
+  const buyItem = buyMode ? heldItem ?? null : null
+  const buyLoaded = heldItem !== undefined
   const loaded = buyMode ? buyLoaded : cartLoaded
   // Otherwise only the items ticked in the cart are checked out
   const items = useMemo(

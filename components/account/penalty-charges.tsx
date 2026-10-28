@@ -30,16 +30,16 @@ export function PenaltyCharges() {
   const [penalties, setPenalties] = useState<Penalty[] | null>(null)
   const [paying, setPaying] = useState<string | null>(null)
 
-  async function load() {
+  async function fetchPenalties(): Promise<Penalty[] | null> {
     const supabase = createClient()
     // Overdue pre-orders are discarded (and charged) first, so the list is current
     await supabase.rpc("expire_overdue_preorders").then(() => {}, () => {})
     const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
+    if (!user) return null
     const { data, error } = await supabase.from("buyer_penalties")
       .select("id, order_id, amount, reason, status, created_at, store_id")
       .eq("buyer_id", user.id).order("created_at", { ascending: false }).limit(30)
-    if (error || !data?.length) { setPenalties([]); return } // table arrives with scripts/29
+    if (error || !data?.length) return [] // table arrives with scripts/29
     const storeIds = [...new Set(data.map((p) => p.store_id))]
     type Shop = { id: string; org_name: string | null; store_hours?: string | null; pickup_location?: string | null; gcash_qr_url?: string | null; qr_status?: string | null }
     const loadShops = async (columns: string) =>
@@ -47,17 +47,21 @@ export function PenaltyCharges() {
     let { data: shops, error: shopError } = await loadShops("id, org_name, store_hours, pickup_location, gcash_qr_url, qr_status")
     if (shopError) ({ data: shops } = await loadShops("id, org_name, gcash_qr_url, qr_status"))
     const byId = new Map((shops ?? []).map((s) => [s.id, s]))
-    setPenalties(data.map((p) => {
+    return data.map((p) => {
       const s = byId.get(p.store_id)
       return {
         ...p, amount: Number(p.amount), status: p.status as Penalty["status"],
         shop: { name: s?.org_name ?? "Shop", hours: s?.store_hours ?? null, location: s?.pickup_location ?? null, qrUrl: s?.qr_status === "active" ? s?.gcash_qr_url ?? null : null },
       }
-    }))
+    })
   }
+  const load = () => fetchPenalties().then(setPenalties)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    let live = true
+    fetchPenalties().then((list) => { if (live) setPenalties(list) })
+    return () => { live = false }
+  }, [])
 
   if (!penalties || penalties.length === 0) return null
   const owed = penalties.filter((p) => p.status === "unpaid" || p.status === "pending_review")

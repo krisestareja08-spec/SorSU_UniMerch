@@ -136,17 +136,3 @@ export function StageBadge({ stage }: { stage: "waitlist" | "ready" | "claimed" 
   return <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", tone)}>{label}</span>
 }
 
-export function StatusBadges({ claimed, purchasedAt, claimedAt }: { claimed: boolean; purchasedAt?: string | null; claimedAt?: string | null }) {
-  return (
-    <span className="flex flex-wrap gap-1">
-      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">
-        Purchased{purchasedAt ? ` ${new Date(purchasedAt).toLocaleDateString("en-PH", { month: "numeric", day: "numeric" })}` : ""}
-      </span>
-      {claimed && (
-        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-          Claimed{claimedAt ? ` ${new Date(claimedAt).toLocaleDateString("en-PH", { month: "numeric", day: "numeric" })}` : ""}
-        </span>
-      )}
-    </span>
-  )
-}

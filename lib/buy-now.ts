@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from "react"
 import type { CartItem } from "@/lib/cart-context"
 
 /**
@@ -19,6 +20,21 @@ export function readBuyNowItem(): CartItem | null {
   } catch {
     return null
   }
+}
+
+// The same item for every render until sessionStorage changes (useSyncExternalStore needs that)
+let snapshot: { raw: string | null; item: CartItem | null } | null = null
+function readSnapshot(): CartItem | null {
+  let raw: string | null = null
+  try { raw = sessionStorage.getItem(KEY) } catch {}
+  if (!snapshot || snapshot.raw !== raw) snapshot = { raw, item: readBuyNowItem() }
+  return snapshot.item
+}
+const noSubscribe = () => () => {}
+
+/** The held item: undefined until the browser has read it (and on the server), then the item or null */
+export function useBuyNowItem(): CartItem | null | undefined {
+  return useSyncExternalStore(noSubscribe, readSnapshot, () => undefined)
 }
 
 export function clearBuyNowItem() {

@@ -66,7 +66,6 @@ export function LiveAlerts() {
       pending.forEach(clearTimeout)
       pending.clear()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- subscribe once per mount
   }, [])
 
   function dismiss(id: string) {

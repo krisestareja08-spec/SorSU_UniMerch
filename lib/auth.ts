@@ -104,9 +104,3 @@ export async function requireUser(): Promise<SessionUser> {
 
   return { id: user.id, email: user.email ?? "", profile }
 }
-
-/** Banned accounts (e.g. confirmed dummy accounts) are locked out of the whole app. */
-export async function redirectIfBanned(userId: string) {
-  const row = await getProfileRow(userId)
-  if (row?.account_status === "banned") redirect("/auth/restricted")
-}

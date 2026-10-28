@@ -23,20 +23,26 @@ export function StorePenalties({ storeId, module }: { storeId: string; module: M
   const [busy, setBusy] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(null)
 
-  async function load() {
+  async function fetchPenalties(): Promise<{ rows: Penalty[]; buyers: Record<string, OrderBuyer> }> {
     const supabase = createClient()
     const { data, error } = await supabase.from("buyer_penalties")
       .select("id, order_id, amount, status, payment_method, receipt_url, reference_number, created_at")
       .eq("store_id", storeId).in("status", ["unpaid", "pending_review"]).order("created_at", { ascending: false })
-    if (error) { setPenalties([]); return } // table arrives with scripts/29
+    if (error) return { rows: [], buyers: {} } // table arrives with scripts/29
     const rows = (data ?? []).map((p) => ({ ...p, amount: Number(p.amount) })) as Penalty[]
-    setPenalties(rows)
     const orderIds = rows.map((p) => p.order_id).filter((id): id is string => !!id)
-    if (orderIds.length) setBuyers(await getOrderBuyers(module, orderIds).then(unwrap).catch(() => ({})))
+    const buyers = orderIds.length ? await getOrderBuyers(module, orderIds).then(unwrap).catch(() => ({})) : {}
+    return { rows, buyers }
   }
+  const show = ({ rows, buyers }: Awaited<ReturnType<typeof fetchPenalties>>) => { setPenalties(rows); setBuyers(buyers) }
+  const load = () => fetchPenalties().then(show)
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per store
-  useEffect(() => { load() }, [storeId])
+  useEffect(() => {
+    let live = true
+    fetchPenalties().then((result) => { if (live) show(result) })
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per store
+  }, [storeId])
 
   async function update(id: string, patch: Record<string, unknown>) {
     setBusy(id)

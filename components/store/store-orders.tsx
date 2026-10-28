@@ -301,11 +301,17 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     // Discard overdue pre-orders and charge their penalty before listing (no-op before scripts/29)
     await supabase.rpc("expire_overdue_preorders").then(() => {}, () => {})
 
-    const { data, error: err } = await supabase
-      .from("order_items")
-      .select("order_id, product_name, product_image_url, variant, quantity, unit_price, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
-      .eq("seller_id", ctx.storeId ?? "")
-      .order("order_id", { ascending: false })
+    // One request returns up to 1000 lines: newest orders first, so only the oldest history is left
+    // out (sorting by the random order id dropped random orders). Older databases: unsorted.
+    const lines = (newestFirst: boolean) => {
+      const q = supabase
+        .from("order_items")
+        .select("order_id, product_name, product_image_url, variant, quantity, unit_price, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
+        .eq("seller_id", ctx.storeId ?? "")
+      return (newestFirst ? q.order("orders(created_at)", { ascending: false }) : q.order("order_id", { ascending: false })).limit(1000)
+    }
+    let { data, error: err } = await lines(true)
+    if (err) ({ data, error: err } = await lines(false))
 
     if (err) { setError(err.message); setLoading(false); return }
 
@@ -350,6 +356,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     startTransition(() => {
       load()
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once
   }, [])
 
   async function updateOrder(orderId: string, update: Record<string, unknown>) {
