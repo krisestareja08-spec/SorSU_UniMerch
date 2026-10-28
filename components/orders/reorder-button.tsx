@@ -32,7 +32,8 @@ export function ReorderButton({ items, storeName, className }: { items: ReorderI
 
     let skipped = 0
     const added: string[] = []
-    for (const item of items) {
+    // Each added line goes to the top of the cart, so add in reverse to keep the order's own order
+    for (const item of [...items].reverse()) {
       const p = item.productId ? byId.get(item.productId) : undefined
       const variants = p ? variantsByProduct?.get(p.id) ?? [] : []
       const variant = variants.find((v) => v.name === item.variant)

@@ -42,12 +42,13 @@ function cartReducer(state: CartState, action: CartAction): CartState {
     case "LOAD":
       return { items: action.items, loaded: true }
     case "ADD": {
+      // The line just added goes to the top of the cart; an existing one keeps its total quantity
       const key = lineKey(action.item)
       const exists = state.items.find((i) => lineKey(i) === key)
-      if (exists) {
-        return { ...state, items: state.items.map((i) => lineKey(i) === key ? { ...i, price: action.item.price, quantity: i.quantity + action.item.quantity, selected: true } : i) }
-      }
-      return { ...state, items: [...state.items, action.item] }
+      const line = exists
+        ? { ...exists, price: action.item.price, quantity: exists.quantity + action.item.quantity, selected: true }
+        : action.item
+      return { ...state, items: [line, ...state.items.filter((i) => lineKey(i) !== key)] }
     }
     case "REMOVE":
       return { ...state, items: state.items.filter((i) => lineKey(i) !== action.id) }
