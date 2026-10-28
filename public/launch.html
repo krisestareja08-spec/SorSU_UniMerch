@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#7a1f2b">
+  <meta name="robots" content="noindex">
+  <title>UniMerch</title>
+  <!--
+    Launch screen, shown by the service worker (public/sw.js) the moment the app opens, straight from
+    its cache, while the real page loads over the network. Same background as the manifest's
+    splash, so the phone's still logo turns into this rolling one. No personal data here.
+  -->
+  <style>
+    :root { color-scheme: light; --maroon: #7a1f2b; --gold: #c99a2e; --bg: #fbf8f3; --muted: #6f625a; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; place-items: center; padding: 24px 16px; background: var(--bg); color: var(--muted);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    main { display: flex; flex-direction: column; align-items: center; }
+
+    /* The cart rolls along: it bobs, its shadow breathes, the road slides by */
+    .cart { position: relative; width: 160px; height: 160px; transform-origin: 50% 85%;
+      animation: enter .45s cubic-bezier(.2, .8, .3, 1.2) both, bob 1.1s ease-in-out .45s infinite; }
+    .cart img { display: block; width: 100%; height: 100%; }
+    /* A light sweeping across the logo only (masked by the logo itself) */
+    .cart::after { content: ""; position: absolute; inset: 0; pointer-events: none;
+      background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .6) 50%, transparent 60%) 100% 0 / 250% 100% no-repeat;
+      -webkit-mask: url(/icons/icon-512.png) center / contain no-repeat; mask: url(/icons/icon-512.png) center / contain no-repeat;
+      animation: shine 2.6s ease-in-out 1s infinite; }
+    .ground { position: relative; width: 190px; height: 18px; margin-top: -6px; }
+    .shadow { position: absolute; left: 50%; top: 0; width: 120px; height: 10px; margin-left: -60px; border-radius: 50%;
+      background: radial-gradient(closest-side, rgba(43, 33, 29, .22), transparent); animation: shadow 1.1s ease-in-out .45s infinite; }
+    .road { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; border-radius: 3px;
+      background: repeating-linear-gradient(90deg, var(--gold) 0 16px, transparent 16px 30px);
+      -webkit-mask: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent); mask: linear-gradient(90deg, transparent, #000 25%, #000 75%, transparent);
+      animation: road .5s linear infinite; }
+
+    /* Words only when it takes a while, so a quick start doesn't flash text */
+    .status { min-height: 64px; margin-top: 22px; text-align: center; font-size: 14px; line-height: 1.45; }
+    .status p { margin: 0; opacity: 0; transition: opacity .4s; }
+    .status p.show { opacity: 1; }
+    .status strong { display: block; color: var(--maroon); font-family: Georgia, serif; font-size: 17px; font-weight: 600; }
+    .dots::after { content: ""; display: inline-block; width: 1.2em; text-align: left; animation: dots 1.4s steps(4) infinite; }
+    button { margin-top: 14px; border: 0; border-radius: 999px; padding: 11px 26px; font: 600 14px/1 inherit; color: #fff; background: var(--maroon); cursor: pointer; }
+    button:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+    [hidden] { display: none; }
+
+    @keyframes enter { from { opacity: .7; transform: scale(.92); } }
+    @keyframes bob { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-7px) rotate(-1.5deg); } 60% { transform: translateY(0) rotate(0); } 80% { transform: translateY(-2px) rotate(.8deg); } }
+    @keyframes shadow { 0%, 100% { transform: scaleX(1); opacity: 1; } 30% { transform: scaleX(.8); opacity: .6; } 60% { transform: scaleX(1); opacity: 1; } }
+    @keyframes road { to { background-position: -30px 0; } }
+    @keyframes shine { 0% { background-position: 100% 0; } 50%, 100% { background-position: 0 0; } }
+    @keyframes dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+    @keyframes pulse { 50% { opacity: .55; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cart { animation: pulse 1.8s ease-in-out infinite; }
+      .cart::after, .shadow, .road, .dots::after { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main role="status" aria-live="polite">
+    <div class="cart"><img src="/icons/icon-512.png" alt="UniMerch" width="160" height="160"></div>
+    <div class="ground" aria-hidden="true"><span class="shadow"></span><span class="road"></span></div>
+    <div class="status">
+      <p id="opening"><strong>UniMerch</strong><span class="dots">Opening</span></p>
+      <p id="slow" hidden><strong>Still loading</strong>Your connection is slow. Hang tight, we&rsquo;re almost there.</p>
+      <p id="stuck" hidden><strong>This is taking long</strong>Check your internet connection.<br><button type="button" id="retry">Try again</button></p>
+    </div>
+  </main>
+  <script>
+    (function () {
+      // The address is the page that was asked for (the service worker answered it with this screen)
+      var target = location.pathname === "/launch.html" ? "/" : location.href
+      // If this screen keeps coming back in the same tab, skip it so it can never loop
+      try {
+        var last = Number(sessionStorage.getItem("unimerch-launch") || 0)
+        if (Date.now() - last < 15000) { var u = new URL(target, location.href); u.searchParams.set("nosplash", "1"); target = u.href }
+        sessionStorage.setItem("unimerch-launch", String(Date.now()))
+      } catch (e) {}
+      // Paint first, then load the page; this screen keeps animating until the page arrives
+      function go() { location.replace(target) }
+      requestAnimationFrame(function () { setTimeout(go, 0) })
+
+      function show(id) {
+        ["opening", "slow", "stuck"].forEach(function (p) { var el = document.getElementById(p); el.hidden = p !== id; el.classList.remove("show") })
+        requestAnimationFrame(function () { requestAnimationFrame(function () { document.getElementById(id).classList.add("show") }) })
+      }
+      setTimeout(function () { show("opening") }, 1200)
+      setTimeout(function () { show("slow") }, 7000)
+      setTimeout(function () { show("stuck") }, 20000)
+      document.getElementById("retry").addEventListener("click", function () { show("opening"); go() })
+    })()
+  </script>
+</body>
+</html>
