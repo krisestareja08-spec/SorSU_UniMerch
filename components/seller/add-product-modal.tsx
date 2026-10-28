@@ -55,8 +55,8 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   // Organization sellers only: made with the Main Supply Office, which then pays the royalty
   const [supplyOfficeCollab, setSupplyOfficeCollab] = useState(false)
   const canCollab = module === "seller"
-  // Supply Office branches: stock comes from the Main Supply Office (restock requests)
-  const isBranch = module === "cashier"
+  // Supply Office branches and collaboration products: stock comes from the Main Supply Office
+  const isBranch = module === "cashier" || (canCollab && hasLogo && supplyOfficeCollab)
   const [royaltyPercentage, setRoyaltyPercentage] = useState(3)
   const fileRef = useRef<HTMLInputElement>(null)
 

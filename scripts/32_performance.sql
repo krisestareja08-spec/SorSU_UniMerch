@@ -103,6 +103,12 @@ alter table public.order_items add column if not exists royalty_store_id   uuid;
 alter table public.order_items add column if not exists remittance_id      uuid references public.royalty_remittances(id) on delete set null;
 create index if not exists order_items_royalty_open_idx on public.order_items (royalty_store_id) where remittance_id is null;
 create index if not exists order_items_remittance_idx   on public.order_items (remittance_id);
+-- Royalty collected in supply orders (scripts/31) is remitted by the Main office the same way
+do $$ begin
+  if to_regclass('public.supply_request_items') is not null then
+    alter table public.supply_request_items add column if not exists remittance_id uuid references public.royalty_remittances(id) on delete set null;
+  end if;
+end $$;
 
 -- Past royalty sales: owed by the store that sold them, at the rate they were recorded with
 update public.order_items oi set
@@ -156,9 +162,16 @@ begin
   if coalesce(p.is_royalty_product, false) then
     new.royalty_percentage := p.royalty_percentage;
     new.royalty_store_id := new.seller_id;
-    -- Collaboration products and every branch sale: owed by the Main Supply Office
-    if p.supply_office_collab or public.is_branch_store(new.seller_id) then
+    -- Every branch sale: owed by the Main Supply Office
+    if public.is_branch_store(new.seller_id) then
       new.royalty_store_id := coalesce(public.main_supply_store(), new.seller_id);
+    end if;
+    -- Collaboration products: the royalty was paid up front, per unit, in the supply order that
+    -- brought their stock (scripts/31), so their sales carry none
+    if p.supply_office_collab then
+      new.royalty_store_id := null;
+      new.royalty_percentage := null;
+      new.royalty_amount := 0;
     end if;
   else
     new.royalty_store_id := null;
@@ -205,7 +218,8 @@ create or replace function public.royalty_lines(p_store uuid)
 returns table (
   item_id uuid, order_id uuid, ordered_at timestamptz, order_status text, product_name text,
   quantity integer, unit_price numeric, royalty_percentage numeric, royalty_amount numeric,
-  origin_store uuid, origin_name text, collab boolean, remittance_id uuid, origin_branch boolean, fully_paid boolean
+  origin_store uuid, origin_name text, collab boolean, remittance_id uuid, origin_branch boolean, fully_paid boolean,
+  supply boolean
 )
 language plpgsql security definer set search_path = public stable as $$
 #variable_conflict use_column
@@ -218,7 +232,8 @@ begin
            oi.quantity, oi.unit_price, oi.royalty_percentage, oi.royalty_amount,
            oi.seller_id, sp.org_name, oi.royalty_store_id is distinct from oi.seller_id, oi.remittance_id,
            public.is_branch_store(oi.seller_id),
-           o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total)
+           o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total),
+           false
     from public.order_items oi
     join public.orders o on o.id = oi.order_id
     left join public.seller_profiles sp on sp.id = oi.seller_id
@@ -226,7 +241,19 @@ begin
     where oi.royalty_store_id = p_store
       and o.status not in ('cancelled', 'refunded')
       and (oi.remittance_id is null or r.status = 'pending')
-    order by o.created_at desc;
+    union all
+    -- Paid supply orders' royalty (per unit × units ordered), owed by the Main office
+    select si.id, si.request_id, coalesce(sr.paid_at, sr.created_at), 'paid'::text, si.name || coalesce(' (' || si.size || ')', ''),
+           si.quantity, si.unit_price, si.royalty_percentage, si.royalty_amount,
+           sr.requester_store_id, sp.org_name, false, si.remittance_id, public.is_branch_store(sr.requester_store_id), true, true
+    from public.supply_request_items si
+    join public.supply_requests sr on sr.id = si.request_id
+    left join public.seller_profiles sp on sp.id = sr.requester_store_id
+    left join public.royalty_remittances r on r.id = si.remittance_id
+    where p_store = public.main_supply_store() and si.royalty_amount > 0
+      and sr.status in ('paid', 'preparing', 'ready', 'out_for_delivery', 'completed')
+      and (si.remittance_id is null or r.status = 'pending')
+    order by 3 desc;
 end;
 $$;
 
@@ -264,10 +291,20 @@ begin
     -- Fully paid sales only (a partly paid pre-order ready for pick up waits for its balance)
     and (o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total));
 
-  select coalesce(sum(oi.royalty_amount * oi.quantity), 0), count(*), min(o.created_at), max(o.created_at)
-  into total, n, first_at, last_at
-  from public.order_items oi join public.orders o on o.id = oi.order_id
-  where oi.remittance_id = rid;
+  if p_store = public.main_supply_store() then
+    update public.supply_request_items si set remittance_id = rid
+    from public.supply_requests sr
+    where sr.id = si.request_id and si.remittance_id is null and si.royalty_amount > 0
+      and sr.status in ('paid', 'preparing', 'ready', 'out_for_delivery', 'completed');
+  end if;
+
+  select coalesce(sum(x.amt), 0), count(*), min(x.at), max(x.at) into total, n, first_at, last_at from (
+    select oi.royalty_amount * oi.quantity as amt, o.created_at as at
+    from public.order_items oi join public.orders o on o.id = oi.order_id where oi.remittance_id = rid
+    union all
+    select si.royalty_amount * si.quantity, coalesce(sr.paid_at, sr.created_at)
+    from public.supply_request_items si join public.supply_requests sr on sr.id = si.request_id where si.remittance_id = rid
+  ) x;
   if n = 0 or total <= 0 then
     raise exception 'There is no royalty from paid sales to remit yet.';
   end if;
@@ -287,6 +324,22 @@ begin
     left join public.seller_profiles sp on sp.id = oi.seller_id
     where oi.remittance_id = rid
     group by oi.product_name, oi.royalty_percentage, oi.seller_id, oi.royalty_store_id
+    union all
+    select jsonb_build_object(
+      'product', si.name || coalesce(' (' || si.size || ')', ''),
+      'rate',    si.royalty_percentage,
+      'items',   sum(si.quantity),
+      'gross',   sum(si.unit_price * si.quantity),
+      'royalty', sum(si.royalty_amount * si.quantity),
+      'collab',  false,
+      'branch',  public.is_branch_store(sr.requester_store_id),
+      'supply',  true,
+      'store',   max(sp.org_name))
+    from public.supply_request_items si
+    join public.supply_requests sr on sr.id = si.request_id
+    left join public.seller_profiles sp on sp.id = sr.requester_store_id
+    where si.remittance_id = rid
+    group by si.name, si.size, si.royalty_percentage, sr.requester_store_id
   ) x;
 
   update public.royalty_remittances
@@ -321,6 +374,9 @@ begin
 
   if p_decision = 'rejected' then
     update public.order_items set remittance_id = null where remittance_id = p_id;
+    if to_regclass('public.supply_request_items') is not null then
+      update public.supply_request_items set remittance_id = null where remittance_id = p_id;
+    end if;
   end if;
 
   select * into dash from public.store_dashboard_path(r.store_id);

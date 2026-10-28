@@ -20,6 +20,7 @@ export function EditVariantsButton({
   module,
   basePrice,
   legacySizes = [],
+  lockStock = false,
 }: {
   productId: string
   productName: string
@@ -28,6 +29,8 @@ export function EditVariantsButton({
   basePrice: number
   /** Size names saved before variants existed; offered as a starting point */
   legacySizes?: string[]
+  /** Collaboration products: stock comes from the Main Supply Office (branches always) */
+  lockStock?: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -51,7 +54,7 @@ export function EditVariantsButton({
 
   async function save() {
     if (!rows) return
-    const problem = validateDrafts(rows, { lockStock: module === "cashier" })
+    const problem = validateDrafts(rows, { lockStock: lockStock || module === "cashier" })
     if (problem) { setError(problem); return }
     setSaving(true)
     setError(null)
@@ -90,7 +93,7 @@ export function EditVariantsButton({
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />{error}
                 </p>
               )}
-              {rows === null ? <Loader2 className="mx-auto my-6 size-6 animate-spin text-primary" /> : <VariantEditor rows={rows} onChange={setRows} lockStock={module === "cashier"} />}
+              {rows === null ? <Loader2 className="mx-auto my-6 size-6 animate-spin text-primary" /> : <VariantEditor rows={rows} onChange={setRows} lockStock={lockStock || module === "cashier"} />}
               <div className="flex gap-2 pt-1">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button type="button" className="flex-1 gap-2" disabled={saving || !rows?.length} onClick={save}>

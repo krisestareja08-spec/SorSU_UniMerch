@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, ShieldCheck, Users, AlertOctagon, Store, ClipboardList, Building2,
   CheckSquare, BarChart2, FileText, Settings, Boxes, ShoppingCart, Package,
-  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, HandCoins, ClipboardCheck, Warehouse, type LucideIcon,
+  Tag, CreditCard, MessageCircle, MessagesSquare, Megaphone, Wallet, Globe, UserCog, Flag, Coins, ReceiptText, HandCoins, ClipboardCheck, Warehouse, Truck, type LucideIcon,
 } from "lucide-react"
 
 /**
@@ -70,6 +70,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "products",   label: "Products",         href: "/supply-office/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",        href: "/supply-office/inventory",  icon: Boxes },
       { perm: "inventory",  label: "Branch Inventory", short: "Branches", href: "/supply-office/branch-inventory", icon: Warehouse },
+      { perm: "supply",     label: "Special Orders", short: "Special",   href: "/supply-office/special-orders", icon: Truck },
       { perm: "restricted", label: "Restricted Items", short: "Restricted", href: "/supply-office/restricted", icon: ShieldCheck },
       { perm: "reports",    label: "Sales Reports", short: "Reports",    href: "/supply-office/reports",    icon: FileText },
       { perm: "reports",    label: "Royalty",          href: "/supply-office/royalty",    icon: HandCoins },
@@ -89,6 +90,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "messages",   label: "Buyer Messages", short: "Messages",      href: "/cashier/messages",   icon: MessageCircle },
       { perm: "products",   label: "Products",            href: "/cashier/products",   icon: Package },
       { perm: "inventory",  label: "Inventory",           href: "/cashier/inventory",  icon: Boxes },
+      { perm: "supply",     label: "Supply Requests", short: "Supply", href: "/cashier/supply-requests", icon: Truck },
       { perm: "restricted", label: "Restricted Items", short: "Restricted",    href: "/cashier/restricted", icon: ShieldCheck },
       { perm: "payments",   label: "Transaction History", short: "History", href: "/cashier/payments",   icon: CreditCard },
       { perm: "reports",    label: "Sales Reports", short: "Reports",       href: "/cashier/reports",    icon: FileText },
@@ -107,6 +109,7 @@ export const MODULES: Record<ModuleKey, ModuleDef> = {
       { perm: "orders",     label: "Orders",      href: "/seller/orders",    icon: ReceiptText },
       { perm: "orders",     label: "Pre-order Forms", short: "Pre-orders", href: "/seller/preorders", icon: ClipboardCheck },
       { perm: "inventory",  label: "Inventory",   href: "/seller/inventory", icon: Boxes },
+      { perm: "supply",     label: "Supply Requests", short: "Supply", href: "/seller/supply-requests", icon: Truck },
       { perm: "analytics",  label: "Analytics",   href: "/seller/analytics", icon: BarChart2 },
       { perm: "reports",    label: "Sales Reports", short: "Reports", href: "/seller/reports", icon: FileText },
       { perm: "reports",    label: "Royalty",     href: "/seller/royalty",   icon: HandCoins },

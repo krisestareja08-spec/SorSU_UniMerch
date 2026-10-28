@@ -7,7 +7,8 @@ import { AlertTriangle, Boxes, History, PackageX, Send, TrendingDown } from "luc
 import { StockControl } from "@/components/store/stock-control"
 import { BranchRequestsList, BranchStockActions, type BranchRequest } from "@/components/store/branch-requests"
 import { formatDateTime } from "@/lib/admin"
-import type { DashboardCtx } from "@/lib/modules"
+import { MODULES, type DashboardCtx } from "@/lib/modules"
+import Link from "next/link"
 import { cn } from "@/lib/utils"
 import { Fragment } from "react"
 import { loadVariants } from "@/lib/variants"
@@ -18,7 +19,7 @@ const REASON_LABELS: Record<string, string> = {
   sale: "Sale", restock: "Restock", cancellation: "Cancelled order", adjustment: "Adjustment", initial: "Initial",
 }
 
-type ProductRow = { id: string; name: string; category: string; stock: number; status: string; badge: string; image_url: string | null }
+type ProductRow = { id: string; name: string; category: string; stock: number; status: string; badge: string; image_url: string | null; supply_office_collab?: boolean }
 
 const stockTone = (n: number) => (n === 0 ? "text-destructive" : n <= LOW_STOCK ? "text-amber-700" : "")
 const stockNote = (n: number) => (n === 0 ? " · out of stock" : n <= LOW_STOCK ? " · low" : "")
@@ -33,7 +34,8 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
   const supabase = await createClient()
   const branch = ctx.module === "cashier"
   const [{ data: productRows }, movementsRes, requestsRes] = await Promise.all([
-    supabase.from("products").select("id, name, category, stock, status, badge, image_url").eq("seller_id", ctx.storeId ?? "").order("stock", { ascending: true }),
+    // "*": supply_office_collab arrives with scripts/32
+    supabase.from("products").select("*").eq("seller_id", ctx.storeId ?? "").order("stock", { ascending: true }),
     supabase.from("inventory_movements").select("product_name, change, reason, note, created_at").eq("store_id", ctx.storeId ?? "").order("created_at", { ascending: false }).limit(50),
     branch
       ? supabase.from("branch_stock_requests")
@@ -42,6 +44,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
       : Promise.resolve({ data: null, error: null }),
   ])
   const requests = (requestsRes.data ?? []) as BranchRequest[]
+  const supplyHref = `${MODULES[ctx.module].basePath}/supply-requests/new`
   const products = (productRows ?? []) as ProductRow[]
   // Products with sizes keep stock per size (scripts/28); restocks and adjustments go to that size
   const variantsByProduct = (await loadVariants(supabase, products.map((p) => p.id))) ?? new Map()
@@ -102,6 +105,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                         {variants.length
                           ? <span className="text-xs text-muted-foreground">Total of all sizes — {branch ? "request per size below" : "adjust each size below"}</span>
                           : branch ? <BranchStockActions productId={p.id} stock={p.stock} />
+                          : p.supply_office_collab ? <CollabStockNote href={supplyHref} />
                           : <StockControl module={ctx.module} productId={p.id} current={p.stock} />}
                       </td>
                     </tr>
@@ -115,6 +119,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                         <td className="py-1.5 pr-3 text-xs text-muted-foreground">{stockNote(v.stock).replace(" · ", "") || "in stock"}</td>
                         <td className="py-1.5">{branch
                           ? <BranchStockActions productId={p.id} variantId={v.id} stock={v.stock} />
+                          : p.supply_office_collab ? <CollabStockNote href={supplyHref} />
                           : <StockControl module={ctx.module} productId={p.id} variantId={v.id} current={v.stock} />}</td>
                       </tr>
                     ))}
@@ -154,5 +159,14 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
         </CardContent>
       </Card>
     </ManagementShell>
+  )
+}
+
+/** Collaboration products: stock comes from the Main Supply Office through a paid supply order */
+function CollabStockNote({ href }: { href: string }) {
+  return (
+    <span className="text-xs text-muted-foreground">
+      Stocked by the Main Supply Office · <Link href={href} className="font-medium text-primary hover:underline">Order stock</Link>
+    </span>
   )
 }

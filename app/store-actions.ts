@@ -78,8 +78,10 @@ async function adjustStockImpl(formData: FormData): Promise<{ before: number; af
   // Supply Office branches are stocked by the Main Supply Office (scripts/31)
   if (mod === "cashier") throw new Error("Stock is added by the Main Supply Office — send a restock request from Inventory.")
   const { supabase, userId, storeId } = await assertDashboard(mod, "inventory")
-  const { data: product } = await supabase.from("products").select("name, stock, seller_id").eq("id", productId).maybeSingle()
+  const { data: product } = await supabase.from("products").select("*").eq("id", productId).maybeSingle()
   if (!product || product.seller_id !== storeId) throw new Error("Product not found in your store.")
+  // Collaboration products are stocked by the Main Supply Office through paid supply orders
+  if (product.supply_office_collab) throw new Error("Stock for collaboration products comes from the Main Supply Office — order it in Supply Requests.")
   let before = Number(product.stock)
   let label = product.name
   if (variantId) {

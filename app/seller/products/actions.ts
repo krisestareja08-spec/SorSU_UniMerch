@@ -41,8 +41,9 @@ async function addProductImpl(formData: FormData) {
   const category = formData.get("category") as string
   // Sizes: each is its own variant (price, stock, SKU, image); the product shows the range and total
   const variants = parseVariantInputs(JSON.parse((formData.get("variants") as string | null) ?? "[]"))
-  // Supply Office branches get their stock from the Main Supply Office (restock requests): start at 0
-  const branch = mod === "cashier"
+  // Supply Office branches get their stock from the Main Supply Office (restock requests), and so do
+  // organizations' collaboration products (paid supply orders): start at 0
+  const branch = mod === "cashier" || (mod === "seller" && formData.get("has_logo") === "true" && formData.get("supply_office_collab") === "true")
   if (branch) for (const v of variants) v.stock = 0
   const price = variants.length ? Math.min(...variants.map((v) => v.price)) : parseFloat(formData.get("price") as string)
   const stock = branch ? 0 : variants.length ? variants.reduce((n, v) => n + v.stock, 0) : parseInt(formData.get("stock") as string, 10)
@@ -118,8 +119,10 @@ async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJs
   const variants = parseVariantInputs(JSON.parse(variantsJson || "[]"))
   if (variants.length === 0) throw new Error("Add at least one size.")
 
-  const { data: product } = await supabase.from("products").select("id, seller_id").eq("id", productId).maybeSingle()
+  const { data: product } = await supabase.from("products").select("*").eq("id", productId).maybeSingle()
   if (!product || product.seller_id !== storeId) throw new Error("Product not found in your store.")
+  // Branch and collaboration products: stock only comes from the Main Supply Office
+  const lockStock = mod === "cashier" || !!product.supply_office_collab
 
   const existing = await loadVariants(supabase, [productId])
   if (!existing) throw new Error(NEEDS_SCRIPT_28)
@@ -133,8 +136,8 @@ async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJs
   }
   for (const [i, v] of variants.entries()) {
     const row = variantRow(productId, v, i)
-    // Branches can't change stock here: it comes from the Main Supply Office
-    if (mod === "cashier") row.stock = current.find((c) => c.id === v.id)?.stock ?? 0
+    // Branches and collaboration products can't change stock here: it comes from the Main Supply Office
+    if (lockStock) row.stock = current.find((c) => c.id === v.id)?.stock ?? 0
     const { error } = v.id && current.some((c) => c.id === v.id)
       ? await supabase.from("product_variants").update(row).eq("id", v.id).eq("product_id", productId)
       : await supabase.from("product_variants").insert(row)
@@ -257,6 +260,11 @@ async function deleteProductImpl(productId: string, module: ModuleKey = "seller"
 
 async function publishDraftImpl(productId: string, module: ModuleKey = "seller") {
   const { supabase, storeId, path } = await storeContext(module)
+  // Drafts made from supply orders may not have a photo yet
+  const { data: draft } = await supabase.from("products").select("images, image_url").eq("id", productId).eq("seller_id", storeId).maybeSingle()
+  if (draft && !draft.image_url && !(Array.isArray(draft.images) && draft.images.length)) {
+    throw new Error("Add at least one photo (Edit) before submitting it for review.")
+  }
 
   const { error } = await supabase
     .from("products")
