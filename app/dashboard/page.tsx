@@ -6,6 +6,7 @@ import { AFFILIATION_LABELS } from "@/lib/roles"
 import { getMyMemberships } from "@/lib/dashboards"
 import { MODULES, dashboardHref, type ModuleKey } from "@/lib/modules"
 import { profileFromUser } from "@/lib/profile"
+import { canShopAsMember } from "@/lib/member-shopping"
 import { AppHeader } from "@/components/app-header"
 import { VerificationStatusBadge } from "@/components/verification-status-badge"
 import { Button } from "@/components/ui/button"
@@ -128,8 +129,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Card>
         )}
 
-        {/* CTA cards — buyers only; dashboard accounts don't shop (lib/supabase/proxy.ts) */}
-        {dashboards.length === 0 && (
+        {/* CTA cards — buyers, and store members who also shop (lib/member-shopping.ts) */}
+        {canShopAsMember(resolved, dashboards.map((d) => d.module)) && (
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Card className="border-primary/10 transition-shadow hover:shadow-md">
             <CardHeader>

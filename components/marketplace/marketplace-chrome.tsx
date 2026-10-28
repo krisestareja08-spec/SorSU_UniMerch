@@ -54,7 +54,7 @@ export async function MarketplaceChrome({ children }: { children: React.ReactNod
       {/* Mobile bottom tabs */}
       <MarketplaceBottomTabs dashboards={dashboards} />
       {user && <LiveAlerts />}
-      {/* Buyers who haven't applied for verification are invited to (dashboard accounts never shop) */}
+      {/* Buyers who haven't applied for verification are invited to (store members who shop are already verified) */}
       {user && dashboards.length === 0 && <VerificationPrompt userId={user.id} state={verification} />}
     </div>
     </CartProvider>

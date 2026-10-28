@@ -9,7 +9,7 @@ import { resetTheme } from "@/lib/theme"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Menu, X, LogOut, ChevronsUpDown, Check, Crown, UserCog } from "lucide-react"
+import { Menu, X, LogOut, ChevronsUpDown, Check, Crown, UserCog, ShoppingBag, ChevronRight, BadgeCheck } from "lucide-react"
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
 import { HistoryButtons } from "@/components/navigation/history-nav"
@@ -46,10 +46,11 @@ export function ManagementShell({
   const nav: Pick<ModulePage, "label" | "short" | "href" | "icon">[] = [
     ...moduleDef.pages.filter((p) => canUse(ctx, p.perm)),
     ...(ctx.isMain ? [{ label: MEMBERS_PAGE.label, href: membersHref(ctx.module), icon: MEMBERS_PAGE.icon }] : []),
-    // Dashboard accounts never shop, so there is no marketplace link (lib/supabase/proxy.ts keeps them
-    // out of the buyer pages). Their password lives on the shared My Account page.
+    // Members who also shop reach the marketplace from "Shop as buyer" above the menu; everyone's
+    // password lives on the shared My Account page.
     { label: "My Account", short: "Account", href: "/account", icon: UserCog },
   ]
+  const canSwitch = ctx.dashboards.length > 1 || !!ctx.canShop
   const homeHref = moduleDef.basePath
   // A fixed set of tabs per dashboard (pages the member has no permission for are left out)
   const preferred = BOTTOM_TABS[ctx.module]
@@ -96,9 +97,9 @@ export function ManagementShell({
             <p className="text-[11px] font-semibold uppercase tracking-widest text-primary-foreground/50">{moduleDef.name}</p>
             <p className="truncate text-sm font-semibold text-primary-foreground">{ctx.dashboardName}</p>
           </div>
-          {ctx.dashboards.length > 1 && <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/60" />}
+          {canSwitch && <ChevronsUpDown className="size-4 shrink-0 text-primary-foreground/60" />}
         </button>
-        {switcherOpen && ctx.dashboards.length > 1 && (
+        {switcherOpen && canSwitch && (
           <div className="absolute inset-x-3 top-full z-10 mt-1 overflow-hidden rounded-xl border border-border bg-card text-foreground shadow-xl">
             <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">My dashboards</p>
             {ctx.dashboards.map((d) => (
@@ -110,9 +111,41 @@ export function ManagementShell({
                 {d.id === ctx.dashboardId && <Check className="size-4 text-primary" />}
               </a>
             ))}
+            {ctx.canShop && (
+              <Link href="/marketplace" className="flex items-center gap-2 border-t border-border px-3 py-2 text-sm hover:bg-muted">
+                <ShoppingBag className="size-4 text-primary" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">Marketplace</span>
+                  <span className="block text-[11px] text-muted-foreground">Shop as a buyer</span>
+                </span>
+              </Link>
+            )}
           </div>
         )}
       </div>
+
+      {/* Verified students / faculty / staff on a store dashboard also shop (lib/member-shopping.ts) */}
+      {ctx.canShop ? (
+        <Link href="/marketplace" onClick={() => setDrawerOpen(false)}
+          className="group mx-3 mt-1 flex items-center gap-3 rounded-xl bg-gold px-3 py-2.5 text-primary shadow-sm transition-colors hover:bg-gold/90">
+          <ShoppingBag className="size-5 shrink-0" />
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block text-sm font-semibold">Shop as buyer</span>
+            <span className="block text-[11px] text-primary/75">Open the marketplace</span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 opacity-60 group-hover:opacity-100" />
+        </Link>
+      ) : ctx.verifyToShop ? (
+        <Link href="/verify" onClick={() => setDrawerOpen(false)}
+          className="group mx-3 mt-1 flex items-center gap-3 rounded-xl border border-primary-foreground/15 px-3 py-2.5 text-primary-foreground/85 transition-colors hover:bg-primary-foreground/8">
+          <BadgeCheck className="size-5 shrink-0 text-gold/80" />
+          <span className="min-w-0 flex-1 leading-tight">
+            <span className="block text-sm font-medium">Get verified to shop</span>
+            <span className="block text-[11px] text-primary-foreground/55">Verified students &amp; staff can also buy</span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 opacity-60 group-hover:opacity-100" />
+        </Link>
+      ) : null}
 
       {/* Nav */}
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto py-3 px-2">

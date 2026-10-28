@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server"
 import { validateFullName } from "@/lib/profile-rules"
 import { PAYMENT_METHOD_MODE, parsePaymentModes } from "@/lib/product-pricing"
 import { loadVariants } from "@/lib/variants"
+import { canShopAsMember } from "@/lib/member-shopping"
 
 type OrderItem = {
   id: string
@@ -34,17 +35,18 @@ async function submitOrderImpl(args: {
   if (!user) throw new Error("Not authenticated")
   if (args.items.length === 0) throw new Error("Cart is empty")
 
-  // Only plain user accounts buy. Dashboard accounts (Verification Admin, BAO, Supply Office,
-  // Cashier, Seller) manage and sell; they cannot place orders.
-  const { count: dashboards } = await supabase.from("dashboard_members").select("dashboard_id", { count: "exact", head: true }).eq("user_id", user.id)
-  if ((dashboards ?? 0) > 0) throw new Error("Dashboard accounts can't place orders. Use a regular user account to buy.")
-
   // Buyers need a real, complete profile and an account in good standing to order.
-  const { data: buyer } = await supabase
-    .from("profiles")
-    .select("full_name, contact, account_status")
-    .eq("id", user.id)
-    .maybeSingle()
+  const [{ data: buyer }, { data: memberRows }] = await Promise.all([
+    supabase.from("profiles").select("full_name, contact, account_status, is_identity_verified, affiliation").eq("id", user.id).maybeSingle(),
+    supabase.from("dashboard_members").select("dashboards(module)").eq("user_id", user.id),
+  ])
+  // Plain accounts buy, and so do verified students / faculty / staff on store dashboards.
+  // Other dashboard accounts (Verification Admin, BAO, store-only logins) manage and sell.
+  const memberModules = ((memberRows ?? []) as { dashboards: { module: string } | { module: string }[] | null }[])
+    .flatMap((r) => (Array.isArray(r.dashboards) ? r.dashboards : r.dashboards ? [r.dashboards] : []).map((d) => d.module))
+  if (!canShopAsMember(buyer, memberModules)) {
+    throw new Error("This dashboard account can't place orders. Verified students, faculty and staff on a store dashboard can; otherwise use a regular user account to buy.")
+  }
   if (buyer?.account_status === "suspended" || buyer?.account_status === "banned") {
     throw new Error("Your account is restricted and can't place orders. Contact the Verification Admin.")
   }

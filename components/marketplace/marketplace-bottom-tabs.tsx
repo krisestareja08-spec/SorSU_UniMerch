@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
-  Home, Store, ShoppingCart, Package, Tag, Users, LayoutDashboard,
+  Home, Store, ShoppingCart, Package, Users, LayoutDashboard,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -14,20 +14,13 @@ type Tab = { label: string; href: string; icon: LucideIcon; highlight?: boolean 
 
 /**
  * Buyers: Stores · Cart · Market (centre) · Orders · Account.
- * Dashboard members (admins/staff) keep their original tabs, with Dashboard in place of Orders.
+ * Store-dashboard members who also shop (lib/member-shopping.ts): Dashboard in place of Stores.
  */
 function buildTabs(dashboards: DashboardSummary[]): Tab[] {
-  if (dashboards.length > 0) {
-    return [
-      { label: "Market",    href: "/marketplace",            icon: Home },
-      { label: "Browse",    href: "/marketplace/categories", icon: Tag },
-      { label: "Cart",      href: "/marketplace/cart",       icon: ShoppingCart, highlight: true },
-      { label: "Dashboard", href: dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard", icon: LayoutDashboard },
-      { label: "Account",   href: "/marketplace/account",    icon: Users },
-    ]
-  }
   return [
-    { label: "Stores",   href: "/marketplace/stores",     icon: Store },
+    dashboards.length > 0
+      ? { label: "Dashboard", href: dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard", icon: LayoutDashboard }
+      : { label: "Stores",   href: "/marketplace/stores",     icon: Store },
     { label: "Cart",     href: "/marketplace/cart",       icon: ShoppingCart },
     { label: "Market",   href: "/marketplace",            icon: Home, highlight: true },
     { label: "Orders",   href: "/marketplace/orders",     icon: Package },

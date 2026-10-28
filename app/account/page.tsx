@@ -11,8 +11,8 @@ import Link from "next/link"
 
 /**
  * My Account for dashboard accounts (Verification Admin, BAO, Supply Office, Cashier, Seller).
- * They can't open the buyer pages (lib/supabase/proxy.ts), so their password is changed here.
- * Plain buyers have this under Settings in the marketplace.
+ * Most can't open the buyer pages (lib/supabase/proxy.ts), so their password is changed here.
+ * Plain buyers — and store members who also shop — have this under Settings in the marketplace too.
  */
 export default async function AccountPage() {
   const user = await getCurrentUser()

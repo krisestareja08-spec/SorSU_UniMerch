@@ -156,6 +156,10 @@ export type DashboardCtx = {
   isMain: boolean
   permissions: string[]
   dashboards: DashboardSummary[]
+  /** Verified student / faculty / staff on store dashboards: may also shop (lib/member-shopping.ts) */
+  canShop?: boolean
+  /** A store member who could shop once their identity is verified */
+  verifyToShop?: boolean
 }
 
 export function canUse(ctx: Pick<DashboardCtx, "isMain" | "permissions">, perm: string | null) {

@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getCurrentUser, requireUser } from "@/lib/auth"
+import { canShopAsMember, couldShopOnceVerified } from "@/lib/member-shopping"
 import { MODULES, MULTI_INSTANCE, canUse, type DashboardCtx, type DashboardSummary, type ModuleKey } from "@/lib/modules"
 
 type Supabase = Awaited<ReturnType<typeof createClient>>
@@ -82,6 +83,8 @@ export async function requireDashboard(module: ModuleKey, perm: string | null = 
     isMain: current.isMain,
     permissions: current.permissions,
     dashboards: memberships.map(({ id, module, name, storeId, isMain }) => ({ id, module, name, storeId, isMain })),
+    canShop: canShopAsMember(profile, memberships.map((m) => m.module)),
+    verifyToShop: couldShopOnceVerified(profile, memberships.map((m) => m.module)),
   }
 }
 

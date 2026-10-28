@@ -1,7 +1,8 @@
 import type { Metadata } from "next"
 import { notFound } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
-import { getCurrentUser } from "@/lib/auth"
+import { getCurrentUser, getProfileRow } from "@/lib/auth"
+import { canShopAsMember } from "@/lib/member-shopping"
 import { MarketplaceChrome } from "@/components/marketplace/marketplace-chrome"
 import { ManagementShell } from "@/components/management/management-shell"
 import { getMyMemberships, requireDashboard } from "@/lib/dashboards"
@@ -57,9 +58,12 @@ export default async function SellerStorefrontPage({ params, searchParams }: Pro
   ])
   const productCount = categories.reduce((sum, c) => sum + c.count, 0)
 
-  // Dashboard accounts never shop: they preview storefronts inside their own dashboard, without buyer actions
-  const primary = user ? primaryDashboard(await getMyMemberships(user.id)) : undefined
-  const sellerCtx = primary ? await requireDashboard(primary.module) : null
+  // Dashboard accounts that don't shop preview storefronts inside their own dashboard, without buyer
+  // actions. Verified students / faculty / staff on store dashboards shop here like any buyer.
+  const memberships = user ? await getMyMemberships(user.id) : []
+  const primary = primaryDashboard(memberships)
+  const shops = !primary || canShopAsMember(user ? await getProfileRow(user.id) : null, memberships.map((m) => m.module))
+  const sellerCtx = primary && !shops ? await requireDashboard(primary.module) : null
 
   const base = storefrontHref(storefront.id)
   const pageHref = (p: number) => {

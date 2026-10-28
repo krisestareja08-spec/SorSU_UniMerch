@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { hasAcceptedTerms } from '@/lib/legal'
+import { canShopAsMember } from '@/lib/member-shopping'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -95,8 +96,9 @@ export async function updateSession(request: NextRequest) {
     return redirect
   }
 
-  // Only plain user accounts shop. Dashboard accounts (Verification Admin, BAO, Supply Office,
-  // Cashier, Seller) manage and sell: any buyer page sends them back to their own dashboard.
+  // Plain user accounts shop, and so do verified students / faculty / staff who are members of a
+  // store dashboard (lib/member-shopping.ts). Other dashboard accounts (Verification Admin, BAO, store
+  // logins that aren't a verified university member) manage and sell: buyer pages send them back.
   //  • BAO → its view-only marketplace (/bao/browse, /bao/sellers/{id})
   //  • Seller → the matching Seller Dashboard page
   //  • others → their dashboard; settings/account → the shared My Account page (/account)
@@ -112,13 +114,17 @@ export async function updateSession(request: NextRequest) {
       const value = cached.slice(user.id.length + 1)
       primaryModule = value === '-' ? undefined : value
     } else {
-      const { data: rows } = await supabase.from('dashboard_members').select('dashboards(module)').eq('user_id', user.id)
+      const [{ data: rows }, { data: profile }] = await Promise.all([
+        supabase.from('dashboard_members').select('dashboards(module)').eq('user_id', user.id),
+        supabase.from('profiles').select('is_identity_verified, affiliation').eq('id', user.id).maybeSingle(),
+      ])
       const modules = new Set(
         (rows ?? []).flatMap((r: { dashboards: { module: string } | { module: string }[] | null }) =>
           (Array.isArray(r.dashboards) ? r.dashboards : r.dashboards ? [r.dashboards] : []).map((d) => d.module)),
       )
-      // Same order as DASHBOARD_PRIORITY in lib/modules.ts
-      primaryModule = KNOWN.find((m) => modules.has(m))
+      // Verified students / faculty / staff on store dashboards also shop: no redirect for them.
+      // Otherwise the first dashboard, in the same order as DASHBOARD_PRIORITY in lib/modules.ts.
+      primaryModule = canShopAsMember(profile, [...modules]) ? undefined : KNOWN.find((m) => modules.has(m))
       supabaseResponse.cookies.set('um_dash', `${user.id}:${primaryModule ?? '-'}`, {
         maxAge: 300, path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
       })
