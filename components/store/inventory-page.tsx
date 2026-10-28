@@ -3,8 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertTriangle, Boxes, History, PackageX, TrendingDown } from "lucide-react"
+import { AlertTriangle, Boxes, History, PackageX, Send, TrendingDown } from "lucide-react"
 import { StockControl } from "@/components/store/stock-control"
+import { BranchRequestsList, BranchStockActions, type BranchRequest } from "@/components/store/branch-requests"
 import { formatDateTime } from "@/lib/admin"
 import type { DashboardCtx } from "@/lib/modules"
 import { cn } from "@/lib/utils"
@@ -25,13 +26,22 @@ const stockNote = (n: number) => (n === 0 ? " · out of stock" : n <= LOW_STOCK 
 /**
  * Inventory management for a store: current stock, low-stock alerts, restock / adjustment,
  * and the movement history (sales reduce stock automatically; cancellations return it).
+ * Supply Office branches are stocked by the Main Supply Office: they see their stock, ask for
+ * restocks and report damaged / defective units instead of changing stock (scripts/31).
  */
 export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
   const supabase = await createClient()
-  const [{ data: productRows }, movementsRes] = await Promise.all([
+  const branch = ctx.module === "cashier"
+  const [{ data: productRows }, movementsRes, requestsRes] = await Promise.all([
     supabase.from("products").select("id, name, category, stock, status, badge, image_url").eq("seller_id", ctx.storeId ?? "").order("stock", { ascending: true }),
     supabase.from("inventory_movements").select("product_name, change, reason, note, created_at").eq("store_id", ctx.storeId ?? "").order("created_at", { ascending: false }).limit(50),
+    branch
+      ? supabase.from("branch_stock_requests")
+          .select("id, branch_store_id, kind, product_name, quantity, reason, note, status, fulfilled_quantity, main_note, created_at, reviewed_at")
+          .eq("branch_store_id", ctx.storeId ?? "").order("created_at", { ascending: false }).limit(100)
+      : Promise.resolve({ data: null, error: null }),
   ])
+  const requests = (requestsRes.data ?? []) as BranchRequest[]
   const products = (productRows ?? []) as ProductRow[]
   // Products with sizes keep stock per size (scripts/28); restocks and adjustments go to that size
   const variantsByProduct = (await loadVariants(supabase, products.map((p) => p.id))) ?? new Map()
@@ -50,8 +60,21 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
 
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Inventory" description="Stock levels for your products. Sales take items out of stock automatically and cancelled orders put them back; use Update stock to add units you received, remove units that are lost or damaged, or set the total you counted." />
+      <PageHeading title="Inventory" description={branch
+        ? "Your branch's stock comes from the Main Supply Office. Sales take items out automatically; use Request restock when you need more, or Report damaged / defective to send units back."
+        : "Stock levels for your products. Sales take items out of stock automatically and cancelled orders put them back; use Update stock to add units you received, remove units that are lost or damaged, or set the total you counted."} />
       <div className="mt-6"><StatGrid stats={stats} /></div>
+
+      {branch && (
+        <Card className="mt-6">
+          <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Send className="size-4 text-primary" />My requests to the Main Supply Office</CardTitle></CardHeader>
+          <CardContent>
+            {requestsRes.error
+              ? <p className="text-sm text-muted-foreground">Restock requests arrive with the latest <code>scripts/31_supply_office_branches.sql</code>. Ask the admin to run it in Supabase.</p>
+              : <BranchRequestsList requests={requests} mode="branch" />}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mt-6">
         <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Boxes className="size-4 text-primary" />Stock levels</CardTitle></CardHeader>
@@ -59,7 +82,7 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
           <table className="w-full min-w-170 text-sm">
             <thead><tr className="border-b border-border text-left text-xs uppercase text-muted-foreground">
               <th className="py-2 pr-3 font-medium">Product</th><th className="py-2 pr-3 text-right font-medium">In stock</th>
-              <th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">Update stock</th></tr></thead>
+              <th className="py-2 pr-3 font-medium">Status</th><th className="py-2 font-medium">{branch ? "Main Supply Office" : "Update stock"}</th></tr></thead>
             <tbody>
               {products.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No products yet.</td></tr>}
               {products.map((p) => {
@@ -77,7 +100,8 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                       <td className="py-2 pr-3 text-xs capitalize text-muted-foreground">{p.status}{stockNote(p.stock)}</td>
                       <td className="py-2">
                         {variants.length
-                          ? <span className="text-xs text-muted-foreground">Total of all sizes — adjust each size below</span>
+                          ? <span className="text-xs text-muted-foreground">Total of all sizes — {branch ? "request per size below" : "adjust each size below"}</span>
+                          : branch ? <BranchStockActions productId={p.id} stock={p.stock} />
                           : <StockControl module={ctx.module} productId={p.id} current={p.stock} />}
                       </td>
                     </tr>
@@ -89,7 +113,9 @@ export async function InventoryPage({ ctx }: { ctx: DashboardCtx }) {
                         </td>
                         <td className={cn("py-1.5 pr-3 text-right font-semibold tabular-nums", stockTone(v.stock))}>{v.stock}</td>
                         <td className="py-1.5 pr-3 text-xs text-muted-foreground">{stockNote(v.stock).replace(" · ", "") || "in stock"}</td>
-                        <td className="py-1.5"><StockControl module={ctx.module} productId={p.id} variantId={v.id} current={v.stock} /></td>
+                        <td className="py-1.5">{branch
+                          ? <BranchStockActions productId={p.id} variantId={v.id} stock={v.stock} />
+                          : <StockControl module={ctx.module} productId={p.id} variantId={v.id} current={v.stock} />}</td>
                       </tr>
                     ))}
                   </Fragment>

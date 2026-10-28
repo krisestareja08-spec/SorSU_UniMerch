@@ -55,6 +55,8 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
   // Organization sellers only: made with the Main Supply Office, which then pays the royalty
   const [supplyOfficeCollab, setSupplyOfficeCollab] = useState(false)
   const canCollab = module === "seller"
+  // Supply Office branches: stock comes from the Main Supply Office (restock requests)
+  const isBranch = module === "cashier"
   const [royaltyPercentage, setRoyaltyPercentage] = useState(3)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -105,12 +107,12 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
     if (!category) { setError("Please select a category."); return }
     // With sizes, each size carries its own price and stock (the product shows the range and total)
     if (hasVariants) {
-      const problem = validateDrafts(variantRows)
+      const problem = validateDrafts(variantRows, { lockStock: isBranch })
       if (problem) { setError(problem); return }
     }
     const priceNum = hasVariants ? Math.min(...variantRows.map((r) => parseFloat(r.price))) : parseFloat(price)
     if (isNaN(priceNum) || priceNum < 0) { setError("Enter a valid price."); return }
-    const stockNum = hasVariants ? variantRows.reduce((n, r) => n + parseInt(r.stock, 10), 0) : parseInt(stock, 10)
+    const stockNum = isBranch ? 0 : hasVariants ? variantRows.reduce((n, r) => n + parseInt(r.stock, 10), 0) : parseInt(stock, 10)
     if (isNaN(stockNum) || stockNum < 0) { setError("Enter a valid stock quantity."); return }
     if (imageFiles.length === 0) { setError("At least one product image is required."); return }
     if (isRestricted && !parseAllowed(allowedRoles).some((t) => !t.includes(":"))) { setError("Select who can buy this restricted product."); return }
@@ -282,7 +284,9 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="p-stock">Stock Quantity *</Label>
-              {hasVariants ? (
+              {isBranch ? (
+                <p className="flex h-8 items-center rounded-lg border border-dashed border-border px-2.5 text-xs text-muted-foreground">From the Main Supply Office</p>
+              ) : hasVariants ? (
                 <p className="flex h-8 items-center rounded-lg border border-dashed border-border px-2.5 text-xs text-muted-foreground">Set per size below</p>
               ) : (
                 <Input id="p-stock" type="number" min="0" placeholder="0" value={stock} onChange={(e) => setStock(e.target.value)} required />
@@ -307,7 +311,7 @@ export function AddProductModal({ sellerId, module = "seller" }: { sellerId: str
             <p className="text-[11px] text-muted-foreground">
               Add sizes if this product comes in different sizes. Each size gets its own price, stock and SKU, and optionally a photo. Buyers see the price range until they pick a size, then that size&apos;s exact price and stock.
             </p>
-            <VariantEditor rows={variantRows} onChange={setVariantRows} />
+            <VariantEditor rows={variantRows} onChange={setVariantRows} lockStock={isBranch} />
           </div>
 
           {/* Payment modes the buyer can use for this product */}

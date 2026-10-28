@@ -1,7 +1,6 @@
-import { requireDashboard } from "@/lib/dashboards"
-import { RoyaltyPage } from "@/components/store/royalty-page"
+import { redirect } from "next/navigation"
 
-export default async function Page() {
-  const ctx = await requireDashboard("cashier", "reports")
-  return <RoyaltyPage ctx={ctx} />
+// Branches don't remit royalty: the Main Supply Office pays it on their sales (/supply-office/royalty)
+export default function Page() {
+  redirect("/cashier")
 }

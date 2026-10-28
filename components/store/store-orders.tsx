@@ -105,10 +105,10 @@ function preorderStep(o: Order): string | null {
     case "pending":
       if (o.id_status !== "approved") return "Check the buyer's I.D. first."
       return o.payment_method === "cash"
-        ? "Walk-in: record the payment when the buyer pays at the counter, or mark it ready once the items arrive."
+        ? "Walk-in: record the payment when the buyer pays at the counter (half or full) to put them on the waitlist."
         : `Check the receipt (${o.payment_plan === "half" ? `half: ${peso(Math.round(o.total * 50) / 100)}` : `full: ${peso(o.total)}`}), then record the payment.`
-    case "partially_paid": return `Balance of ${peso(balance)}. Mark it ready for pick up once the items arrive.`
-    case "paid": return "Paid in full. Mark it ready for pick up once the items arrive. The buyer is notified."
+    case "partially_paid": return `On the waitlist (half paid, ${peso(balance)} due). Mark it ready when the size arrives — here or from the Pre-order Form.`
+    case "paid": return "On the waitlist (paid in full). Mark it ready when the size arrives — here or from the Pre-order Form. The buyer is notified."
     case "ready_for_pickup":
       if (pickupMissed(o)) return "The buyer missed their pick-up day. Give a new day, or return / refund the payment."
       if (!o.pickup_date) return `Waiting for the buyer to choose a pick-up day${o.pickup_deadline ? ` (by ${deadlineDay(o.pickup_deadline)})` : ""}.`
@@ -378,10 +378,10 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
   const historyStatuses = ["completed", "cancelled", "refunded"]
   const now = new Date()
 
-  // Pre-order queue: paid (full or half) first, then unpaid walk-ins — each in the order placed
+  // Pre-order queue: only paid pre-orders (half or full) are in it, in the order they were placed
   const queue = new Map(
-    orders.filter((o) => o.is_preorder && activeStatuses.includes(o.status))
-      .sort((a, b) => Number(preorderPaid(b)) - Number(preorderPaid(a)) || a.created_at.localeCompare(b.created_at))
+    orders.filter((o) => o.is_preorder && ["paid", "partially_paid", "ready_for_pickup"].includes(o.status))
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))
       .map((o, i) => [o.id, i + 1]),
   )
 
@@ -697,7 +697,8 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
                           <RecordPayment key={`${o.status}-${o.amount_paid}`} order={o} busy={updating === o.id} blocked={needsIdCheck(o.id)}
                             onRecord={(status, amountPaid) => setStatus(o.id, status, undefined, amountPaid)} />
                         )}
-                        {(o.status === "paid" || o.status === "partially_paid" || (o.status === "pending" && o.payment_method === "cash" && o.id_status === "approved")) && (
+                        {/* Only paid pre-orders (half or full) are on the waitlist and can be marked ready */}
+                        {(o.status === "paid" || o.status === "partially_paid") && (
                           <Button size="sm" disabled={updating === o.id || needsIdCheck(o.id)} onClick={() => setStatus(o.id, "ready_for_pickup")}
                             className="gap-1 bg-primary text-primary-foreground hover:bg-primary/90">
                             {updating === o.id ? <Loader2 className="size-3 animate-spin" /> : <Package className="size-3" />}Mark Ready for Pick Up

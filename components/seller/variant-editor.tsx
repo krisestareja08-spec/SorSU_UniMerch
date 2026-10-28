@@ -37,7 +37,8 @@ export function draftFromVariant(v: Variant): VariantDraft {
 }
 
 /** First problem with the rows, or null when they can be saved. */
-export function validateDrafts(rows: VariantDraft[]): string | null {
+/** `lockStock`: Supply Office branches — stock comes from the Main office, so it isn't entered here. */
+export function validateDrafts(rows: VariantDraft[], { lockStock = false }: { lockStock?: boolean } = {}): string | null {
   if (rows.length === 0) return "Add at least one size."
   const names = new Set<string>()
   for (const r of rows) {
@@ -47,7 +48,7 @@ export function validateDrafts(rows: VariantDraft[]): string | null {
     names.add(name)
     const price = Number.parseFloat(r.price)
     if (!Number.isFinite(price) || price < 0) return `Enter a price for ${variantName(r.size, r.color)}.`
-    const stock = Number.parseInt(r.stock, 10)
+    const stock = Number.parseInt(r.stock || (lockStock ? "0" : ""), 10)
     if (!Number.isFinite(stock) || stock < 0) return `Enter the stock for ${variantName(r.size, r.color)}.`
     if (r.imageFile && r.imageFile.size > 5 * 1024 * 1024) return "Each variant image must be under 5 MB."
   }
@@ -69,14 +70,14 @@ export async function draftsToInputs(supabase: SupabaseClient, storeId: string, 
     }
     out.push({
       id: r.id, size: r.size.trim(), color: r.color.trim() || null, price: Number.parseFloat(r.price),
-      stock: Number.parseInt(r.stock, 10), sku: r.sku.trim() || null, imageUrl,
+      stock: Number.parseInt(r.stock || "0", 10), sku: r.sku.trim() || null, imageUrl,
     })
   }
   return out
 }
 
 /** Seller's table of sizes: each with its own price, stock, SKU and optional image. */
-export function VariantEditor({ rows, onChange }: { rows: VariantDraft[]; onChange: (rows: VariantDraft[]) => void }) {
+export function VariantEditor({ rows, onChange, lockStock = false }: { rows: VariantDraft[]; onChange: (rows: VariantDraft[]) => void; lockStock?: boolean }) {
   const [quick, setQuick] = useState("")
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -130,7 +131,13 @@ export function VariantEditor({ rows, onChange }: { rows: VariantDraft[]; onChan
                   <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">₱</span>
                   <Input type="number" min="0" step="0.01" value={r.price} onChange={(e) => update(r.key, { price: e.target.value })} placeholder="Price *" aria-label="Price" className="h-8 pl-6 text-xs" />
                 </div>
-                <Input type="number" min="0" step="1" value={r.stock} onChange={(e) => update(r.key, { stock: e.target.value })} placeholder="Stock *" aria-label="Stock" className="h-8 text-xs" />
+                {lockStock ? (
+                  <p className="flex h-8 items-center rounded-md border border-dashed border-border px-2 text-xs text-muted-foreground" title="Stock comes from the Main Supply Office">
+                    {r.id ? `${r.stock || 0} in stock` : "Stock: from Main"}
+                  </p>
+                ) : (
+                  <Input type="number" min="0" step="1" value={r.stock} onChange={(e) => update(r.key, { stock: e.target.value })} placeholder="Stock *" aria-label="Stock" className="h-8 text-xs" />
+                )}
                 <Input value={r.sku} onChange={(e) => update(r.key, { sku: e.target.value })} placeholder="SKU / item code" aria-label="SKU" className="col-span-2 h-8 text-xs sm:col-span-2" />
               </div>
 

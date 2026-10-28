@@ -112,14 +112,26 @@ update public.order_items oi set
     round(oi.royalty_amount * 100 / nullif(oi.unit_price, 0), 2))
 where oi.royalty_amount > 0 and oi.royalty_store_id is null;
 
+-- Supply Office branches (module 'cashier') are supplied by the Main Supply Office, which pays the
+-- royalty on everything they sell
+create or replace function public.is_branch_store(p_store uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.dashboards where store_id = p_store and module = 'cashier');
+$$;
+create or replace function public.main_supply_store()
+returns uuid language sql security definer set search_path = public stable as $$
+  select store_id from public.dashboards where module = 'supply_office' and store_id is not null limit 1;
+$$;
+
 -- Product royalty fields always follow price and rate (also when size prices change)
 create or replace function public.products_royalty_fields()
 returns trigger language plpgsql set search_path = public as $$
 begin
   if new.is_royalty_product then
     new.royalty_amount := round(coalesce(new.price, 0) * coalesce(new.royalty_percentage, 0) / 100, 2);
-    -- Collaboration: the Supply Office pays the royalty, so the seller receives the full price
-    new.final_price := new.price - case when new.supply_office_collab then 0 else new.royalty_amount end;
+    -- Collaborations and branch products: the Main Supply Office pays the royalty, so the seller
+    -- receives the full price
+    new.final_price := new.price - case when new.supply_office_collab or public.is_branch_store(new.seller_id) then 0 else new.royalty_amount end;
   else
     new.royalty_amount := 0;
     new.final_price := new.price;
@@ -144,10 +156,9 @@ begin
   if coalesce(p.is_royalty_product, false) then
     new.royalty_percentage := p.royalty_percentage;
     new.royalty_store_id := new.seller_id;
-    if p.supply_office_collab then
-      new.royalty_store_id := coalesce(
-        (select store_id from public.dashboards where module = 'supply_office' and store_id is not null limit 1),
-        new.seller_id);
+    -- Collaboration products and every branch sale: owed by the Main Supply Office
+    if p.supply_office_collab or public.is_branch_store(new.seller_id) then
+      new.royalty_store_id := coalesce(public.main_supply_store(), new.seller_id);
     end if;
   else
     new.royalty_store_id := null;
@@ -158,6 +169,14 @@ $$;
 drop trigger if exists order_items_royalty_owner on public.order_items;
 create trigger order_items_royalty_owner before insert on public.order_items
   for each row execute procedure public.order_items_royalty_owner();
+
+-- Branch sales not remitted yet move to the Main Supply Office (remittances already sent stay)
+update public.order_items oi set royalty_store_id = public.main_supply_store()
+where oi.royalty_store_id is not null and oi.remittance_id is null
+  and public.is_branch_store(oi.seller_id) and public.main_supply_store() is not null
+  and oi.royalty_store_id is distinct from public.main_supply_store();
+-- Branch logo products: the branch keeps the full price
+update public.products set price = price where is_royalty_product and public.is_branch_store(seller_id);
 
 -- BAO changes the rate → every logo listing and every sale not yet remitted uses the new rate
 create or replace function public.apply_royalty_rate()
@@ -181,11 +200,12 @@ create trigger apply_royalty_rate after update on public.bao_settings
 
 -- A store's royalty sales that are not remitted yet (or waiting in its pending remittance).
 -- A function because the Supply Office owes royalty on other stores' orders, which it can't read.
+drop function if exists public.royalty_lines(uuid);
 create or replace function public.royalty_lines(p_store uuid)
 returns table (
   item_id uuid, order_id uuid, ordered_at timestamptz, order_status text, product_name text,
   quantity integer, unit_price numeric, royalty_percentage numeric, royalty_amount numeric,
-  origin_store uuid, origin_name text, collab boolean, remittance_id uuid
+  origin_store uuid, origin_name text, collab boolean, remittance_id uuid, origin_branch boolean, fully_paid boolean
 )
 language plpgsql security definer set search_path = public stable as $$
 #variable_conflict use_column
@@ -196,13 +216,15 @@ begin
   return query
     select oi.id, oi.order_id, o.created_at, o.status, oi.product_name,
            oi.quantity, oi.unit_price, oi.royalty_percentage, oi.royalty_amount,
-           oi.seller_id, sp.org_name, oi.royalty_store_id is distinct from oi.seller_id, oi.remittance_id
+           oi.seller_id, sp.org_name, oi.royalty_store_id is distinct from oi.seller_id, oi.remittance_id,
+           public.is_branch_store(oi.seller_id),
+           o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total)
     from public.order_items oi
     join public.orders o on o.id = oi.order_id
     left join public.seller_profiles sp on sp.id = oi.seller_id
     left join public.royalty_remittances r on r.id = oi.remittance_id
     where oi.royalty_store_id = p_store
-      and o.status <> 'cancelled'
+      and o.status not in ('cancelled', 'refunded')
       and (oi.remittance_id is null or r.status = 'pending')
     order by o.created_at desc;
 end;
@@ -239,7 +261,8 @@ begin
   from public.orders o
   where o.id = oi.order_id
     and oi.royalty_store_id = p_store and oi.remittance_id is null
-    and o.status in ('paid', 'ready_for_pickup', 'completed');
+    -- Fully paid sales only (a partly paid pre-order ready for pick up waits for its balance)
+    and (o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total));
 
   select coalesce(sum(oi.royalty_amount * oi.quantity), 0), count(*), min(o.created_at), max(o.created_at)
   into total, n, first_at, last_at
@@ -257,7 +280,8 @@ begin
       'items',   sum(oi.quantity),
       'gross',   sum(oi.unit_price * oi.quantity),
       'royalty', sum(oi.royalty_amount * oi.quantity),
-      'collab',  oi.royalty_store_id is distinct from oi.seller_id,
+      'collab',  oi.royalty_store_id is distinct from oi.seller_id and not public.is_branch_store(oi.seller_id),
+      'branch',  public.is_branch_store(oi.seller_id),
       'store',   max(sp.org_name)) as b
     from public.order_items oi
     left join public.seller_profiles sp on sp.id = oi.seller_id

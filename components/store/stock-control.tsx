@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react"
 import { AlertCircle, Check, Loader2, PackagePlus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { adjustStock } from "@/app/store-actions"
+import { adjustBranchStock } from "@/app/branch-stock-actions"
 import { unwrap } from "@/lib/action-result"
 import { cn } from "@/lib/utils"
 
@@ -17,9 +18,12 @@ const MODES: { value: Mode; label: string; help: string; field: string; placehol
 
 /**
  * Updating the stock of a product (or one size) in plain terms: add units, remove units, or set the
- * counted total — with a preview of the new total before saving.
+ * counted total — with a preview of the new total before saving. With `branchStoreId`, the Main
+ * Supply Office updates one of its branches' stock (app/branch-stock-actions.ts).
  */
-export function StockControl({ module, productId, variantId, current }: { module: string; productId: string; variantId?: string; current: number }) {
+export function StockControl({ module, productId, variantId, current, branchStoreId }: {
+  module: string; productId: string; variantId?: string; current: number; branchStoreId?: string
+}) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<Mode>("add")
   const [quantity, setQuantity] = useState("")
@@ -61,9 +65,10 @@ export function StockControl({ module, productId, variantId, current }: { module
     fd.set("mode", mode)
     fd.set("quantity", String(qty))
     fd.set("note", note)
+    if (branchStoreId) { fd.set("branch_store_id", branchStoreId); fd.set("current", String(current)) }
     start(async () => {
       try {
-        const r = unwrap(await adjustStock(fd))
+        const r = unwrap(await (branchStoreId ? adjustBranchStock(fd) : adjustStock(fd)))
         close()
         setDone(`Stock updated: ${r.before} → ${r.after}`)
       } catch (err) {

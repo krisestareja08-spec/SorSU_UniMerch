@@ -3306,6 +3306,9 @@ create policy "pre-order ids readable by buyer and shop" on storage.objects for 
 --   4. Fully paid → Completed. Otherwise Returned / Refunded or Cancelled.
 --   5. Missed pick-up day: an unpaid (walk-in) pre-order is cancelled and the penalty charged, so
 --      the stock can be sold again; a paid one is flagged for the shop to refund or re-schedule.
+--   6. Stock is taken at pick-up, not at checkout. Marking "ready" doesn't reserve it: the first to
+--      pick up gets it. When a size runs out, pre-orders still "ready" for it go back to the waitlist
+--      (Paid / Partially Paid, same place in the queue) and the buyer is told.
 alter table public.orders add column if not exists is_preorder boolean not null default false;
 alter table public.orders add column if not exists payment_plan text;
 alter table public.orders drop constraint if exists orders_payment_plan_check;
@@ -3313,6 +3316,74 @@ alter table public.orders add constraint orders_payment_plan_check
   check (payment_plan is null or payment_plan in ('full', 'half')) not valid;
 update public.orders set is_preorder = true where not is_preorder and (pickup_date is not null or buyer_id_path is not null);
 create index if not exists orders_preorder_idx on public.orders(seller_id, created_at) where is_preorder;
+-- Has this order's stock been taken? Earlier orders: yes (at checkout). New pre-orders: at pick-up.
+alter table public.orders add column if not exists stock_taken boolean not null default true;
+
+create or replace function public.preorder_insert_rules()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.is_preorder then new.stock_taken := false; end if;
+  return new;
+end;
+$$;
+drop trigger if exists preorder_insert_rules on public.orders;
+create trigger preorder_insert_rules before insert on public.orders for each row execute procedure public.preorder_insert_rules();
+
+-- Sales take stock from the exact size (replaces 28_product_variants.sql) — except pre-orders,
+-- which take it when they're picked up
+create or replace function public.stock_out_on_sale()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from public.orders where id = new.order_id and not stock_taken) then
+    return new;
+  end if;
+  if new.variant_id is not null then
+    -- the variant sync trigger then updates the product's total stock
+    update public.product_variants set stock = greatest(stock - new.quantity, 0), updated_at = now() where id = new.variant_id;
+  elsif new.product_id is not null then
+    update public.products set stock = greatest(stock - new.quantity, 0), updated_at = now() where id = new.product_id;
+  end if;
+  if new.product_id is not null and exists (select 1 from public.seller_profiles where id = new.seller_id) then
+    insert into public.inventory_movements (store_id, product_id, variant_id, product_name, change, reason, order_id, created_by)
+    values (new.seller_id, new.product_id, new.variant_id,
+            new.product_name || coalesce(' (' || new.variant || ')', ''), -new.quantity, 'sale', new.order_id, auth.uid());
+  end if;
+  return new;
+end;
+$$;
+
+-- A pre-order is picked up: take its stock now (refused when a size is short)
+create or replace function public.take_preorder_stock(p_order uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  item record;
+  have integer;
+begin
+  -- The order being completed is skipped by the "back to the waitlist" trigger below
+  perform set_config('app.completing_order', p_order::text, true);
+  for item in select * from public.order_items where order_id = p_order and product_id is not null loop
+    have := coalesce((select stock from public.product_variants where id = item.variant_id),
+                     (select stock from public.products where id = item.product_id), 0);
+    if have < item.quantity then
+      raise exception 'Only % of % in stock — restock it before completing this pre-order.',
+        have, item.product_name || coalesce(' (' || item.variant || ')', '');
+    end if;
+    if item.variant_id is not null then
+      update public.product_variants set stock = stock - item.quantity, updated_at = now() where id = item.variant_id;
+    else
+      update public.products set stock = stock - item.quantity, updated_at = now() where id = item.product_id;
+    end if;
+    if exists (select 1 from public.seller_profiles where id = item.seller_id) then
+      insert into public.inventory_movements (store_id, product_id, variant_id, product_name, change, reason, note, order_id, created_by)
+      values (item.seller_id, item.product_id, item.variant_id, item.product_name || coalesce(' (' || item.variant || ')', ''),
+              -item.quantity, 'sale', 'Pre-order picked up', p_order, auth.uid());
+    end if;
+  end loop;
+  perform set_config('app.completing_order', '', true);
+end;
+$$;
+revoke all on function public.take_preorder_stock(uuid) from public, anon, authenticated;
 
 -- Returned / refunded orders
 alter table public.orders drop constraint if exists orders_status_check;
@@ -3336,6 +3407,11 @@ declare
 begin
   if new.status = 'paid' and old.status is distinct from 'paid' and coalesce(new.amount_paid, 0) < new.total then
     new.amount_paid := new.total;
+  end if;
+  -- Picked up: the pre-order's stock is taken now
+  if new.status = 'completed' and old.status is distinct from 'completed' and new.is_preorder and not new.stock_taken then
+    perform public.take_preorder_stock(new.id);
+    new.stock_taken := true;
   end if;
   -- Ready for pick up without a chosen day (or the shop cleared it for a new one): the buyer has
   -- until the end of the shop's claim window to choose and pick up
@@ -3427,7 +3503,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   item record;
 begin
-  if new.status in ('cancelled', 'refunded') and old.status not in ('cancelled', 'refunded') then
+  -- Only stock that was taken goes back (a pre-order's stock is taken at pick-up)
+  if new.status in ('cancelled', 'refunded') and old.status not in ('cancelled', 'refunded') and old.stock_taken then
     for item in select * from public.order_items where order_id = new.id and product_id is not null loop
       if item.variant_id is not null then
         update public.product_variants set stock = stock + item.quantity, updated_at = now() where id = item.variant_id;
@@ -3464,8 +3541,13 @@ begin
     end if;
   elsif new.status is distinct from old.status then
     label := case new.status
-      when 'paid' then case when new.is_preorder then 'Payment received for your pre-order' else 'Payment confirmed — your items are being prepared' end
-      when 'partially_paid' then 'Partial payment received'
+      when 'paid' then case
+        when new.is_preorder and old.status = 'ready_for_pickup' then 'Back on the pre-order waitlist — your size ran out. You keep your place.'
+        when new.is_preorder then 'Payment received for your pre-order'
+        else 'Payment confirmed — your items are being prepared' end
+      when 'partially_paid' then case
+        when new.is_preorder and old.status = 'ready_for_pickup' then 'Back on the pre-order waitlist — your size ran out. You keep your place.'
+        else 'Partial payment received' end
       when 'ready_for_pickup' then case when new.is_preorder then 'Pre-order ready — choose your pick-up day' else 'Ready for pickup' end
       when 'completed' then 'Order completed'
       when 'cancelled' then 'Order cancelled'
@@ -3477,7 +3559,37 @@ begin
 end;
 $$;
 
--- ── Pre-order completion forms (made by the shop) ─────────────────────────
+-- A size (or a product without sizes) ran out: pre-orders still "ready" for it go back to the waitlist
+create or replace function public.preorder_back_to_waitlist()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  o record;
+begin
+  if new.stock > 0 or old.stock <= 0 then return new; end if;
+  for o in
+    select distinct ord.id, ord.total, ord.amount_paid from public.orders ord
+    join public.order_items oi on oi.order_id = ord.id
+    where ord.is_preorder and not ord.stock_taken and ord.status = 'ready_for_pickup'
+      and ord.id::text is distinct from nullif(current_setting('app.completing_order', true), '')
+      and case when tg_table_name = 'product_variants' then oi.variant_id = new.id
+               else oi.product_id = new.id and oi.variant_id is null end
+  loop
+    update public.orders
+    set status = case when coalesce(o.amount_paid, 0) >= o.total then 'paid' else 'partially_paid' end,
+        pickup_date = null, pickup_deadline = null
+    where id = o.id;
+  end loop;
+  return new;
+end;
+$$;
+drop trigger if exists preorder_back_to_waitlist on public.product_variants;
+create trigger preorder_back_to_waitlist after update of stock on public.product_variants
+  for each row execute procedure public.preorder_back_to_waitlist();
+drop trigger if exists preorder_back_to_waitlist on public.products;
+create trigger preorder_back_to_waitlist after update of stock on public.products
+  for each row execute procedure public.preorder_back_to_waitlist();
+
+-- ── Pre-order forms (made by the shop) ─────────────────────────────────────
 -- A form has a title and Size / Qty cells; each cell lists the products it covers, e.g.
 -- "School Uniform": [Polo, Blouse] [Pants, Skirt]. columns = [{"products":[{"id":…,"name":…}]}]
 create table if not exists public.preorder_forms (
@@ -3582,6 +3694,217 @@ begin
   return new;
 end;
 $$;
+
+-- ── Branches are supplied by the Main Supply Office ───────────────────────
+-- Branches sell. The Main Supply Office adds their stock (restock requests, or directly) and takes
+-- back damaged / defective items (return reports). Royalty on branch sales is owed by the Main
+-- office (scripts/32). Branches can't add stock themselves (app/store-actions.ts).
+create table if not exists public.branch_stock_requests (
+  id                 uuid primary key default gen_random_uuid(),
+  branch_store_id    uuid not null references public.seller_profiles(id) on delete cascade,
+  kind               text not null check (kind in ('restock', 'return')),
+  product_id         uuid references public.products(id) on delete set null,
+  variant_id         uuid references public.product_variants(id) on delete set null,
+  product_name       text not null default '',
+  quantity           integer not null check (quantity > 0),
+  reason             text check (reason is null or reason in ('damaged', 'defective', 'other')),
+  note               text,
+  photo_url          text,
+  status             text not null default 'pending' check (status in ('pending', 'fulfilled', 'partial', 'approved', 'declined')),
+  fulfilled_quantity integer,
+  main_note          text,
+  created_by         uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at         timestamptz not null default now(),
+  reviewed_by        uuid references auth.users(id) on delete set null,
+  reviewed_at        timestamptz
+);
+create index if not exists branch_stock_requests_store_idx on public.branch_stock_requests(branch_store_id, created_at desc);
+create index if not exists branch_stock_requests_pending_idx on public.branch_stock_requests(created_at) where status = 'pending';
+
+alter table public.branch_stock_requests enable row level security;
+drop policy if exists "branch and main office read stock requests" on public.branch_stock_requests;
+create policy "branch and main office read stock requests" on public.branch_stock_requests for select
+  using (public.store_access(branch_store_id, 'inventory') or public.module_access('supply_office', 'inventory'));
+drop policy if exists "branches send stock requests" on public.branch_stock_requests;
+create policy "branches send stock requests" on public.branch_stock_requests for insert
+  with check (public.store_access(branch_store_id, 'inventory') and status = 'pending');
+drop policy if exists "branches withdraw pending requests" on public.branch_stock_requests;
+create policy "branches withdraw pending requests" on public.branch_stock_requests for delete
+  using (public.store_access(branch_store_id, 'inventory') and status = 'pending');
+
+-- A new request: checked against the branch's own product, named, and sent to the Main office
+create or replace function public.branch_request_rules()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  pname text;
+  vname text;
+  vstock integer;
+  pstock integer;
+  office record;
+begin
+  if not exists (select 1 from public.dashboards where store_id = new.branch_store_id and module = 'cashier') then
+    raise exception 'Only Supply Office branches send stock requests.';
+  end if;
+  select name, stock into pname, pstock from public.products where id = new.product_id and seller_id = new.branch_store_id;
+  if pname is null then raise exception 'Choose one of your branch''s products.'; end if;
+  if new.variant_id is not null then
+    select name, stock into vname, vstock from public.product_variants where id = new.variant_id and product_id = new.product_id;
+    if vname is null then raise exception 'That size was not found.'; end if;
+  end if;
+  if new.kind = 'return' then
+    if new.reason is null then raise exception 'Choose why the items go back: damaged, defective or other.'; end if;
+    if new.quantity > coalesce(vstock, pstock, 0) then
+      raise exception 'Only % in stock — you can''t return %.', coalesce(vstock, pstock, 0), new.quantity;
+    end if;
+  else
+    new.reason := null;
+  end if;
+  new.product_name := pname || coalesce(' (' || vname || ')', '');
+  new.status := 'pending';
+  new.created_by := auth.uid();
+
+  select d.id into office from public.dashboards d where d.module = 'supply_office' limit 1;
+  if office.id is not null then
+    perform public.notify_dashboard(office.id, 'inventory', 'inventory',
+      case new.kind when 'restock' then 'Restock request' else 'Damaged / defective items reported' end,
+      coalesce((select org_name from public.seller_profiles where id = new.branch_store_id), 'A branch') || ': '
+        || new.quantity || ' × ' || new.product_name,
+      '/supply-office/branch-inventory');
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists branch_request_rules on public.branch_stock_requests;
+create trigger branch_request_rules before insert on public.branch_stock_requests
+  for each row execute procedure public.branch_request_rules();
+
+-- Stock change on a branch product / size, recorded as an inventory movement
+create or replace function public.branch_stock_change(p_store uuid, p_product uuid, p_variant uuid, p_delta integer, p_reason text, p_note text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  label text;
+  after_stock integer;
+  now_stock integer;
+begin
+  select coalesce((select stock from public.product_variants where id = p_variant and product_id = p_product),
+                  (select stock from public.products where id = p_product and seller_id = p_store))
+    into now_stock;
+  if now_stock is null then raise exception 'That product was not found in the branch.'; end if;
+  if now_stock + p_delta < 0 then raise exception 'Only % in stock.', now_stock; end if;
+  if p_variant is not null then
+    update public.product_variants v set stock = v.stock + p_delta, updated_at = now()
+    where v.id = p_variant and v.product_id = p_product returning v.stock into after_stock;
+    select p.name || ' (' || v.name || ')' into label from public.products p join public.product_variants v on v.product_id = p.id where v.id = p_variant;
+  else
+    update public.products p set stock = p.stock + p_delta, updated_at = now()
+    where p.id = p_product and p.seller_id = p_store returning p.stock into after_stock;
+    select name into label from public.products where id = p_product;
+  end if;
+  insert into public.inventory_movements (store_id, product_id, variant_id, product_name, change, reason, note, created_by)
+  values (p_store, p_product, p_variant, label, p_delta, p_reason, p_note, auth.uid());
+  return after_stock;
+end;
+$$;
+revoke all on function public.branch_stock_change(uuid, uuid, uuid, integer, text, text) from public, anon, authenticated;
+
+-- The Main office fulfils / declines a restock, or approves / declines a return
+create or replace function public.review_branch_request(p_id uuid, p_decision text, p_quantity integer default null, p_note text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  r public.branch_stock_requests;
+  qty integer;
+  current_stock integer;
+  dash uuid;
+  title text;
+begin
+  if not public.module_access('supply_office', 'inventory') then
+    raise exception 'Only the Main Supply Office reviews branch requests.';
+  end if;
+  select * into r from public.branch_stock_requests where id = p_id and status = 'pending' for update;
+  if not found then raise exception 'This request was already reviewed.'; end if;
+
+  if p_decision = 'decline' then
+    update public.branch_stock_requests set status = 'declined', main_note = nullif(trim(p_note), ''), reviewed_by = auth.uid(), reviewed_at = now() where id = p_id;
+    title := case r.kind when 'restock' then 'Restock request declined' else 'Return report declined' end;
+  elsif r.kind = 'restock' and p_decision = 'fulfil' then
+    qty := coalesce(p_quantity, r.quantity);
+    if qty < 1 then raise exception 'Enter how many units you''re sending.'; end if;
+    perform public.branch_stock_change(r.branch_store_id, r.product_id, r.variant_id, qty, 'restock',
+      'From Main Supply Office' || coalesce(': ' || nullif(trim(p_note), ''), ''));
+    update public.branch_stock_requests
+    set status = case when qty >= r.quantity then 'fulfilled' else 'partial' end, fulfilled_quantity = qty,
+        main_note = nullif(trim(p_note), ''), reviewed_by = auth.uid(), reviewed_at = now()
+    where id = p_id;
+    title := 'Restock sent: ' || qty || ' × ' || r.product_name;
+  elsif r.kind = 'return' and p_decision = 'approve' then
+    select coalesce((select stock from public.product_variants where id = r.variant_id), (select stock from public.products where id = r.product_id), 0)
+      into current_stock;
+    qty := least(coalesce(p_quantity, r.quantity), current_stock);
+    if qty > 0 then
+      perform public.branch_stock_change(r.branch_store_id, r.product_id, r.variant_id, -qty, 'adjustment',
+        'Returned to Main Supply Office: ' || r.reason || coalesce(' — ' || nullif(trim(r.note), ''), ''));
+    end if;
+    update public.branch_stock_requests
+    set status = 'approved', fulfilled_quantity = qty, main_note = nullif(trim(p_note), ''), reviewed_by = auth.uid(), reviewed_at = now()
+    where id = p_id;
+    title := 'Return approved: ' || qty || ' × ' || r.product_name;
+  else
+    raise exception 'Choose fulfil or decline for restocks, approve or decline for returns.';
+  end if;
+
+  select id into dash from public.dashboards where store_id = r.branch_store_id and module = 'cashier' limit 1;
+  if dash is not null then
+    perform public.notify_dashboard(dash, 'inventory', 'inventory', title, coalesce(nullif(trim(p_note), ''), r.product_name), '/cashier/inventory');
+  end if;
+end;
+$$;
+grant execute on function public.review_branch_request(uuid, text, integer, text) to authenticated;
+
+-- The Main office adds to, removes from or counts a branch's stock directly
+create or replace function public.main_adjust_branch_stock(p_store uuid, p_product uuid, p_variant uuid, p_mode text, p_quantity integer, p_note text default null)
+returns integer language plpgsql security definer set search_path = public as $$
+declare
+  before_stock integer;
+  delta integer;
+begin
+  if not public.module_access('supply_office', 'inventory') then raise exception 'Only the Main Supply Office manages branch stock.'; end if;
+  if not exists (select 1 from public.dashboards where store_id = p_store and module = 'cashier') then raise exception 'That store is not a Supply Office branch.'; end if;
+  if not exists (select 1 from public.products where id = p_product and seller_id = p_store) then raise exception 'That product is not in this branch.'; end if;
+  select coalesce((select stock from public.product_variants where id = p_variant and product_id = p_product), (select stock from public.products where id = p_product))
+    into before_stock;
+  delta := case p_mode when 'add' then p_quantity when 'remove' then -p_quantity when 'set' then p_quantity - before_stock end;
+  if delta is null then raise exception 'Choose add, remove or set.'; end if;
+  if p_quantity < 0 or (p_mode <> 'set' and p_quantity < 1) then raise exception 'Enter a valid number of units.'; end if;
+  if delta = 0 then return before_stock; end if;
+  return public.branch_stock_change(p_store, p_product, p_variant, delta,
+    case when p_mode = 'add' then 'restock' else 'adjustment' end,
+    coalesce(nullif(trim(p_note), ''), case p_mode when 'add' then 'Added by Main Supply Office' when 'set' then 'Stock count by Main Supply Office' else 'Removed by Main Supply Office' end));
+end;
+$$;
+grant execute on function public.main_adjust_branch_stock(uuid, uuid, uuid, text, integer, text) to authenticated;
+
+-- What the Main office sees of its branches: the branches, and each branch's products and sizes
+create or replace function public.supply_branches()
+returns table (store_id uuid, name text, campus text)
+language sql security definer set search_path = public stable as $$
+  select d.store_id, d.name, d.campus from public.dashboards d
+  where d.module = 'cashier' and d.store_id is not null and public.module_access('supply_office', 'inventory')
+  order by d.name;
+$$;
+grant execute on function public.supply_branches() to authenticated;
+
+create or replace function public.branch_inventory(p_store uuid)
+returns table (product_id uuid, product_name text, image_url text, product_status text, product_stock integer,
+               variant_id uuid, variant_name text, variant_stock integer)
+language sql security definer set search_path = public stable as $$
+  select p.id, p.name, p.image_url, p.status, p.stock, v.id, v.name, v.stock
+  from public.products p
+  left join public.product_variants v on v.product_id = p.id
+  where p.seller_id = p_store and public.module_access('supply_office', 'inventory')
+    and exists (select 1 from public.dashboards where store_id = p_store and module = 'cashier')
+  order by p.name, v.position, v.name;
+$$;
+grant execute on function public.branch_inventory(uuid) to authenticated;
 
 notify pgrst, 'reload schema';
 
@@ -3710,14 +4033,26 @@ update public.order_items oi set
     round(oi.royalty_amount * 100 / nullif(oi.unit_price, 0), 2))
 where oi.royalty_amount > 0 and oi.royalty_store_id is null;
 
+-- Supply Office branches (module 'cashier') are supplied by the Main Supply Office, which pays the
+-- royalty on everything they sell
+create or replace function public.is_branch_store(p_store uuid)
+returns boolean language sql security definer set search_path = public stable as $$
+  select exists (select 1 from public.dashboards where store_id = p_store and module = 'cashier');
+$$;
+create or replace function public.main_supply_store()
+returns uuid language sql security definer set search_path = public stable as $$
+  select store_id from public.dashboards where module = 'supply_office' and store_id is not null limit 1;
+$$;
+
 -- Product royalty fields always follow price and rate (also when size prices change)
 create or replace function public.products_royalty_fields()
 returns trigger language plpgsql set search_path = public as $$
 begin
   if new.is_royalty_product then
     new.royalty_amount := round(coalesce(new.price, 0) * coalesce(new.royalty_percentage, 0) / 100, 2);
-    -- Collaboration: the Supply Office pays the royalty, so the seller receives the full price
-    new.final_price := new.price - case when new.supply_office_collab then 0 else new.royalty_amount end;
+    -- Collaborations and branch products: the Main Supply Office pays the royalty, so the seller
+    -- receives the full price
+    new.final_price := new.price - case when new.supply_office_collab or public.is_branch_store(new.seller_id) then 0 else new.royalty_amount end;
   else
     new.royalty_amount := 0;
     new.final_price := new.price;
@@ -3742,10 +4077,9 @@ begin
   if coalesce(p.is_royalty_product, false) then
     new.royalty_percentage := p.royalty_percentage;
     new.royalty_store_id := new.seller_id;
-    if p.supply_office_collab then
-      new.royalty_store_id := coalesce(
-        (select store_id from public.dashboards where module = 'supply_office' and store_id is not null limit 1),
-        new.seller_id);
+    -- Collaboration products and every branch sale: owed by the Main Supply Office
+    if p.supply_office_collab or public.is_branch_store(new.seller_id) then
+      new.royalty_store_id := coalesce(public.main_supply_store(), new.seller_id);
     end if;
   else
     new.royalty_store_id := null;
@@ -3756,6 +4090,14 @@ $$;
 drop trigger if exists order_items_royalty_owner on public.order_items;
 create trigger order_items_royalty_owner before insert on public.order_items
   for each row execute procedure public.order_items_royalty_owner();
+
+-- Branch sales not remitted yet move to the Main Supply Office (remittances already sent stay)
+update public.order_items oi set royalty_store_id = public.main_supply_store()
+where oi.royalty_store_id is not null and oi.remittance_id is null
+  and public.is_branch_store(oi.seller_id) and public.main_supply_store() is not null
+  and oi.royalty_store_id is distinct from public.main_supply_store();
+-- Branch logo products: the branch keeps the full price
+update public.products set price = price where is_royalty_product and public.is_branch_store(seller_id);
 
 -- BAO changes the rate → every logo listing and every sale not yet remitted uses the new rate
 create or replace function public.apply_royalty_rate()
@@ -3779,11 +4121,12 @@ create trigger apply_royalty_rate after update on public.bao_settings
 
 -- A store's royalty sales that are not remitted yet (or waiting in its pending remittance).
 -- A function because the Supply Office owes royalty on other stores' orders, which it can't read.
+drop function if exists public.royalty_lines(uuid);
 create or replace function public.royalty_lines(p_store uuid)
 returns table (
   item_id uuid, order_id uuid, ordered_at timestamptz, order_status text, product_name text,
   quantity integer, unit_price numeric, royalty_percentage numeric, royalty_amount numeric,
-  origin_store uuid, origin_name text, collab boolean, remittance_id uuid
+  origin_store uuid, origin_name text, collab boolean, remittance_id uuid, origin_branch boolean, fully_paid boolean
 )
 language plpgsql security definer set search_path = public stable as $$
 #variable_conflict use_column
@@ -3794,13 +4137,15 @@ begin
   return query
     select oi.id, oi.order_id, o.created_at, o.status, oi.product_name,
            oi.quantity, oi.unit_price, oi.royalty_percentage, oi.royalty_amount,
-           oi.seller_id, sp.org_name, oi.royalty_store_id is distinct from oi.seller_id, oi.remittance_id
+           oi.seller_id, sp.org_name, oi.royalty_store_id is distinct from oi.seller_id, oi.remittance_id,
+           public.is_branch_store(oi.seller_id),
+           o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total)
     from public.order_items oi
     join public.orders o on o.id = oi.order_id
     left join public.seller_profiles sp on sp.id = oi.seller_id
     left join public.royalty_remittances r on r.id = oi.remittance_id
     where oi.royalty_store_id = p_store
-      and o.status <> 'cancelled'
+      and o.status not in ('cancelled', 'refunded')
       and (oi.remittance_id is null or r.status = 'pending')
     order by o.created_at desc;
 end;
@@ -3837,7 +4182,8 @@ begin
   from public.orders o
   where o.id = oi.order_id
     and oi.royalty_store_id = p_store and oi.remittance_id is null
-    and o.status in ('paid', 'ready_for_pickup', 'completed');
+    -- Fully paid sales only (a partly paid pre-order ready for pick up waits for its balance)
+    and (o.status in ('paid', 'completed') or (o.status = 'ready_for_pickup' and coalesce(o.amount_paid, o.total) >= o.total));
 
   select coalesce(sum(oi.royalty_amount * oi.quantity), 0), count(*), min(o.created_at), max(o.created_at)
   into total, n, first_at, last_at
@@ -3855,7 +4201,8 @@ begin
       'items',   sum(oi.quantity),
       'gross',   sum(oi.unit_price * oi.quantity),
       'royalty', sum(oi.royalty_amount * oi.quantity),
-      'collab',  oi.royalty_store_id is distinct from oi.seller_id,
+      'collab',  oi.royalty_store_id is distinct from oi.seller_id and not public.is_branch_store(oi.seller_id),
+      'branch',  public.is_branch_store(oi.seller_id),
       'store',   max(sp.org_name)) as b
     from public.order_items oi
     left join public.seller_profiles sp on sp.id = oi.seller_id

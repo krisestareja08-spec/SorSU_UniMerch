@@ -41,8 +41,11 @@ async function addProductImpl(formData: FormData) {
   const category = formData.get("category") as string
   // Sizes: each is its own variant (price, stock, SKU, image); the product shows the range and total
   const variants = parseVariantInputs(JSON.parse((formData.get("variants") as string | null) ?? "[]"))
+  // Supply Office branches get their stock from the Main Supply Office (restock requests): start at 0
+  const branch = mod === "cashier"
+  if (branch) for (const v of variants) v.stock = 0
   const price = variants.length ? Math.min(...variants.map((v) => v.price)) : parseFloat(formData.get("price") as string)
-  const stock = variants.length ? variants.reduce((n, v) => n + v.stock, 0) : parseInt(formData.get("stock") as string, 10)
+  const stock = branch ? 0 : variants.length ? variants.reduce((n, v) => n + v.stock, 0) : parseInt(formData.get("stock") as string, 10)
   const badge = formData.get("badge") as string
   const images = (formData.get("images") as string | null)?.split(",").map((u) => u.trim()).filter(Boolean) ?? []
   const sku = formData.get("sku") as string | null
@@ -111,7 +114,7 @@ async function addProductImpl(formData: FormData) {
  * removed ones deleted. The database keeps the product's price range, total stock and size list in sync.
  */
 async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJson: string) {
-  const { supabase, storeId, path } = await storeContext(module)
+  const { supabase, storeId, path, mod } = await storeContext(module)
   const variants = parseVariantInputs(JSON.parse(variantsJson || "[]"))
   if (variants.length === 0) throw new Error("Add at least one size.")
 
@@ -130,6 +133,8 @@ async function saveVariantsImpl(productId: string, module: ModuleKey, variantsJs
   }
   for (const [i, v] of variants.entries()) {
     const row = variantRow(productId, v, i)
+    // Branches can't change stock here: it comes from the Main Supply Office
+    if (mod === "cashier") row.stock = current.find((c) => c.id === v.id)?.stock ?? 0
     const { error } = v.id && current.some((c) => c.id === v.id)
       ? await supabase.from("product_variants").update(row).eq("id", v.id).eq("product_id", productId)
       : await supabase.from("product_variants").insert(row)

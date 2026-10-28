@@ -5,7 +5,7 @@ import { BackLink } from "@/components/navigation/history-nav"
 import { PreorderFormsIndex, type FormRecord, type FormSummary } from "@/components/store/preorder-forms-index"
 import { PreorderFormView } from "@/components/store/preorder-form-view"
 import { PreorderFormEditor, type PickableProduct } from "@/components/store/preorder-form-editor"
-import { formRows, loadForms, loadPurchases } from "@/lib/preorder-forms"
+import { formRows, loadFormStock, loadForms, loadPurchases } from "@/lib/preorder-forms"
 import { createClient } from "@/lib/supabase/server"
 import { MODULES, type DashboardCtx } from "@/lib/modules"
 
@@ -15,7 +15,7 @@ function SetupNotice({ message }: { message: string }) {
 
 const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s)
 
-/** The shop's pre-order completion forms, with Create form and a search across every record. */
+/** The shop's pre-order forms (live waitlists), with Create form and a search across every record. */
 export async function PreorderFormsPage({ ctx }: { ctx: DashboardCtx }) {
   const storeId = ctx.storeId ?? ""
   const [{ forms, error }, { purchases, error: purchaseError }, products] = await Promise.all([loadForms(storeId), loadPurchases(storeId), storeProducts(storeId)])
@@ -25,12 +25,13 @@ export async function PreorderFormsPage({ ctx }: { ctx: DashboardCtx }) {
     const rows = formRows(f, purchases)
     summaries.push({
       id: f.id, title: f.title, products: f.columns.flatMap((c) => c.products.map((p) => p.name)),
-      records: rows.length, claimed: rows.filter((r) => r.claimed).length,
+      records: rows.length, waiting: rows.filter((r) => r.stage === "waitlist").length,
+      ready: rows.filter((r) => r.stage === "ready").length, claimed: rows.filter((r) => r.stage === "claimed").length,
       units: rows.reduce((n, r) => n + r.quantity, 0), amount: rows.reduce((n, r) => n + r.amountPaid, 0),
-      updatedAt: rows.reduce((t, r) => [r.claimedAt, r.purchasedAt].reduce<string>((m, d) => (d && d > m ? d : m), t), f.updatedAt),
+      updatedAt: rows.reduce((t, r) => [r.claimedAt, r.orderedAt].reduce<string>((m, d) => (d && d > m ? d : m), t), f.updatedAt),
     })
     for (const r of rows) {
-      records.push({ key: r.key, formId: f.id, formTitle: f.title, buyerName: r.buyerName, course: r.course, contact: r.contact, sizes: Object.values(r.cells).join(", "), claimed: r.claimed })
+      records.push({ key: r.key, formId: f.id, formTitle: f.title, buyerName: r.buyerName, course: r.course, contact: r.contact, sizes: Object.values(r.cells).join(", "), claimed: r.stage === "claimed", stage: r.stage })
     }
   }
   // Pre-order products no form covers yet (their buyers wouldn't be recorded anywhere)
@@ -42,8 +43,8 @@ export async function PreorderFormsPage({ ctx }: { ctx: DashboardCtx }) {
   const problem = error ?? purchaseError
   return (
     <ManagementShell ctx={ctx}>
-      <PageHeading title="Pre-order Completion Forms"
-        description="Your forms, like the paper pre-order sheets. Buyers are recorded once their pre-order is paid (Purchased) and marked Claimed when it's completed." />
+      <PageHeading title="Pre-order Forms"
+        description="Your forms, like the paper pre-order sheets, and the live waitlist: buyers are listed in queue order once they pay half or in full. Mark them ready when their size arrives; picked-up orders move to History." />
       {problem ? <SetupNotice message={problem} /> : <PreorderFormsIndex forms={summaries} records={records} unassigned={unassigned} basePath={MODULES[ctx.module].basePath} />}
     </ManagementShell>
   )
@@ -56,15 +57,17 @@ export async function PreorderFormPage({ ctx, formId, query }: { ctx: DashboardC
   const [{ forms, error }, { purchases, error: purchaseError }] = await Promise.all([loadForms(storeId), loadPurchases(storeId)])
   const form = forms.find((f) => f.id === formId)
   if (!error && !form) notFound()
+  const stock = form ? await loadFormStock(form.columns.flatMap((c) => c.products.map((p) => p.id))) : {}
   const base = MODULES[ctx.module].basePath
   const problem = error ?? purchaseError
   return (
     <ManagementShell ctx={ctx}>
       <div className="print:hidden"><BackLink href={`${base}/preorders`} className="mb-3" /></div>
-      <PageHeading title={form?.title ?? "Pre-order Completion Form"} description="Who bought, what size and how many, how much was paid, and whether it's been claimed." />
+      <PageHeading title={form?.title ?? "Pre-order Form"} description="Who pre-ordered which size, in queue order, how much they paid, and whether it's ready or picked up." />
       {problem || !form
         ? <SetupNotice message={problem ?? "Form not found."} />
-        : <PreorderFormView form={form} storeName={ctx.dashboardName} rows={formRows(form, purchases)} editHref={`${base}/preorders/${form.id}/edit`} initialQuery={query} />}
+        : <PreorderFormView form={form} storeName={ctx.dashboardName} rows={formRows(form, purchases)} stock={stock} module={ctx.module}
+            editHref={`${base}/preorders/${form.id}/edit`} initialQuery={query} />}
     </ManagementShell>
   )
 }

@@ -51,7 +51,7 @@ export function EditVariantsButton({
 
   async function save() {
     if (!rows) return
-    const problem = validateDrafts(rows)
+    const problem = validateDrafts(rows, { lockStock: module === "cashier" })
     if (problem) { setError(problem); return }
     setSaving(true)
     setError(null)
@@ -90,7 +90,7 @@ export function EditVariantsButton({
                   <AlertCircle className="mt-0.5 size-3.5 shrink-0" />{error}
                 </p>
               )}
-              {rows === null ? <Loader2 className="mx-auto my-6 size-6 animate-spin text-primary" /> : <VariantEditor rows={rows} onChange={setRows} />}
+              {rows === null ? <Loader2 className="mx-auto my-6 size-6 animate-spin text-primary" /> : <VariantEditor rows={rows} onChange={setRows} lockStock={module === "cashier"} />}
               <div className="flex gap-2 pt-1">
                 <Button type="button" variant="outline" className="flex-1" onClick={() => setOpen(false)}>Cancel</Button>
                 <Button type="button" className="flex-1 gap-2" disabled={saving || !rows?.length} onClick={save}>

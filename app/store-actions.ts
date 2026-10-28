@@ -75,6 +75,8 @@ async function adjustStockImpl(formData: FormData): Promise<{ before: number; af
   if (!["add", "remove", "set"].includes(mode)) throw new Error("Choose what you want to do: add, remove or set the count.")
   if (!Number.isInteger(quantity)) throw new Error("Enter a whole number of units.")
 
+  // Supply Office branches are stocked by the Main Supply Office (scripts/31)
+  if (mod === "cashier") throw new Error("Stock is added by the Main Supply Office — send a restock request from Inventory.")
   const { supabase, userId, storeId } = await assertDashboard(mod, "inventory")
   const { data: product } = await supabase.from("products").select("name, stock, seller_id").eq("id", productId).maybeSingle()
   if (!product || product.seller_id !== storeId) throw new Error("Product not found in your store.")

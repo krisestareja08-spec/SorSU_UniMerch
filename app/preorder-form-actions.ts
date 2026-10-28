@@ -8,7 +8,7 @@ import { MODULES, type ModuleKey } from "@/lib/modules"
 const STORE_MODULES: ModuleKey[] = ["seller", "cashier", "supply_office"]
 
 /**
- * Creates or updates a pre-order completion form: a title and Size / Qty cells, each listing the
+ * Creates or updates a pre-order form: a title and Size / Qty cells, each listing the
  * store's products it covers. Product names are saved with the ids so a deleted product still shows.
  */
 async function saveFormImpl(args: { module: ModuleKey; id?: string; title: string; columns: { productIds: string[] }[] }) {
@@ -49,6 +49,30 @@ async function deleteFormImpl(args: { module: ModuleKey; id: string }) {
   const { error } = await supabase.from("preorder_forms").delete().eq("id", args.id).eq("store_id", storeId ?? "")
   if (error) throw new Error(error.message)
   revalidatePath(`${MODULES[args.module].basePath}/preorders`)
+}
+
+/**
+ * Batch "ready for pick up": the selected waitlisted pre-orders (paid half or full, this store's)
+ * become Ready for Pick Up. The database notifies each buyer to choose a pick-up day and gives
+ * them the shop's claim window. Stock isn't reserved: the first to pick up gets it.
+ */
+async function markReadyImpl(args: { module: ModuleKey; orderIds: string[] }) {
+  if (!STORE_MODULES.includes(args.module)) throw new Error("Invalid dashboard")
+  const ids = [...new Set(args.orderIds)].slice(0, 500)
+  if (ids.length === 0) throw new Error("Select at least one buyer.")
+  const { supabase, storeId } = await assertDashboard(args.module, "orders")
+  const { data, error } = await supabase.from("orders")
+    .update({ status: "ready_for_pickup" })
+    .in("id", ids).eq("seller_id", storeId ?? "").eq("is_preorder", true).in("status", ["paid", "partially_paid"])
+    .select("id")
+  if (error) throw new Error(error.message)
+  revalidatePath(`${MODULES[args.module].basePath}/preorders`, "layout")
+  revalidatePath(`${MODULES[args.module].basePath}/orders`)
+  return { updated: (data ?? []).length, skipped: ids.length - (data ?? []).length }
+}
+
+export async function markPreordersReady(...args: Parameters<typeof markReadyImpl>) {
+  return attempt(() => markReadyImpl(...args))
 }
 
 export async function savePreorderForm(...args: Parameters<typeof saveFormImpl>) {

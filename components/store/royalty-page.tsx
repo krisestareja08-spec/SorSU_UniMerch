@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading, StatGrid, type Stat } from "@/components/management/dashboard-ui"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Coins, Handshake, Hourglass, Percent, Send } from "lucide-react"
+import { Building2, Coins, Handshake, Hourglass, Percent, Send } from "lucide-react"
 import { EARNED_STATUSES, peso, ratesLabel, storeNames } from "@/lib/analytics"
 import { getGlobalRoyaltyPercentage } from "@/lib/bao-settings"
 import { formatDateTime } from "@/lib/admin"
@@ -16,11 +16,13 @@ type Line = {
   item_id: string; order_id: string; ordered_at: string; order_status: string; product_name: string
   quantity: number; unit_price: number; royalty_percentage: number | null; royalty_amount: number
   origin_store: string; origin_name: string | null; collab: boolean; remittance_id: string | null
+  /** Sold by a Supply Office branch (the Main office pays its royalty); paid in full (remittable) */
+  origin_branch?: boolean; fully_paid?: boolean
 }
 
 type Remittance = {
   id: string; amount: number; items_count: number; period_start: string | null; period_end: string | null
-  breakdown: { product: string; rate: number | null; items: number; royalty: number; collab: boolean; store: string | null }[] | null
+  breakdown: { product: string; rate: number | null; items: number; royalty: number; collab: boolean; branch?: boolean; store: string | null }[] | null
   method: string; reference_number: string | null; status: string; bao_note: string | null; created_at: string; reviewed_at: string | null
 }
 
@@ -34,7 +36,8 @@ const STATUS_LABEL: Record<string, string> = { pending: "Waiting for BAO", appro
 /**
  * Royalty a store owes BAO and its remittances. Royalty from PAID sales can be remitted with a
  * receipt; BAO approves it (the balance resets) or rejects it (the sales return to the balance).
- * The Main Supply Office also owes the royalty of organizations' collaboration products.
+ * The Main Supply Office also owes the royalty of organizations' collaboration products and of
+ * everything its branches sell (they have no Royalty page of their own).
  */
 export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
   const supabase = await createClient()
@@ -71,8 +74,17 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
   const names = await storeNames(supabase, collabProducts.map((p) => p.seller_id))
 
   const open = lines.filter((l) => !l.remittance_id)
-  const remittable = open.filter((l) => EARNED_STATUSES.includes(l.order_status))
-  const notYetPaid = open.filter((l) => !EARNED_STATUSES.includes(l.order_status))
+  // Fully paid sales are remittable (a partly paid pre-order waits for its balance)
+  const paidInFull = (l: Line) => l.fully_paid ?? EARNED_STATUSES.includes(l.order_status)
+  const remittable = open.filter(paidInFull)
+  const notYetPaid = open.filter((l) => !paidInFull(l))
+  // Main office: royalty owed per branch
+  const byBranch = [...open.filter((l) => l.origin_branch).reduce((m, l) => {
+    const k = l.origin_name ?? "Branch"
+    const cur = m.get(k) ?? { lines: 0, royalty: 0 }
+    m.set(k, { lines: cur.lines + 1, royalty: cur.royalty + Number(l.royalty_amount) * l.quantity })
+    return m
+  }, new Map<string, { lines: number; royalty: number }>())].sort((a, b) => b[1].royalty - a[1].royalty)
   const sum = (ls: Line[]) => ls.reduce((s, l) => s + Number(l.royalty_amount) * l.quantity, 0)
   const pending = remittances.find((r) => r.status === "pending")
   const approvedTotal = remittances.filter((r) => r.status === "approved").reduce((s, r) => s + Number(r.amount), 0)
@@ -89,7 +101,7 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
     <ManagementShell ctx={ctx}>
       <PageHeading
         title="Royalty"
-        description={`Official-logo products send a royalty to BAO on every sale. Remit the royalty of your paid sales with a receipt; once BAO approves it, your balance resets.${isOffice ? " The Supply Office also pays the royalty of organizations' collaboration products." : ""}`}
+        description={`Official-logo products send a royalty to BAO on every sale. Remit the royalty of your paid sales with a receipt; once BAO approves it, your balance resets.${isOffice ? " The Main Supply Office also pays the royalty on everything its branches sell and on organizations' collaboration products." : ""}`}
       />
       <div className="mt-6"><StatGrid stats={stats} /></div>
 
@@ -109,12 +121,14 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
                     <td className="py-2 pr-3 text-xs text-muted-foreground">{formatOrderTime(l.ordered_at)}</td>
                     <td className="py-2 pr-3">
                       {l.product_name}
-                      {l.collab && <span className="block text-[11px] text-amber-800 dark:text-gold">Collab · {l.origin_name ?? "organization"}</span>}
+                      {l.origin_branch
+                        ? <span className="block text-[11px] text-primary">Branch · {l.origin_name ?? "Supply Office branch"}</span>
+                        : l.collab && <span className="block text-[11px] text-amber-800 dark:text-gold">Collab · {l.origin_name ?? "organization"}</span>}
                     </td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.quantity} × {peso(Number(l.unit_price))}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{ratesLabel(l.royalty_percentage != null ? [Number(l.royalty_percentage)] : [])}</td>
                     <td className="py-2 pr-3 text-right font-semibold tabular-nums">{peso(Number(l.royalty_amount) * l.quantity)}</td>
-                    <td className="py-2 text-xs">{EARNED_STATUSES.includes(l.order_status) ? "Paid" : statusDef(l.order_status).label}</td>
+                    <td className="py-2 text-xs">{paidInFull(l) ? "Paid" : statusDef(l.order_status).label}</td>
                   </tr>
                 ))}
               </tbody>
@@ -138,6 +152,22 @@ export async function RoyaltyPage({ ctx }: { ctx: DashboardCtx }) {
           </CardContent>
         </Card>
       </div>
+
+      {isOffice && byBranch.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader><CardTitle className="flex items-center gap-2 font-serif text-base"><Building2 className="size-4 text-primary" />Branch sales not yet remitted</CardTitle></CardHeader>
+          <CardContent className="text-sm">
+            <ul className="divide-y divide-border">
+              {byBranch.map(([name, b]) => (
+                <li key={name} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span className="font-medium">{name}</span>
+                  <span className="text-xs text-muted-foreground">{b.lines} sale line{b.lines === 1 ? "" : "s"} · <strong className="text-foreground tabular-nums">{peso(b.royalty)}</strong> royalty</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {isOffice && (
         <Card className="mt-4">
@@ -202,7 +232,9 @@ export function RemittanceBreakdown({ remittance: r }: { remittance: Pick<Remitt
             <tr key={`${b.product}-${b.rate}-${i}`} className="border-b border-border/60 last:border-0">
               <td className="py-1.5 pr-3">
                 {b.product}
-                {b.collab && <span className="block text-[11px] text-amber-800 dark:text-gold">Supply Office collab · {b.store ?? "organization"}</span>}
+                {b.branch
+                  ? <span className="block text-[11px] text-primary">Branch · {b.store ?? "Supply Office branch"}</span>
+                  : b.collab && <span className="block text-[11px] text-amber-800 dark:text-gold">Supply Office collab · {b.store ?? "organization"}</span>}
               </td>
               <td className="py-1.5 pr-3 text-right tabular-nums">{b.rate != null ? `${Number(b.rate)}%` : "—"}</td>
               <td className="py-1.5 pr-3 text-right tabular-nums">{b.items}</td>

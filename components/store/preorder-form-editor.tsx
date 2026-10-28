@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils"
 export type PickableProduct = { id: string; name: string; preOrder: boolean; image: string | null }
 
 /**
- * Create / edit a pre-order completion form: a title, then Size / Qty cells. Each cell holds the
+ * Create / edit a pre-order form: a title, then Size / Qty cells. Each cell holds the
  * products it covers, e.g. "Polo" + "Blouse" in one cell and "Pants" + "Skirt" in another; each
  * product becomes a sub-column where a buyer's "M-2" is written.
  */

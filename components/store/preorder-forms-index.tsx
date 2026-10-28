@@ -11,12 +11,15 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-PH", { month: 
 
 export type FormSummary = {
   id: string; title: string; products: string[]
-  records: number; claimed: number; units: number; amount: number; updatedAt: string
+  records: number; waiting: number; ready: number; claimed: number; units: number; amount: number; updatedAt: string
 }
 /** A buyer row, for searching across every form */
-export type FormRecord = { key: string; formId: string; formTitle: string; buyerName: string; course: string | null; contact: string | null; sizes: string; claimed: boolean }
+export type FormRecord = {
+  key: string; formId: string; formTitle: string; buyerName: string; course: string | null; contact: string | null; sizes: string
+  claimed: boolean; stage: "waitlist" | "ready" | "claimed"
+}
 
-/** The shop's pre-order completion forms, a Create form button, and a search across all records. */
+/** The shop's pre-order forms (live waitlists), a Create form button, and a search across all records. */
 export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
   forms: FormSummary[]; records: FormRecord[]; unassigned: string[]; basePath: string
 }) {
@@ -29,8 +32,8 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
     [r.buyerName, r.contact, r.course, r.sizes].some((v) => v?.toLowerCase().includes(q))).slice(0, 50), [q, records])
 
   const visible = forms.filter((f) => {
-    if (show === "open" && f.claimed >= f.records) return false
-    if (show === "done" && (f.records === 0 || f.claimed < f.records)) return false
+    if (show === "open" && f.waiting + f.ready === 0) return false
+    if (show === "done" && (f.records === 0 || f.waiting + f.ready > 0)) return false
     if (!q) return true
     return f.title.toLowerCase().includes(q) || f.products.some((p) => p.toLowerCase().includes(q)) || matches.some((m) => m.formId === f.id)
   })
@@ -51,7 +54,7 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
           )}
         </div>
         <div role="group" aria-label="Show forms" className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
-          {([["all", "All"], ["open", "Not all claimed"], ["done", "All claimed"]] as const).map(([v, l]) => (
+          {([["all", "All"], ["open", "Has buyers waiting"], ["done", "All picked up"]] as const).map(([v, l]) => (
             <button key={v} type="button" onClick={() => setShow(v)} aria-pressed={show === v}
               className={cn("rounded-lg px-3 py-1.5 text-xs font-medium", show === v ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>{l}</button>
           ))}
@@ -77,7 +80,7 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
                     <span className="font-medium">{r.buyerName}</span>
                     <span className="ml-2 text-xs text-muted-foreground">{r.formTitle} · {r.sizes}</span>
                   </span>
-                  <StatusBadges claimed={r.claimed} />
+                  <StageBadge stage={r.stage} />
                 </Link>
               </li>
             ))}
@@ -91,7 +94,7 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
           <ClipboardList className="mx-auto mb-2 size-8 text-muted-foreground/40" />
           {forms.length === 0 ? (
             <>
-              <p>No forms yet. Create one, e.g. &ldquo;School Uniform&rdquo; with Polo / Blouse and Pants / Skirt.</p>
+              <p>No forms yet. Create one, e.g. &ldquo;School Uniform&rdquo; with Polo / Blouse and Pants / Skirt. Buyers who paid half or in full are listed in queue order.</p>
               <Button asChild size="sm" className="mt-3 gap-2"><Link href={`${basePath}/preorders/new`}><Plus className="size-4" />Create form</Link></Button>
             </>
           ) : "No forms match your search."}
@@ -103,12 +106,12 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
               className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
               <p className="font-serif text-base font-semibold leading-tight">{f.title}</p>
               <p className="line-clamp-2 text-xs text-muted-foreground">{f.products.join(" · ")}</p>
-              <p className="text-xs text-muted-foreground">{f.records} record{f.records === 1 ? "" : "s"} · {f.units} unit{f.units === 1 ? "" : "s"} · {peso(f.amount)}</p>
-              <div className="mt-auto flex flex-wrap items-center gap-2 text-xs">
-                <span className={cn("rounded-full px-2 py-0.5 font-semibold", f.records > 0 && f.claimed >= f.records ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" : "bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300")}>
-                  {f.claimed}/{f.records} claimed
-                </span>
-                <span className="text-muted-foreground">Updated {day(f.updatedAt)}</span>
+              <p className="text-xs text-muted-foreground">{f.records} buyer{f.records === 1 ? "" : "s"} · {f.units} unit{f.units === 1 ? "" : "s"} · {peso(f.amount)} paid</p>
+              <div className="mt-auto flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">{f.waiting} waiting</span>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{f.ready} ready</span>
+                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{f.claimed} claimed</span>
+                <span className="text-muted-foreground">· Updated {day(f.updatedAt)}</span>
               </div>
             </Link>
           ))}
@@ -116,6 +119,12 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
       )}
     </div>
   )
+}
+
+export function StageBadge({ stage }: { stage: "waitlist" | "ready" | "claimed" }) {
+  const [label, tone] = stage === "claimed" ? ["Claimed", "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"]
+    : stage === "ready" ? ["Ready for pick up", "bg-primary/10 text-primary"] : ["Waitlist", "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300"]
+  return <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", tone)}>{label}</span>
 }
 
 export function StatusBadges({ claimed, purchasedAt, claimedAt }: { claimed: boolean; purchasedAt?: string | null; claimedAt?: string | null }) {

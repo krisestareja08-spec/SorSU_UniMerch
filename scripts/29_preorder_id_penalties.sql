@@ -133,6 +133,9 @@ create policy "pre-order ids readable by buyer and shop" on storage.objects for 
 --   4. Fully paid → Completed. Otherwise Returned / Refunded or Cancelled.
 --   5. Missed pick-up day: an unpaid (walk-in) pre-order is cancelled and the penalty charged, so
 --      the stock can be sold again; a paid one is flagged for the shop to refund or re-schedule.
+--   6. Stock is taken at pick-up, not at checkout. Marking "ready" doesn't reserve it: the first to
+--      pick up gets it. When a size runs out, pre-orders still "ready" for it go back to the waitlist
+--      (Paid / Partially Paid, same place in the queue) and the buyer is told.
 alter table public.orders add column if not exists is_preorder boolean not null default false;
 alter table public.orders add column if not exists payment_plan text;
 alter table public.orders drop constraint if exists orders_payment_plan_check;
@@ -140,6 +143,74 @@ alter table public.orders add constraint orders_payment_plan_check
   check (payment_plan is null or payment_plan in ('full', 'half')) not valid;
 update public.orders set is_preorder = true where not is_preorder and (pickup_date is not null or buyer_id_path is not null);
 create index if not exists orders_preorder_idx on public.orders(seller_id, created_at) where is_preorder;
+-- Has this order's stock been taken? Earlier orders: yes (at checkout). New pre-orders: at pick-up.
+alter table public.orders add column if not exists stock_taken boolean not null default true;
+
+create or replace function public.preorder_insert_rules()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if new.is_preorder then new.stock_taken := false; end if;
+  return new;
+end;
+$$;
+drop trigger if exists preorder_insert_rules on public.orders;
+create trigger preorder_insert_rules before insert on public.orders for each row execute procedure public.preorder_insert_rules();
+
+-- Sales take stock from the exact size (replaces 28_product_variants.sql) — except pre-orders,
+-- which take it when they're picked up
+create or replace function public.stock_out_on_sale()
+returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if exists (select 1 from public.orders where id = new.order_id and not stock_taken) then
+    return new;
+  end if;
+  if new.variant_id is not null then
+    -- the variant sync trigger then updates the product's total stock
+    update public.product_variants set stock = greatest(stock - new.quantity, 0), updated_at = now() where id = new.variant_id;
+  elsif new.product_id is not null then
+    update public.products set stock = greatest(stock - new.quantity, 0), updated_at = now() where id = new.product_id;
+  end if;
+  if new.product_id is not null and exists (select 1 from public.seller_profiles where id = new.seller_id) then
+    insert into public.inventory_movements (store_id, product_id, variant_id, product_name, change, reason, order_id, created_by)
+    values (new.seller_id, new.product_id, new.variant_id,
+            new.product_name || coalesce(' (' || new.variant || ')', ''), -new.quantity, 'sale', new.order_id, auth.uid());
+  end if;
+  return new;
+end;
+$$;
+
+-- A pre-order is picked up: take its stock now (refused when a size is short)
+create or replace function public.take_preorder_stock(p_order uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  item record;
+  have integer;
+begin
+  -- The order being completed is skipped by the "back to the waitlist" trigger below
+  perform set_config('app.completing_order', p_order::text, true);
+  for item in select * from public.order_items where order_id = p_order and product_id is not null loop
+    have := coalesce((select stock from public.product_variants where id = item.variant_id),
+                     (select stock from public.products where id = item.product_id), 0);
+    if have < item.quantity then
+      raise exception 'Only % of % in stock — restock it before completing this pre-order.',
+        have, item.product_name || coalesce(' (' || item.variant || ')', '');
+    end if;
+    if item.variant_id is not null then
+      update public.product_variants set stock = stock - item.quantity, updated_at = now() where id = item.variant_id;
+    else
+      update public.products set stock = stock - item.quantity, updated_at = now() where id = item.product_id;
+    end if;
+    if exists (select 1 from public.seller_profiles where id = item.seller_id) then
+      insert into public.inventory_movements (store_id, product_id, variant_id, product_name, change, reason, note, order_id, created_by)
+      values (item.seller_id, item.product_id, item.variant_id, item.product_name || coalesce(' (' || item.variant || ')', ''),
+              -item.quantity, 'sale', 'Pre-order picked up', p_order, auth.uid());
+    end if;
+  end loop;
+  perform set_config('app.completing_order', '', true);
+end;
+$$;
+revoke all on function public.take_preorder_stock(uuid) from public, anon, authenticated;
 
 -- Returned / refunded orders
 alter table public.orders drop constraint if exists orders_status_check;
@@ -163,6 +234,11 @@ declare
 begin
   if new.status = 'paid' and old.status is distinct from 'paid' and coalesce(new.amount_paid, 0) < new.total then
     new.amount_paid := new.total;
+  end if;
+  -- Picked up: the pre-order's stock is taken now
+  if new.status = 'completed' and old.status is distinct from 'completed' and new.is_preorder and not new.stock_taken then
+    perform public.take_preorder_stock(new.id);
+    new.stock_taken := true;
   end if;
   -- Ready for pick up without a chosen day (or the shop cleared it for a new one): the buyer has
   -- until the end of the shop's claim window to choose and pick up
@@ -254,7 +330,8 @@ language plpgsql security definer set search_path = public as $$
 declare
   item record;
 begin
-  if new.status in ('cancelled', 'refunded') and old.status not in ('cancelled', 'refunded') then
+  -- Only stock that was taken goes back (a pre-order's stock is taken at pick-up)
+  if new.status in ('cancelled', 'refunded') and old.status not in ('cancelled', 'refunded') and old.stock_taken then
     for item in select * from public.order_items where order_id = new.id and product_id is not null loop
       if item.variant_id is not null then
         update public.product_variants set stock = stock + item.quantity, updated_at = now() where id = item.variant_id;
@@ -291,8 +368,13 @@ begin
     end if;
   elsif new.status is distinct from old.status then
     label := case new.status
-      when 'paid' then case when new.is_preorder then 'Payment received for your pre-order' else 'Payment confirmed — your items are being prepared' end
-      when 'partially_paid' then 'Partial payment received'
+      when 'paid' then case
+        when new.is_preorder and old.status = 'ready_for_pickup' then 'Back on the pre-order waitlist — your size ran out. You keep your place.'
+        when new.is_preorder then 'Payment received for your pre-order'
+        else 'Payment confirmed — your items are being prepared' end
+      when 'partially_paid' then case
+        when new.is_preorder and old.status = 'ready_for_pickup' then 'Back on the pre-order waitlist — your size ran out. You keep your place.'
+        else 'Partial payment received' end
       when 'ready_for_pickup' then case when new.is_preorder then 'Pre-order ready — choose your pick-up day' else 'Ready for pickup' end
       when 'completed' then 'Order completed'
       when 'cancelled' then 'Order cancelled'
@@ -304,7 +386,37 @@ begin
 end;
 $$;
 
--- ── Pre-order completion forms (made by the shop) ─────────────────────────
+-- A size (or a product without sizes) ran out: pre-orders still "ready" for it go back to the waitlist
+create or replace function public.preorder_back_to_waitlist()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  o record;
+begin
+  if new.stock > 0 or old.stock <= 0 then return new; end if;
+  for o in
+    select distinct ord.id, ord.total, ord.amount_paid from public.orders ord
+    join public.order_items oi on oi.order_id = ord.id
+    where ord.is_preorder and not ord.stock_taken and ord.status = 'ready_for_pickup'
+      and ord.id::text is distinct from nullif(current_setting('app.completing_order', true), '')
+      and case when tg_table_name = 'product_variants' then oi.variant_id = new.id
+               else oi.product_id = new.id and oi.variant_id is null end
+  loop
+    update public.orders
+    set status = case when coalesce(o.amount_paid, 0) >= o.total then 'paid' else 'partially_paid' end,
+        pickup_date = null, pickup_deadline = null
+    where id = o.id;
+  end loop;
+  return new;
+end;
+$$;
+drop trigger if exists preorder_back_to_waitlist on public.product_variants;
+create trigger preorder_back_to_waitlist after update of stock on public.product_variants
+  for each row execute procedure public.preorder_back_to_waitlist();
+drop trigger if exists preorder_back_to_waitlist on public.products;
+create trigger preorder_back_to_waitlist after update of stock on public.products
+  for each row execute procedure public.preorder_back_to_waitlist();
+
+-- ── Pre-order forms (made by the shop) ─────────────────────────────────────
 -- A form has a title and Size / Qty cells; each cell lists the products it covers, e.g.
 -- "School Uniform": [Polo, Blouse] [Pants, Skirt]. columns = [{"products":[{"id":…,"name":…}]}]
 create table if not exists public.preorder_forms (
