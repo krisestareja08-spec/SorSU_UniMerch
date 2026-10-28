@@ -13,6 +13,8 @@ import { Menu, X, LogOut, ChevronsUpDown, Check, Crown, UserCog, ShoppingBag, Ch
 import { NotificationBell } from "@/components/notifications/notification-bell"
 import { LiveAlerts } from "@/components/notifications/live-alerts"
 import { HistoryButtons } from "@/components/navigation/history-nav"
+import { badgeText, useBadges } from "@/components/navigation/use-badges"
+import { getNavBadges } from "@/app/nav-badge-actions"
 import {
   MODULES, MEMBERS_PAGE, canUse, dashboardHref, membersHref,
   type DashboardCtx, type ModuleKey, type ModulePage,
@@ -59,6 +61,12 @@ export function ManagementShell({
     : []
   const bottomTabs = pickedTabs.length >= 2 ? pickedTabs : nav.slice(0, 5)
   const roleLabel = ctx.isMain ? "Main Admin" : "Member"
+
+  // Number badges: what's new or waiting for review on each page (scripts/32 §3e)
+  const badges = useBadges(`dash:${ctx.dashboardId}`, () => getNavBadges(ctx.dashboardId))
+  const badgeOf = (href: string) => (href.startsWith(moduleDef.basePath + "/") ? badges[href.slice(moduleDef.basePath.length + 1)] ?? 0 : 0)
+  // Something waiting on a page that's only in the menu (not a bottom tab): a dot on the menu button
+  const hiddenWaiting = nav.some((n) => badgeOf(n.href) > 0 && !bottomTabs.some((t) => t.href === n.href))
 
   async function signOut() {
     const supabase = createClient()
@@ -163,7 +171,11 @@ export function ManagementShell({
             >
               {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r-full bg-gold" />}
               <Icon className={cn("size-4 shrink-0", active ? "text-gold" : "text-gold/50 group-hover:text-gold/70")} />
-              {item.label}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {badgeOf(item.href) > 0 && (
+                <span className="ml-auto min-w-5 rounded-full bg-gold px-1.5 text-center text-[11px] font-bold leading-5 text-primary"
+                  aria-label={`${badgeOf(item.href)} waiting`}>{badgeText(badgeOf(item.href))}</span>
+              )}
             </Link>
           )
         })}
@@ -225,9 +237,10 @@ export function ManagementShell({
           <div className="flex h-14 items-center gap-3 px-4 sm:px-6">
             {/* Hamburger — mobile only */}
             <button onClick={() => setDrawerOpen(true)}
-              className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
-              aria-label="Open menu">
+              className="relative rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:hidden"
+              aria-label={hiddenWaiting ? "Open menu — items waiting" : "Open menu"}>
               <Menu className="size-5" />
+              {hiddenWaiting && <span className="absolute right-1 top-1 size-2 rounded-full bg-destructive ring-2 ring-card" aria-hidden />}
             </button>
 
             {/* Back / Forward through the pages visited in this tab */}
@@ -291,7 +304,13 @@ export function ManagementShell({
                     <Icon className="size-5 text-primary-foreground" />
                   </span>
                 ) : (
-                  <Icon className="size-5" />
+                  <span className="relative">
+                    <Icon className="size-5" />
+                    {badgeOf(tab.href) > 0 && (
+                      <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-destructive px-1 text-center text-[10px] font-bold leading-4 text-white ring-2 ring-card"
+                        aria-label={`${badgeOf(tab.href)} waiting`}>{badgeText(badgeOf(tab.href))}</span>
+                    )}
+                  </span>
                 )}
                 <span className={cn("block max-w-full truncate px-0.5", HIGHLIGHT_TABS.has(tab.href) && "mt-1")}>{tab.short ?? tab.label}</span>
               </Link>

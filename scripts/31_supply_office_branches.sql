@@ -58,6 +58,8 @@ create table if not exists public.branch_stock_requests (
   reviewed_by        uuid references auth.users(id) on delete set null,
   reviewed_at        timestamptz
 );
+-- The product's photo, so both sides recognise the item at a glance
+alter table public.branch_stock_requests add column if not exists product_image_url text;
 create index if not exists branch_stock_requests_store_idx on public.branch_stock_requests(branch_store_id, created_at desc);
 create index if not exists branch_stock_requests_pending_idx on public.branch_stock_requests(created_at) where status = 'pending';
 
@@ -80,15 +82,17 @@ declare
   vname text;
   vstock integer;
   pstock integer;
+  pimg text;
+  vimg text;
   office record;
 begin
   if not exists (select 1 from public.dashboards where store_id = new.branch_store_id and module = 'cashier') then
     raise exception 'Only Supply Office branches send stock requests.';
   end if;
-  select name, stock into pname, pstock from public.products where id = new.product_id and seller_id = new.branch_store_id;
+  select name, stock, image_url into pname, pstock, pimg from public.products where id = new.product_id and seller_id = new.branch_store_id;
   if pname is null then raise exception 'Choose one of your branch''s products.'; end if;
   if new.variant_id is not null then
-    select name, stock into vname, vstock from public.product_variants where id = new.variant_id and product_id = new.product_id;
+    select name, stock, image_url into vname, vstock, vimg from public.product_variants where id = new.variant_id and product_id = new.product_id;
     if vname is null then raise exception 'That size was not found.'; end if;
   end if;
   if new.kind = 'return' then
@@ -100,6 +104,7 @@ begin
     new.reason := null;
   end if;
   new.product_name := pname || coalesce(' (' || vname || ')', '');
+  new.product_image_url := coalesce(vimg, pimg);
   new.status := 'pending';
   new.created_by := auth.uid();
 
@@ -117,6 +122,10 @@ $$;
 drop trigger if exists branch_request_rules on public.branch_stock_requests;
 create trigger branch_request_rules before insert on public.branch_stock_requests
   for each row execute procedure public.branch_request_rules();
+update public.branch_stock_requests r
+set product_image_url = coalesce((select image_url from public.product_variants where id = r.variant_id),
+                                 (select image_url from public.products where id = r.product_id))
+where r.product_image_url is null;
 
 -- Stock change on a branch product / size, recorded as an inventory movement
 create or replace function public.branch_stock_change(p_store uuid, p_product uuid, p_variant uuid, p_delta integer, p_reason text, p_note text)
@@ -310,6 +319,7 @@ create table if not exists public.supply_request_items (
   created_product_id  uuid references public.products(id) on delete set null,
   position            integer not null default 0
 );
+alter table public.supply_request_items add column if not exists image_url text;   -- product / size photo, or the design's first image
 create index if not exists supply_request_items_request_idx on public.supply_request_items(request_id, position);
 
 create table if not exists public.supply_request_messages (
@@ -405,8 +415,9 @@ declare
   pos integer := 0;
   k text;
   a jsonb;
-  pid uuid; pname text; pprice numeric; plogo boolean; pseller uuid; pcollab boolean; pstatus text;
-  vid uuid; vname text; vprice numeric;
+  pid uuid; pname text; pprice numeric; plogo boolean; pseller uuid; pcollab boolean; pstatus text; pimg text;
+  vid uuid; vname text; vprice numeric; vimg text;
+  first_img text;
 begin
   if not public.store_access(p_store, 'supply') then raise exception 'You don''t have access to this store''s supply requests.'; end if;
   select module into mod from public.dashboards where store_id = p_store and module in ('seller', 'cashier') limit 1;
@@ -417,6 +428,7 @@ begin
   if jsonb_array_length(p_payload->'items') > 100 then raise exception 'Keep a request under 100 lines.'; end if;
   for a in select * from jsonb_array_elements(coalesce(p_payload->'attachments', '[]'::jsonb)) loop
     if a ? 'path' and (a->>'path') not like p_store::text || '/%' then raise exception 'Upload the files again.'; end if;
+    if first_img is null and a->>'kind' = 'image' and a ? 'url' then first_img := a->>'url'; end if;
   end loop;
 
   if rid is null then
@@ -447,11 +459,11 @@ begin
     k := it->>'kind';
     if k not in ('catalog', 'modified', 'custom', 'collab_stock') then raise exception 'Unknown item type.'; end if;
     if coalesce((it->>'quantity')::integer, 0) < 1 then raise exception 'Every item needs a quantity of 1 or more.'; end if;
-    pid := null; pname := null; pprice := null; plogo := false; pseller := null; pcollab := false; pstatus := null;
-    vid := null; vname := null; vprice := null;
+    pid := null; pname := null; pprice := null; plogo := false; pseller := null; pcollab := false; pstatus := null; pimg := null;
+    vid := null; vname := null; vprice := null; vimg := null;
     if k in ('catalog', 'modified', 'collab_stock') then
-      select id, name, price, is_royalty_product, seller_id, supply_office_collab, status
-        into pid, pname, pprice, plogo, pseller, pcollab, pstatus
+      select id, name, price, is_royalty_product, seller_id, supply_office_collab, status, image_url
+        into pid, pname, pprice, plogo, pseller, pcollab, pstatus, pimg
       from public.products where id = nullif(it->>'product_id', '')::uuid;
       if pid is null then raise exception 'One of the products is no longer available.'; end if;
       if k = 'collab_stock' then
@@ -460,14 +472,14 @@ begin
         raise exception 'Pick items from the Main Supply Office''s products.';
       end if;
       if nullif(it->>'variant_id', '') is not null then
-        select id, name, price into vid, vname, vprice from public.product_variants where id = (it->>'variant_id')::uuid and product_id = pid;
+        select id, name, price, image_url into vid, vname, vprice, vimg from public.product_variants where id = (it->>'variant_id')::uuid and product_id = pid;
         if vid is null then raise exception 'A size of % is no longer available.', pname; end if;
       end if;
     elsif coalesce(trim(it->>'name'), '') = '' then
       raise exception 'Name every new design.';
     end if;
     insert into public.supply_request_items (request_id, kind, product_id, variant_id, design_group, name, size, quantity, notes,
-                                             uses_logo, list_on_marketplace, unit_price, position)
+                                             uses_logo, list_on_marketplace, unit_price, position, image_url)
     values (rid, k, pid, vid, nullif(it->>'design_group', ''),
             case when k = 'custom' then left(trim(it->>'name'), 150) else pname end,
             coalesce(vname, nullif(trim(it->>'size'), '')),
@@ -477,7 +489,8 @@ begin
             k in ('custom', 'modified') and coalesce((it->>'list_on_marketplace')::boolean, false),
             -- Catalog items start at the catalog price; the Main office prices the rest in its quote
             case when k = 'catalog' then coalesce(vprice, pprice) end,
-            pos);
+            pos,
+            case when k = 'custom' then first_img else coalesce(vimg, pimg) end);
   end loop;
 
   perform public.notify_supply_request(rid, 'main',
@@ -671,6 +684,16 @@ end;
 $$;
 grant execute on function public.advance_supply_request(uuid, text, date, text) to authenticated;
 
+-- Photos for lines sent before photos were saved
+update public.supply_request_items si
+set image_url = coalesce((select image_url from public.product_variants where id = si.variant_id),
+                         (select image_url from public.products where id = si.product_id))
+where si.image_url is null and si.product_id is not null;
+update public.supply_request_items si
+set image_url = (select a->>'url' from public.supply_requests r, jsonb_array_elements(r.attachments) a
+                 where r.id = si.request_id and a->>'kind' = 'image' and a ? 'url' limit 1)
+where si.image_url is null and si.kind = 'custom';
+
 -- Private files of a request (proposal documents): the requester uploads, both sides can read
 insert into storage.buckets (id, name, public, file_size_limit)
 values ('supply-requests', 'supply-requests', false, 20971520)
@@ -718,7 +741,7 @@ begin
   if not (public.module_access('supply_office', 'inventory') or public.module_access('supply_office', 'supply')) then
     raise exception 'Only the Main Supply Office sends stock orders.';
   end if;
-  select pr.id, pr.name, pr.seller_id, pr.is_royalty_product into p
+  select pr.id, pr.name, pr.seller_id, pr.is_royalty_product, pr.image_url into p
   from public.products pr where pr.id = p_product and pr.supply_office_collab;
   if p.id is null then raise exception 'That isn''t a collaboration product.'; end if;
   if not exists (select 1 from public.dashboards where store_id = p.seller_id and module = 'seller') then
@@ -746,11 +769,12 @@ begin
     end if;
     pos := pos + 1;
     insert into public.supply_request_items (request_id, kind, product_id, variant_id, design_group, name, size, quantity,
-                                             uses_logo, unit_price, royalty_percentage, royalty_amount, position)
+                                             uses_logo, unit_price, royalty_percentage, royalty_amount, position, image_url)
     values (rid, 'collab_stock', p.id, vid, p.id::text, p.name, vname, (ln->>'quantity')::integer,
             coalesce(p.is_royalty_product, false), round((ln->>'unit_price')::numeric, 2),
             case when p.is_royalty_product then rate end,
-            case when p.is_royalty_product then round((ln->>'unit_price')::numeric * rate / 100, 2) else 0 end, pos);
+            case when p.is_royalty_product then round((ln->>'unit_price')::numeric * rate / 100, 2) else 0 end, pos,
+            coalesce((select image_url from public.product_variants where id = vid), p.image_url));
   end loop;
   if pos = 0 then raise exception 'Enter the units to send.'; end if;
 

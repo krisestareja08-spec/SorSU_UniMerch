@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation"
 import { ManagementShell } from "@/components/management/management-shell"
-import { PageHeading } from "@/components/management/dashboard-ui"
+import { Callout, PageHeading } from "@/components/management/dashboard-ui"
 import { BackLink } from "@/components/navigation/history-nav"
 import { PreorderFormsIndex, type FormRecord, type FormSummary } from "@/components/store/preorder-forms-index"
 import { PreorderFormView } from "@/components/store/preorder-form-view"
@@ -10,7 +10,7 @@ import { createClient } from "@/lib/supabase/server"
 import { MODULES, type DashboardCtx } from "@/lib/modules"
 
 function SetupNotice({ message }: { message: string }) {
-  return <p className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">{message}</p>
+  return <div className="mt-5"><Callout tone="warn">{message}</Callout></div>
 }
 
 const isUuid = (s: string) => /^[0-9a-f-]{36}$/i.test(s)
@@ -21,10 +21,12 @@ export async function PreorderFormsPage({ ctx }: { ctx: DashboardCtx }) {
   const [{ forms, error }, { purchases, error: purchaseError }, products] = await Promise.all([loadForms(storeId), loadPurchases(storeId), storeProducts(storeId)])
   const summaries: FormSummary[] = []
   const records: FormRecord[] = []
+  const imageOf = new Map(products.map((p) => [p.id, p.image]))
   for (const f of forms) {
     const rows = formRows(f, purchases)
     summaries.push({
       id: f.id, title: f.title, products: f.columns.flatMap((c) => c.products.map((p) => p.name)),
+      images: f.columns.flatMap((c) => c.products.map((p) => imageOf.get(p.id) ?? null)),
       records: rows.length, waiting: rows.filter((r) => r.stage === "waitlist").length,
       ready: rows.filter((r) => r.stage === "ready").length, claimed: rows.filter((r) => r.stage === "claimed").length,
       units: rows.reduce((n, r) => n + r.quantity, 0), amount: rows.reduce((n, r) => n + r.amountPaid, 0),

@@ -101,7 +101,7 @@ export default async function CashierProductsPage({ searchParams }: { searchPara
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
                     <EditProductButton product={product} storeId={sellerId} module="cashier" />
-                    <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="cashier"
+                    <EditVariantsButton productId={product.id} productName={product.name} productImage={product.image_url} storeId={sellerId} module="cashier"
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     <p className="text-[10px] text-muted-foreground">Stock: {product.stock}</p>
                     {product.status === "rejected" && product.bao_comment && (

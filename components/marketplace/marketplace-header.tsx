@@ -13,6 +13,8 @@ import { AFFILIATION_LABELS, type Affiliation } from "@/lib/roles"
 import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
 import { cn } from "@/lib/utils"
+import { useBadges } from "@/components/navigation/use-badges"
+import { getBuyerBadges } from "@/app/nav-badge-actions"
 import { HistoryButtons } from "@/components/navigation/history-nav"
 import type { VerificationState } from "@/components/verify/verification-nav"
 
@@ -33,6 +35,9 @@ export function MarketplaceHeader({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [query, setQuery] = useState("")
   const { itemCount } = useCart()
+  // Unread replies live in the menu on phones: a dot on the menu button
+  const badges = useBadges("buyer", getBuyerBadges)
+  const unread = (badges.messages ?? 0) > 0
 
   const hasDashboards = dashboards.length > 0
   const dashHref = dashboards.length === 1 ? dashboardHref(dashboards[0]) : "/dashboard"
@@ -45,10 +50,11 @@ export function MarketplaceHeader({
           {/* Hamburger — mobile */}
           <button
             onClick={() => setDrawerOpen(true)}
-            className="shrink-0 rounded-lg p-1.5 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 lg:hidden"
-            aria-label="Open menu"
+            className="relative shrink-0 rounded-lg p-1.5 text-primary-foreground/80 transition-colors hover:bg-primary-foreground/10 active:scale-95 lg:hidden"
+            aria-label={unread ? "Open menu — unread messages" : "Open menu"}
           >
             <Menu className="size-5" />
+            {unread && <span className="absolute right-1 top-1 size-2 rounded-full bg-gold ring-2 ring-primary" aria-hidden />}
           </button>
 
           {/* Back / Forward through the pages visited in this tab */}

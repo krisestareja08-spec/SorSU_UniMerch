@@ -36,7 +36,7 @@ export type PreorderFormRow = {
 }
 
 /** Stock of a form's products: product id → total and per size */
-export type FormStock = Record<string, { name: string; stock: number; sizes: { id: string; name: string; stock: number }[] }>
+export type FormStock = Record<string, { name: string; image: string | null; stock: number; sizes: { id: string; name: string; stock: number }[] }>
 
 const SIZE_CODES: Record<string, string> = {
   "extra small": "XS", "x-small": "XS", xsmall: "XS", small: "S", medium: "M", large: "L",

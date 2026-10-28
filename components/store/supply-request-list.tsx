@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { Inbox, Plus, Search } from "lucide-react"
+import { ChevronRight, Inbox, Plus, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ProductThumb } from "@/components/ui/product-thumb"
 import { OPEN_STATUSES, SUPPLY_STATUS, pesoFmt, requestCode, type SupplyRequest, type SupplyStatus } from "@/lib/supply-request-shape"
 import { cn } from "@/lib/utils"
 
@@ -46,10 +47,11 @@ export function SupplyRequestList({ requests, mode, hrefBase, newHref }: {
         )}
       </div>
       <div role="tablist" className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
-        {([["todo", mode === "main" ? "To do" : "Needs you"], ["open", "In progress"], ["closed", "Closed"], ["all", "All"]] as const).map(([t, l]) => (
+        {([["todo", mode === "main" ? "To do" : "Needs you"], ["open", "Open"], ["closed", "Closed"], ["all", "All"]] as const).map(([t, l]) => (
           <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-            className={cn("flex-1 rounded-lg py-1.5 text-sm font-medium", tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-            {l} <span className="text-xs text-muted-foreground">({count(t)})</span>
+            className={cn("flex flex-1 items-center justify-center whitespace-nowrap rounded-lg px-1 py-1.5 text-sm font-medium", tab === t ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+            {l}{count(t) > 0 && <span className={cn("ml-1.5 inline-block min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5",
+              t === "todo" ? "bg-gold text-primary" : "bg-muted text-muted-foreground")}>{count(t)}</span>}
           </button>
         ))}
       </div>
@@ -62,22 +64,35 @@ export function SupplyRequestList({ requests, mode, hrefBase, newHref }: {
             : "Nothing here."}
         </div>
       ) : (
-        <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+        <ul className="space-y-2">
           {rows.map((r) => {
             const s = SUPPLY_STATUS[r.status]
             const units = r.items.reduce((n, i) => n + i.quantity, 0)
+            // One photo per item (sizes of one item share a design group)
+            const photos = [...new Map(r.items.map((i) => [i.design_group ?? i.id, i.image_url ?? null])).values()]
+            const needsMe = todo.includes(r.status)
             return (
               <li key={r.id}>
-                <Link href={`${hrefBase}/${r.id}`} className="flex flex-wrap items-center gap-3 px-4 py-3 hover:bg-muted/40">
+                <Link href={`${hrefBase}/${r.id}`}
+                  className={cn("flex items-center gap-3 rounded-2xl border bg-card p-3 transition-colors hover:bg-muted/40 sm:p-4", needsMe ? "border-gold/50" : "border-border")}>
+                  <div className="relative shrink-0">
+                    <ProductThumb src={photos.find(Boolean)} alt="" size="md" />
+                    {photos.length > 1 && <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-card bg-primary px-1.5 text-[10px] font-bold leading-4 text-primary-foreground">+{photos.length - 1}</span>}
+                  </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium">{r.title} <span className="font-mono text-xs text-muted-foreground">{requestCode(r.id)}</span></p>
-                    <p className="text-xs text-muted-foreground">
-                      {mode === "main" ? `${r.requester_name} · ` : ""}{r.items.length} line{r.items.length === 1 ? "" : "s"} · {units} unit{units === 1 ? "" : "s"} · {day(r.created_at)}
+                    <p className="truncate font-semibold">{r.title}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {mode === "main" ? <span className="font-medium text-foreground/80">{r.requester_name} · </span> : ""}
+                      {photos.length} item{photos.length === 1 ? "" : "s"} · {units} unit{units === 1 ? "" : "s"} · {day(r.created_at)}
                       {r.needed_by ? ` · needed by ${day(r.needed_by)}` : ""}
                     </p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", s.tone)}>{s.label}</span>
+                      {r.total != null && <span className="text-xs font-semibold tabular-nums">{pesoFmt(r.total)}</span>}
+                      <span className="font-mono text-[11px] text-muted-foreground">{requestCode(r.id)}</span>
+                    </div>
                   </div>
-                  {r.total != null && <span className="text-sm font-semibold tabular-nums">{pesoFmt(r.total)}</span>}
-                  <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", s.tone)}>{s.label}</span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
                 </Link>
               </li>
             )

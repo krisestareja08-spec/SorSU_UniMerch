@@ -711,6 +711,110 @@ where p.affiliation in ('student', 'faculty', 'staff')
   )
   and not exists (select 1 from public.notifications n where n.user_id = p.id and n.title = 'Update your campus, college and course');
 
+-- ── 3e. Number badges on the menus ─────────────────────────────────────────
+-- What's new or waiting for this dashboard (or this buyer). Keys are the page paths under the
+-- dashboard (e.g. "orders" → /seller/orders). The menu asks once per page, after the page shows.
+-- Each count is skipped (left out) if its table isn't there yet.
+create or replace function public.nav_badges(p_dashboard uuid)
+returns jsonb language plpgsql security definer set search_path = public stable as $$
+declare
+  d record;
+  out jsonb := '{}'::jsonb;
+  n integer;
+begin
+  select dd.id, dd.module, dd.store_id into d
+  from public.dashboards dd join public.dashboard_members m on m.dashboard_id = dd.id
+  where dd.id = p_dashboard and m.user_id = auth.uid();
+  if d.id is null then return out; end if;
+
+  if d.module in ('seller', 'supply_office', 'cashier') and d.store_id is not null then
+    -- New orders waiting for the store
+    begin
+      select count(*) into n from public.orders where seller_id = d.store_id and status = 'pending';
+      out := out || jsonb_build_object('orders', n);
+    exception when others then null; end;
+    -- Paid pre-orders on the waitlist (to mark ready)
+    begin
+      select count(*) into n from public.orders where seller_id = d.store_id and is_preorder and status in ('paid', 'partially_paid');
+      out := out || jsonb_build_object('preorders', n);
+    exception when others then null; end;
+    -- Buyer conversations with unread messages
+    begin
+      select count(distinct c.id) into n from public.conversations c
+      join public.conversation_messages cm on cm.conversation_id = c.id
+      where c.seller_id = d.store_id and not cm.is_read and not cm.from_store and cm.kind <> 'system';
+      out := out || jsonb_build_object('messages', n);
+    exception when others then null; end;
+    -- Organizations / branches: supply requests waiting for them (changes, payment, pick-up)
+    if d.module in ('seller', 'cashier') then
+      begin
+        select count(*) into n from public.supply_requests
+        where requester_store_id = d.store_id and status in ('changes_requested', 'approved', 'ready');
+        out := out || jsonb_build_object('supply-requests', n);
+      exception when others then null; end;
+    end if;
+    -- Main Supply Office: special orders to review / payments to check, and branch requests
+    if d.module = 'supply_office' then
+      begin
+        select count(*) into n from public.supply_requests where status in ('submitted', 'payment_review');
+        out := out || jsonb_build_object('special-orders', n);
+      exception when others then null; end;
+      begin
+        select count(*) into n from public.branch_stock_requests where status = 'pending';
+        out := out || jsonb_build_object('branch-inventory', n);
+      exception when others then null; end;
+    end if;
+  elsif d.module = 'bao' then
+    begin
+      select count(*) into n from public.products where status = 'pending';
+      out := out || jsonb_build_object('approvals', n);
+    exception when others then null; end;
+    begin
+      select count(*) into n from public.royalty_remittances where status = 'pending';
+      out := out || jsonb_build_object('remittances', n);
+    exception when others then null; end;
+    begin
+      select count(*) into n from public.sales_reports where status = 'submitted';
+      out := out || jsonb_build_object('reports', n);
+    exception when others then null; end;
+  elsif d.module = 'verification' then
+    begin
+      select count(*) into n from public.verification_requests where status in ('pending', 'under_review');
+      out := out || jsonb_build_object('queue', n);
+    exception when others then null; end;
+    begin
+      select count(*) into n from public.account_reports where status = 'open';
+      out := out || jsonb_build_object('reports', n);
+    exception when others then null; end;
+  end if;
+  return out;
+end;
+$$;
+grant execute on function public.nav_badges(uuid) to authenticated;
+
+-- Buyers: orders to pick up (or to choose a pick-up day for) and conversations with unread replies
+create or replace function public.buyer_badges()
+returns jsonb language plpgsql security definer set search_path = public stable as $$
+declare
+  out jsonb := '{}'::jsonb;
+  n integer;
+begin
+  if auth.uid() is null then return out; end if;
+  begin
+    select count(*) into n from public.orders where buyer_id = auth.uid() and status = 'ready_for_pickup';
+    out := out || jsonb_build_object('orders', n);
+  exception when others then null; end;
+  begin
+    select count(distinct c.id) into n from public.conversations c
+    join public.conversation_messages cm on cm.conversation_id = c.id
+    where c.buyer_id = auth.uid() and not cm.is_read and cm.from_store and cm.kind <> 'system';
+    out := out || jsonb_build_object('messages', n);
+  exception when others then null; end;
+  return out;
+end;
+$$;
+grant execute on function public.buyer_badges() to authenticated;
+
 -- ── 4. Faster security checks for every policy ───────────────
 
 -- Rewrites one policy expression (temporary helper, gone when this run ends)

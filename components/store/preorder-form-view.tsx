@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Bell, ChevronLeft, ChevronRight, Download, Loader2, Pencil, Printer, Search, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ProductThumb } from "@/components/ui/product-thumb"
 import type { FormStock, PreorderFormDef, PreorderFormRow, PreorderStage } from "@/lib/preorder-form-shape"
 import { markPreordersReady } from "@/app/preorder-form-actions"
 import type { ModuleKey } from "@/lib/modules"
@@ -223,35 +224,49 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
   }
 
   const colSpan = (selectable ? 8 : 7) + products.length
+  const dateOf = (r: PreorderFormRow) => fmtWhen(r.stage === "claimed" ? r.claimedAt ?? r.orderedAt : r.orderedAt)
+  const emptyText = records.length === 0 ? "No paid pre-orders yet. Buyers appear here once they pay half or in full."
+    : filtered ? "No buyers match your search or filters." : `No one ${tab === "claimed" ? "picked up" : "here"} in this period.`
 
   return (
     <div className="mt-5 space-y-4">
       {/* Stock per size vs. who's waiting (not printed) */}
-      <section aria-label="Stock and waitlist" className="flex flex-wrap gap-2 print:hidden">
-        {products.map((p) => {
-          const st = stock[p.id]
-          const sizes = st?.sizes.length ? st.sizes.map((s) => ({ key: sizeKey(p.id, s.id), name: s.name, stock: s.stock })) : [{ key: sizeKey(p.id, null), name: "", stock: st?.stock ?? 0 }]
-          return (
-            <div key={p.id} className="min-w-40 rounded-xl border border-border bg-card px-3 py-2">
-              <p className="text-xs font-semibold">{p.name}</p>
-              <ul className="mt-1 space-y-0.5 text-[11px]">
-                {sizes.map((s) => {
-                  const w = waiting.get(s.key) ?? 0
-                  return (
-                    <li key={s.key} className="flex items-center justify-between gap-3">
-                      <button type="button" onClick={() => { setSize(size === s.key ? "" : s.key); setTab("waitlist") }}
-                        className={cn("rounded px-1 font-medium hover:bg-muted", size === s.key && "bg-primary/10 text-primary")}>{s.name || "Stock"}</button>
-                      <span className="tabular-nums text-muted-foreground">
-                        <span className={cn("font-semibold", s.stock > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>{s.stock}</span> in stock
-                        {w > 0 && <> · <span className={cn("font-semibold", w > s.stock ? "text-amber-700 dark:text-amber-300" : "text-foreground")}>{w}</span> waiting</>}
-                      </span>
-                    </li>
-                  )
-                })}
-              </ul>
-            </div>
-          )
-        })}
+      <section aria-labelledby="stock-heading" className="print:hidden">
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3">
+          <h2 id="stock-heading" className="text-sm font-semibold">Stock &amp; waitlist</h2>
+          <p className="text-xs text-muted-foreground">Tap a size to see who&apos;s waiting for it</p>
+        </div>
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+          {products.map((p) => {
+            const st = stock[p.id]
+            const sizes = st?.sizes.length ? st.sizes.map((s) => ({ key: sizeKey(p.id, s.id), name: s.name, stock: s.stock })) : [{ key: sizeKey(p.id, null), name: "", stock: st?.stock ?? 0 }]
+            return (
+              <div key={p.id} className="w-64 shrink-0 rounded-xl border border-border bg-card p-3 sm:w-auto sm:min-w-56 sm:max-w-sm">
+                <div className="flex items-center gap-2.5">
+                  <ProductThumb src={st?.image} alt={p.name} size="sm" />
+                  <p className="min-w-0 truncate text-sm font-semibold">{p.name}</p>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {sizes.map((s) => {
+                    const w = waiting.get(s.key) ?? 0
+                    return (
+                      <button key={s.key} type="button" aria-pressed={size === s.key} onClick={() => { setSize(size === s.key ? "" : s.key); setTab("waitlist") }}
+                        className={cn("rounded-lg border px-2 py-1 text-left text-[11px] leading-tight transition-colors",
+                          size === s.key ? "border-primary bg-primary/10 ring-1 ring-primary"
+                            : w > s.stock ? "border-amber-300 bg-amber-50 hover:bg-amber-100 dark:border-amber-500/30 dark:bg-amber-500/10" : "border-border hover:bg-muted")}>
+                        <span className="block text-xs font-semibold">{s.name || "Stock"}</span>
+                        <span className="tabular-nums text-muted-foreground">
+                          <span className={cn("font-semibold", s.stock > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-foreground")}>{s.stock}</span> in stock
+                          {w > 0 && <> · <span className="font-semibold text-foreground">{w}</span> waiting</>}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       </section>
 
       {/* Tools (not printed) */}
@@ -259,8 +274,9 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
         <div role="tablist" aria-label="Form" className="flex gap-1 rounded-xl border border-border bg-muted/40 p-1">
           {TABS.map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => { setTab(t.id); setSelected(new Set()) }}
-              className={cn("flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors", tab === t.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-              {t.label} <span className="text-xs text-muted-foreground">({counts[t.id]})</span>
+              className={cn("flex flex-1 items-center justify-center gap-1.5 rounded-lg px-1 py-1.5 text-sm font-medium transition-colors", tab === t.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+              <span className="truncate">{t.label}</span>
+              {counts[t.id] > 0 && <span className={cn("min-w-5 rounded-full px-1.5 text-[11px] font-bold leading-5", t.id === "waitlist" ? "bg-gold text-primary" : "bg-muted text-muted-foreground")}>{counts[t.id]}</span>}
             </button>
           ))}
         </div>
@@ -270,23 +286,23 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
             {(["day", "week", "month", "all"] as const).map((p) => (
               <button key={p} type="button" aria-pressed={period === p} onClick={() => { setPeriod(p); setAnchor(new Date()) }}
                 className={cn("rounded-md px-2.5 py-1 text-xs font-medium capitalize", period === p ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
-                {p === "all" ? "All" : `Per ${p}`}
+                {p === "all" ? "All" : p}
               </button>
             ))}
           </div>
           {period !== "all" && (
             <div className="flex items-center gap-1">
               <Button type="button" size="icon" variant="outline" className="size-8" aria-label="Previous" onClick={() => setAnchor((a) => shift(period, a, -1))}><ChevronLeft className="size-4" /></Button>
-              <span className="min-w-36 text-center text-sm font-medium">{periodLabel(period, span)}</span>
+              <span className="min-w-32 text-center text-sm font-medium">{periodLabel(period, span)}</span>
               <Button type="button" size="icon" variant="outline" className="size-8" aria-label="Next" onClick={() => setAnchor((a) => shift(period, a, 1))}><ChevronRight className="size-4" /></Button>
             </div>
           )}
-          <div className="ml-auto flex gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={download} disabled={downloading}>
-              {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}Download Excel
+          <div className="ml-auto flex gap-1.5">
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={download} disabled={downloading} aria-label="Download Excel">
+              {downloading ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}<span className="hidden sm:inline">Excel</span>
             </Button>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}><Printer className="size-4" />Print</Button>
-            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href={editHref}><Pencil className="size-4" />Edit</Link></Button>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()} aria-label="Print"><Printer className="size-4" /><span className="hidden sm:inline">Print</span></Button>
+            <Button asChild variant="outline" size="sm" className="gap-1.5"><Link href={editHref} aria-label="Edit form"><Pencil className="size-4" /><span className="hidden sm:inline">Edit</span></Link></Button>
           </div>
         </div>
 
@@ -300,36 +316,34 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
                 className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:bg-muted"><X className="size-4" /></button>
             )}
           </div>
-          {products.length > 1 && (
-            <select value={product} onChange={(e) => setProduct(e.target.value)} aria-label="Product" className="h-9 rounded-lg border border-input bg-background px-2 text-sm">
-              <option value="">All products</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          <div className="flex gap-2">
+            {products.length > 1 && (
+              <select value={product} onChange={(e) => setProduct(e.target.value)} aria-label="Product" className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-sm sm:flex-none">
+                <option value="">All products</option>
+                {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            )}
+            <select value={size} onChange={(e) => setSize(e.target.value)} aria-label="Size" className="h-9 min-w-0 flex-1 rounded-lg border border-input bg-background px-2 text-sm sm:flex-none">
+              <option value="">All sizes</option>
+              {sizeOptions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
-          )}
-          <select value={size} onChange={(e) => setSize(e.target.value)} aria-label="Size" className="h-9 rounded-lg border border-input bg-background px-2 text-sm">
-            <option value="">All sizes</option>
-            {sizeOptions.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
+          </div>
           {filtered && (
-            <button type="button" onClick={() => { setQuery(""); setProduct(""); setSize("") }} className="h-9 px-2 text-xs font-medium text-primary hover:underline">Clear filters</button>
+            <button type="button" onClick={() => { setQuery(""); setProduct(""); setSize("") }} className="h-9 self-start px-2 text-xs font-medium text-primary hover:underline sm:self-auto">Clear filters</button>
           )}
         </div>
 
-        {/* Batch actions on the waitlist */}
-        {selectable && (
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2">
-            <Button type="button" size="sm" variant="outline" className="gap-1.5" disabled={!size} onClick={fillStock}
-              title={size ? "Select buyers of this size in queue order, as far as the stock goes" : "Pick a size first (filter or the stock cards above)"}>
-              <Sparkles className="size-4" />Fill available stock{size ? ` (${stockOf(size)})` : ""}
-            </Button>
-            <span className="text-xs text-muted-foreground">{selected.size} selected · tick buyers below, or fill by size</span>
-            <Button type="button" size="sm" className="ml-auto gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700" disabled={selected.size === 0 || pending} onClick={markReady}>
-              {pending ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}Mark ready &amp; notify ({selected.size})
-            </Button>
-            {shortfalls.length > 0 && (
-              <p role="alert" className="w-full text-xs text-amber-700 dark:text-amber-300">
-                More than in stock — {shortfalls.join("; ")}. Stock isn&apos;t held: whoever picks up first gets it, and the rest go back to the waitlist when it runs out.
-              </p>
+        {selectable && counts.waitlist > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-xs">
+            <Sparkles className="size-4 shrink-0 text-primary" />
+            <p className="min-w-0 flex-1 text-muted-foreground">
+              {size ? <>Select the waiting buyers of <span className="font-semibold text-foreground">{sizeOptions.find(([k]) => k === size)?.[1]}</span> in queue order, as far as the stock goes.</>
+                : <>When a size arrives, tap it above (or tick buyers below), then <span className="font-semibold text-foreground">mark them ready</span>. They&apos;re notified to choose a pick-up day.</>}
+            </p>
+            {size && (
+              <Button type="button" size="sm" variant="outline" className="gap-1.5 bg-card" onClick={fillStock}>
+                Fill from stock ({stockOf(size)})
+              </Button>
             )}
           </div>
         )}
@@ -344,7 +358,54 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
           </div>
           <p className="text-xs text-muted-foreground">{periodLabel(period, span)} · {rows.length} buyer{rows.length === 1 ? "" : "s"}{filtered ? " (filtered)" : ""}</p>
         </header>
-        <div className="overflow-x-auto">
+
+        {/* Phones: one card per buyer */}
+        <div className="md:hidden print:hidden">
+          {selectable && rows.length > 0 && (
+            <label className="flex items-center gap-3 border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground">
+              <input type="checkbox" checked={allShown} onChange={toggleAll} className="size-5 accent-primary" />Select all shown
+            </label>
+          )}
+          {rows.length === 0 ? <p className="px-4 py-10 text-center text-sm text-muted-foreground">{emptyText}</p> : (
+            <ul className="divide-y divide-border">
+              {rows.map((r) => {
+                const Wrap = selectable ? "label" : "div"
+                return (
+                  <li key={r.key}>
+                    <Wrap className={cn("flex gap-3 px-4 py-3", selectable && "cursor-pointer", selected.has(r.orderId) && "bg-primary/5")}>
+                      {selectable && <input type="checkbox" checked={selected.has(r.orderId)} onChange={() => toggle(r.orderId)} aria-label={`Select ${r.buyerName}`} className="mt-0.5 size-5 shrink-0 accent-primary" />}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 font-semibold">
+                            {r.queueNo != null && <span className="mr-1.5 rounded-md bg-muted px-1.5 py-0.5 text-xs tabular-nums">#{r.queueNo}</span>}{r.buyerName}
+                          </p>
+                          <p className="shrink-0 text-right text-sm font-semibold tabular-nums">
+                            {peso(r.amountPaid)}{r.partial && <span className="block text-[11px] font-normal text-amber-700 dark:text-amber-300">{peso(r.share - r.amountPaid)} due</span>}
+                          </p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{[r.course, r.contact].filter(Boolean).join(" · ") || "No course or contact number"}</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {products.filter((p) => r.cells[p.id]).map((p) => (
+                            <span key={p.id} className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background py-0.5 pl-0.5 pr-2 text-xs">
+                              <ProductThumb src={stock[p.id]?.image} alt="" size="xs" className="size-6 rounded" />
+                              <span className="text-muted-foreground">{p.name}</span><span className="font-semibold tabular-nums">{r.cells[p.id]}</span>
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                          <Remark r={r} /><span className="text-[11px] text-muted-foreground">{dateOf(r)}</span>
+                        </div>
+                      </div>
+                    </Wrap>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Larger screens and print: the sheet */}
+        <div className="hidden overflow-x-auto md:block print:block">
           <table className="w-full border-collapse text-sm print:text-xs" style={{ minWidth: `${38 + products.length * 5}rem` }}>
             <thead className="text-xs uppercase tracking-wide text-muted-foreground">
               <tr className="bg-muted/40 text-left">
@@ -368,7 +429,9 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
                     {c.products.map((p, pi) => (
                       <th key={p.id} className={cn("border-b border-border px-2 py-1.5 text-center text-[11px] font-semibold normal-case tracking-normal text-foreground",
                         pi === 0 ? "border-l" : "border-l border-l-border/40", ci === form.columns.length - 1 && pi === c.products.length - 1 && "border-r")}>
-                        {p.name}
+                        <span className="flex flex-col items-center gap-1">
+                          <ProductThumb src={stock[p.id]?.image} alt="" size="xs" className="print:hidden" />{p.name}
+                        </span>
                       </th>
                     ))}
                   </Fragment>
@@ -376,17 +439,13 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && (
-                <tr><td colSpan={colSpan} className="px-3 py-10 text-center text-muted-foreground">
-                  {records.length === 0 ? "No paid pre-orders yet. Buyers appear here once they pay half or in full."
-                    : filtered ? "No buyers match your search or filters." : `No one ${tab === "claimed" ? "picked up" : "here"} in this period.`}
-                </td></tr>
-              )}
+              {rows.length === 0 && <tr><td colSpan={colSpan} className="px-3 py-10 text-center text-muted-foreground">{emptyText}</td></tr>}
               {rows.map((r) => (
-                <tr key={r.key} className={cn("border-b border-border/60 last:border-0 print:break-inside-avoid", selected.has(r.orderId) && "bg-primary/5")}>
+                <tr key={r.key} onClick={selectable ? () => toggle(r.orderId) : undefined}
+                  className={cn("border-b border-border/60 last:border-0 print:break-inside-avoid", selectable && "cursor-pointer hover:bg-muted/30", selected.has(r.orderId) && "bg-primary/5 hover:bg-primary/5")}>
                   {selectable && (
                     <td className="px-3 py-2 print:hidden">
-                      <input type="checkbox" checked={selected.has(r.orderId)} onChange={() => toggle(r.orderId)} aria-label={`Select ${r.buyerName}`} className="size-4 accent-primary" />
+                      <input type="checkbox" checked={selected.has(r.orderId)} onChange={() => toggle(r.orderId)} onClick={(e) => e.stopPropagation()} aria-label={`Select ${r.buyerName}`} className="size-4 accent-primary" />
                     </td>
                   )}
                   <td className="px-3 py-2 font-semibold tabular-nums">{r.queueNo ?? "—"}</td>
@@ -401,14 +460,8 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
                   <td className="whitespace-nowrap border-l border-border px-3 py-2 text-right font-semibold tabular-nums">
                     {peso(r.amountPaid)}{r.partial && <span className="block text-[11px] font-normal text-amber-700 dark:text-amber-300">half · {peso(r.share - r.amountPaid)} due</span>}
                   </td>
-                  <td className="px-3 py-2">
-                    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                      r.stage === "claimed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
-                        : r.stage === "ready" ? "bg-primary/10 text-primary" : "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300")}>
-                      {remarks(r)}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-2 text-xs">{fmtWhen(r.stage === "claimed" ? r.claimedAt ?? r.orderedAt : r.orderedAt)}</td>
+                  <td className="px-3 py-2"><Remark r={r} /></td>
+                  <td className="whitespace-nowrap px-3 py-2 text-xs">{dateOf(r)}</td>
                 </tr>
               ))}
             </tbody>
@@ -430,6 +483,24 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
         </div>
       </section>
 
+      {/* Batch action: stays in view while buyers are selected */}
+      {selectable && selected.size > 0 && (
+        <div className="sticky bottom-20 z-20 lg:bottom-4 print:hidden">
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/20 bg-card/95 p-3 shadow-lg backdrop-blur">
+            <p className="text-sm font-semibold">{selected.size} selected</p>
+            <button type="button" onClick={() => setSelected(new Set())} className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline">Clear</button>
+            <Button type="button" size="sm" className="ml-auto gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700" disabled={pending} onClick={markReady}>
+              {pending ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}Mark ready &amp; notify
+            </Button>
+            {shortfalls.length > 0 && (
+              <p role="alert" className="w-full text-xs text-amber-700 dark:text-amber-300">
+                More than in stock: {shortfalls.join("; ")}. Stock isn&apos;t held, so whoever picks up first gets it and the rest go back to the waitlist when it runs out.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {outside > 0 && (
         <p className="text-center text-xs text-muted-foreground print:hidden">
           {outside} more {tab === "claimed" ? "picked up" : "in this list"} outside {periodLabel(period, span)} ·{" "}
@@ -437,5 +508,15 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
         </p>
       )}
     </div>
+  )
+}
+
+function Remark({ r }: { r: PreorderFormRow }) {
+  return (
+    <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold",
+      r.stage === "claimed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+        : r.stage === "ready" ? "bg-primary/10 text-primary" : "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300")}>
+      {remarks(r)}
+    </span>
   )
 }

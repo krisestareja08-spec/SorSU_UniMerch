@@ -73,7 +73,7 @@ export default async function SupplyOfficeProductsPage({ searchParams }: { searc
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
                     <EditProductButton product={product} storeId={sellerId} module="supply_office" />
-                    <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="supply_office"
+                    <EditVariantsButton productId={product.id} productName={product.name} productImage={product.image_url} storeId={sellerId} module="supply_office"
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     {product.status === "rejected" && product.bao_comment && <p className="mt-1 rounded-md bg-destructive/10 p-1.5 text-[10px] text-destructive">BAO: {product.bao_comment}</p>}
                     {product.status === "pending" && (

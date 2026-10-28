@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import { Banknote, Check, Landmark, Loader2, PackageCheck, Pencil, Smartphone, Truck, Upload, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { ProductThumb } from "@/components/ui/product-thumb"
 import { createClient } from "@/lib/supabase/client"
 import { advanceSupplyRequest, cancelSupplyRequest, paySupplyRequest, reviewSupplyRequest } from "@/app/supply-request-actions"
 import { unwrap } from "@/lib/action-result"
@@ -131,15 +132,22 @@ export function MainPanel({ request: r, royaltyRate }: { request: SupplyRequest;
     <div className="space-y-3">
       {r.status === "submitted" && (
         <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/50 p-4 dark:border-amber-500/20 dark:bg-amber-500/5">
-          <p className="text-sm font-semibold">Quote</p>
+          <div>
+            <p className="text-sm font-semibold">Send a quote</p>
+            <p className="text-xs text-muted-foreground">Set the price per unit of each line. The royalty is added for official-logo items.</p>
+          </div>
           <ul className="divide-y divide-border rounded-lg border border-border bg-card text-sm">
             {r.items.map((i) => (
-              <li key={i.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
-                <span className="min-w-0 flex-1">{i.name}{i.size ? ` (${i.size})` : ""} <span className="text-xs text-muted-foreground">× {i.quantity}{i.uses_logo ? " · logo" : ""}</span></span>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground">₱
+              <li key={i.id} className="flex items-center gap-2.5 px-3 py-2">
+                <ProductThumb src={i.image_url} alt="" size="sm" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{i.name}</p>
+                  <p className="text-xs text-muted-foreground">{i.size || "One size"} × {i.quantity}{i.uses_logo ? " · logo" : ""}
+                    {Number.isFinite(unit(i.id)) && <> · <span className="font-semibold tabular-nums text-foreground">{pesoFmt(unit(i.id) * i.quantity)}</span></>}</p>
+                </div>
+                <label className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">₱
                   <input type="number" min={0} step="0.01" value={prices[i.id]} onChange={(e) => setPrices((p) => ({ ...p, [i.id]: e.target.value }))}
-                    aria-label={`Unit price of ${i.name}`} className="h-8 w-24 rounded-md border border-input bg-background px-2 text-sm text-foreground" />/unit</label>
-                <span className="w-24 text-right text-xs font-semibold tabular-nums">{Number.isFinite(unit(i.id)) ? pesoFmt(unit(i.id) * i.quantity) : "—"}</span>
+                    aria-label={`Unit price of ${i.name}${i.size ? ` (${i.size})` : ""}`} placeholder="0.00" className="h-9 w-20 rounded-md border border-input bg-background px-2 text-sm text-foreground" /></label>
               </li>
             ))}
           </ul>

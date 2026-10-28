@@ -4,6 +4,8 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Home, Store, Tag, ShoppingCart, MessageCircle, Bell, Users, Settings, Building2, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { badgeText, useBadges } from "@/components/navigation/use-badges"
+import { getBuyerBadges } from "@/app/nav-badge-actions"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { VerificationNavItem, type VerificationState } from "@/components/verify/verification-nav"
 
@@ -25,6 +27,9 @@ const USER_NAV: NavItem[] = [
 export function MarketplaceDesktopSidebar({ dashboards = [], verification = "verified" }: { dashboards?: DashboardSummary[]; verification?: VerificationState }) {
   const pathname = usePathname()
   const nav = USER_NAV
+  // Number badges: orders to pick up, conversations with unread replies (scripts/32 §3e)
+  const badges = useBadges("buyer", getBuyerBadges)
+  const badgeOf = (href: string) => (href === "/marketplace/orders" ? badges.orders ?? 0 : href === "/marketplace/messages" ? badges.messages ?? 0 : 0)
 
   function isActive(href: string) {
     if (href === "/marketplace") return pathname === "/marketplace"
@@ -49,7 +54,10 @@ export function MarketplaceDesktopSidebar({ dashboards = [], verification = "ver
             >
               {active && <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-r-full bg-gold" />}
               <Icon className={cn("size-4 shrink-0", active ? "text-gold" : "text-gold/50 group-hover:text-gold/70")} />
-              {item.label}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              {badgeOf(item.href) > 0 && (
+                <span className="min-w-5 rounded-full bg-gold px-1.5 text-center text-[11px] font-bold leading-5 text-primary">{badgeText(badgeOf(item.href))}</span>
+              )}
             </Link>
           )
         })}

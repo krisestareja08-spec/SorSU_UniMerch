@@ -9,6 +9,8 @@ import {
 import { cn } from "@/lib/utils"
 import { dashboardHref, type DashboardSummary } from "@/lib/modules"
 import { useCart } from "@/lib/cart-context"
+import { badgeText, useBadges } from "@/components/navigation/use-badges"
+import { getBuyerBadges } from "@/app/nav-badge-actions"
 
 type Tab = { label: string; href: string; icon: LucideIcon; highlight?: boolean }
 
@@ -32,6 +34,9 @@ export function MarketplaceBottomTabs({ dashboards = [] }: { dashboards?: Dashbo
   const pathname = usePathname()
   const tabs = buildTabs(dashboards)
   const { itemCount } = useCart()
+  // Number badges: orders to pick up, conversations with unread replies (scripts/32 §3e)
+  const badges = useBadges("buyer", getBuyerBadges)
+  const badgeOf = (href: string) => (href === "/marketplace/orders" ? badges.orders ?? 0 : href === "/marketplace/messages" ? badges.messages ?? 0 : 0)
 
   function isActive(href: string) {
     if (href === "/marketplace") return pathname === "/marketplace"
@@ -66,6 +71,10 @@ export function MarketplaceBottomTabs({ dashboards = [] }: { dashboards?: Dashbo
                     <span className="absolute -right-2 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[9px] font-bold text-primary">
                       {itemCount > 99 ? "99+" : itemCount}
                     </span>
+                  )}
+                  {badgeOf(tab.href) > 0 && (
+                    <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-white ring-2 ring-card"
+                      aria-label={`${badgeOf(tab.href)} waiting`}>{badgeText(badgeOf(tab.href))}</span>
                   )}
                 </span>
               )}

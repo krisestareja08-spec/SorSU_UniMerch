@@ -2,15 +2,17 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
-import { ClipboardList, Plus, Search, X } from "lucide-react"
+import { AlertTriangle, ClipboardList, Plus, Search, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ProductThumb } from "@/components/ui/product-thumb"
+import { Callout } from "@/components/management/dashboard-ui"
 import { cn } from "@/lib/utils"
 
 const peso = (n: number) => `₱${n.toLocaleString("en-PH", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
 
 export type FormSummary = {
-  id: string; title: string; products: string[]
+  id: string; title: string; products: string[]; images: (string | null)[]
   records: number; waiting: number; ready: number; claimed: number; units: number; amount: number; updatedAt: string
 }
 /** A buyer row, for searching across every form */
@@ -62,9 +64,9 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
       </div>
 
       {unassigned.length > 0 && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/20 dark:bg-amber-500/5 dark:text-amber-300">
+        <Callout tone="warn" icon={AlertTriangle}>
           <span className="font-semibold">Not in a form yet:</span> {unassigned.join(", ")}. Add them to a form so their buyers are recorded.
-        </p>
+        </Callout>
       )}
 
       {/* Records found by the search */}
@@ -103,15 +105,22 @@ export function PreorderFormsIndex({ forms, records, unassigned, basePath }: {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {visible.map((f) => (
             <Link key={f.id} href={`${basePath}/preorders/${f.id}${q && !f.title.toLowerCase().includes(q) ? `?q=${encodeURIComponent(query.trim())}` : ""}`}
-              className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:shadow-sm">
-              <p className="font-serif text-base font-semibold leading-tight">{f.title}</p>
-              <p className="line-clamp-2 text-xs text-muted-foreground">{f.products.join(" · ")}</p>
+              className={cn("flex flex-col gap-2 rounded-2xl border bg-card p-4 transition-colors hover:border-primary/40 hover:shadow-sm", f.waiting > 0 ? "border-gold/50" : "border-border")}>
+              <div className="flex items-start gap-3">
+                <div className="flex shrink-0 -space-x-4">
+                  {f.images.slice(0, 3).map((src, i) => <ProductThumb key={i} src={src} alt="" size="md" className="ring-2 ring-card" />)}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-serif text-base font-semibold leading-tight">{f.title}</p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{f.products.join(" · ")}</p>
+                </div>
+              </div>
               <p className="text-xs text-muted-foreground">{f.records} buyer{f.records === 1 ? "" : "s"} · {f.units} unit{f.units === 1 ? "" : "s"} · {peso(f.amount)} paid</p>
               <div className="mt-auto flex flex-wrap items-center gap-1.5 text-xs">
-                <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">{f.waiting} waiting</span>
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{f.ready} ready</span>
-                <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{f.claimed} claimed</span>
-                <span className="text-muted-foreground">· Updated {day(f.updatedAt)}</span>
+                {f.waiting > 0 && <span className="rounded-full bg-sky-100 px-2 py-0.5 font-semibold text-sky-800 dark:bg-sky-500/15 dark:text-sky-300">{f.waiting} waiting</span>}
+                {f.ready > 0 && <span className="rounded-full bg-primary/10 px-2 py-0.5 font-semibold text-primary">{f.ready} ready</span>}
+                {f.claimed > 0 && <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">{f.claimed} claimed</span>}
+                <span className="text-muted-foreground">{f.records === 0 ? "No buyers yet · " : ""}Updated {day(f.updatedAt)}</span>
               </div>
             </Link>
           ))}

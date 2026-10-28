@@ -15,6 +15,8 @@ export type SupplyItem = {
   id: string; kind: SupplyItemKind; product_id: string | null; variant_id: string | null; design_group: string | null
   name: string; size: string | null; quantity: number; notes: string | null; uses_logo: boolean; list_on_marketplace: boolean
   unit_price: number | null; royalty_percentage: number | null; royalty_amount: number; created_product_id: string | null; position: number
+  /** Product / size photo, or the design's first image (scripts/31) */
+  image_url?: string | null
 }
 
 export type SupplyRequest = {

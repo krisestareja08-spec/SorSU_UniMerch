@@ -5,6 +5,7 @@ import { createPortal } from "react-dom"
 import { useRouter } from "next/navigation"
 import { AlertCircle, Loader2, Ruler, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ProductThumb } from "@/components/ui/product-thumb"
 import { createClient } from "@/lib/supabase/client"
 import { saveVariants } from "@/app/seller/products/actions"
 import { unwrap } from "@/lib/action-result"
@@ -16,6 +17,7 @@ import { VariantEditor, draftFromVariant, draftsToInputs, emptyDraft, validateDr
 export function EditVariantsButton({
   productId,
   productName,
+  productImage,
   storeId,
   module,
   basePrice,
@@ -24,6 +26,7 @@ export function EditVariantsButton({
 }: {
   productId: string
   productName: string
+  productImage?: string | null
   storeId: string
   module: ModuleKey
   basePrice: number
@@ -80,9 +83,12 @@ export function EditVariantsButton({
         <div className="fixed inset-0 z-70 flex items-start justify-center overflow-y-auto bg-black/50 px-4 py-8 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={`Sizes for ${productName}`}>
           <div className="w-full max-w-lg rounded-2xl border border-border bg-card shadow-2xl">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div className="min-w-0">
-                <h2 className="font-serif text-lg font-semibold text-foreground">Sizes &amp; Prices</h2>
-                <p className="truncate text-xs text-muted-foreground">{productName}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <ProductThumb src={productImage} alt={productName} size="md" />
+                <div className="min-w-0">
+                  <h2 className="font-serif text-lg font-semibold text-foreground">Sizes &amp; Prices</h2>
+                  <p className="truncate text-xs text-muted-foreground">{productName}</p>
+                </div>
               </div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted"><X className="size-5" /></button>
             </div>

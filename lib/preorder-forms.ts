@@ -131,11 +131,11 @@ export async function loadFormStock(productIds: string[]): Promise<FormStock> {
   if (productIds.length === 0) return {}
   const supabase = await createClient()
   const [{ data: products }, { data: variants }] = await Promise.all([
-    supabase.from("products").select("id, name, stock").in("id", productIds),
+    supabase.from("products").select("id, name, stock, image_url").in("id", productIds),
     supabase.from("product_variants").select("id, product_id, name, stock, position").in("product_id", productIds).order("position"),
   ])
   const out: FormStock = {}
-  for (const p of products ?? []) out[p.id as string] = { name: p.name as string, stock: Number(p.stock), sizes: [] }
+  for (const p of products ?? []) out[p.id as string] = { name: p.name as string, image: (p.image_url as string | null) ?? null, stock: Number(p.stock), sizes: [] }
   for (const v of variants ?? []) out[v.product_id as string]?.sizes.push({ id: v.id as string, name: v.name as string, stock: Number(v.stock) })
   return out
 }

@@ -114,7 +114,7 @@ export default async function SellerProductsPage({ searchParams }: { searchParam
                     <p className="text-[11px] text-muted-foreground">{product.category}</p>
                     <p className="mt-auto pt-1 text-sm font-bold text-gold">{priceRangeLabel(Number(product.price), undefined, product.price_max)}</p>
                     <EditProductButton product={product} storeId={sellerId} module="seller" />
-                    <EditVariantsButton productId={product.id} productName={product.name} storeId={sellerId} module="seller" lockStock={!!product.supply_office_collab}
+                    <EditVariantsButton productId={product.id} productName={product.name} productImage={product.image_url} storeId={sellerId} module="seller" lockStock={!!product.supply_office_collab}
                       basePrice={Number(product.price)} legacySizes={Array.isArray(product.variations) ? product.variations : []} />
                     {product.is_royalty_product && (product.supply_office_collab ? (
                       <p className="text-[10px] text-muted-foreground">

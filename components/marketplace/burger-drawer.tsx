@@ -10,6 +10,8 @@ import {
 import { ThemeSwitch } from "@/components/theme-select"
 import { InstallAppMenuItem } from "@/components/pwa/install-app"
 import { cn } from "@/lib/utils"
+import { badgeText, useBadges } from "@/components/navigation/use-badges"
+import { getBuyerBadges } from "@/app/nav-badge-actions"
 import { createClient } from "@/lib/supabase/client"
 import { resetTheme } from "@/lib/theme"
 import { MODULES, dashboardHref, type DashboardSummary } from "@/lib/modules"
@@ -42,6 +44,9 @@ export function BurgerDrawer({
 }) {
   const pathname = usePathname()
   const router = useRouter()
+  // Number badges: orders to pick up, conversations with unread replies (scripts/32 §3e)
+  const badges = useBadges("buyer", getBuyerBadges)
+  const badgeOf = (href: string) => (href === "/marketplace/orders" ? badges.orders ?? 0 : href === "/marketplace/messages" ? badges.messages ?? 0 : 0)
   const nav = USER_NAV
 
   async function signOut() {
@@ -92,6 +97,9 @@ export function BurgerDrawer({
                   active ? "bg-primary-foreground/10 text-gold" : "text-primary-foreground/80 hover:bg-primary-foreground/8 hover:text-primary-foreground")}>
                 <Icon className={cn("size-5 shrink-0", active ? "text-gold" : "text-gold/60 group-hover:text-gold/80")} />
                 <span className="flex-1 font-medium">{label}</span>
+                {badgeOf(href) > 0 && (
+                  <span className="min-w-5 rounded-full bg-gold px-1.5 text-center text-[11px] font-bold leading-5 text-primary">{badgeText(badgeOf(href))}</span>
+                )}
                 <ChevronRight className="size-4 opacity-30 group-hover:opacity-60" />
               </Link>
             )
