@@ -142,6 +142,32 @@ body { overflow-wrap: break-word; }
   }
 }
 
+/* ── Scrollbars: thin and rounded, quiet until pointed at ───────────────────── */
+:root {
+  --scrollbar-thumb: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+  --scrollbar-thumb-hover: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+}
+/* Chrome, Edge, Safari: the thumb floats in a clear track and widens a little on hover */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-color: var(--scrollbar-thumb);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { border-width: 2px; background-color: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-thumb:active { border-width: 2px; background-color: color-mix(in oklch, var(--primary) 70%, transparent); }
+/* Firefox (Chromium would drop the rules above if these applied to it too) */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+}
+/* Rows of tabs / chips that scroll sideways: no bar, still swipeable */
+@utility scrollbar-none {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, ::before, ::after {
     animation-duration: 0.01ms !important;

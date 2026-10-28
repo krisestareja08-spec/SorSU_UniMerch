@@ -22,7 +22,7 @@ export function TabLinks({ tabs, className }: {
   className?: string
 }) {
   return (
-    <nav aria-label="Views" className={cn("flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1", className)}>
+    <nav aria-label="Views" className={cn("scrollbar-none flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1", className)}>
       {tabs.map((t) => (
         <Link key={t.href} href={t.href} aria-current={t.active ? "page" : undefined}
           className={cn("flex min-w-max flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",

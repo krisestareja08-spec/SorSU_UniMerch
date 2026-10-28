@@ -110,7 +110,7 @@ export function NotificationCenter() {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1" role="tablist" aria-label="Notification type">
+        <div className="scrollbar-none flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1" role="tablist" aria-label="Notification type">
           {[...TABS.map((t) => ({ id: t.id as TabId, label: t.label })), { id: "unread" as TabId, label: "Unread" }].map((t) => (
             <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} onClick={() => switchTab(t.id)}
               className={cn("shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",

@@ -236,7 +236,7 @@ export function PreorderFormView({ form, storeName, rows: records, stock, module
           <h2 id="stock-heading" className="text-sm font-semibold">Stock &amp; waitlist</h2>
           <p className="text-xs text-muted-foreground">Tap a size to see who&apos;s waiting for it</p>
         </div>
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+        <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           {products.map((p) => {
             const st = stock[p.id]
             const sizes = st?.sizes.length ? st.sizes.map((s) => ({ key: sizeKey(p.id, s.id), name: s.name, stock: s.stock })) : [{ key: sizeKey(p.id, null), name: "", stock: st?.stock ?? 0 }]

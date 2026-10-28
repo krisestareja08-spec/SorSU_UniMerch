@@ -90,7 +90,7 @@ export async function BranchInventoryPage({ ctx, tab, branchId }: { ctx: Dashboa
             <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">No Supply Office branches yet.</p>
           ) : (
             <section className="space-y-3">
-              <nav aria-label="Branches" className="flex gap-1.5 overflow-x-auto pb-1">
+              <nav aria-label="Branches" className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1">
                 {branches.map((b) => (
                   <Link key={b.store_id} href={`${base}?tab=stock&branch=${b.store_id}`} aria-current={b.store_id === selected?.store_id ? "page" : undefined}
                     className={cn("flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium",

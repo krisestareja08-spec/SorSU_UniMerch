@@ -64,7 +64,7 @@ export default async function SettingsPage() {
         <div className="mt-3 h-px bg-linear-to-r from-gold/60 via-gold/20 to-transparent" />
       </div>
 
-      <nav aria-label="Settings sections" className="mb-4 flex gap-2 overflow-x-auto pb-1 text-xs">
+      <nav aria-label="Settings sections" className="scrollbar-none mb-4 flex gap-2 overflow-x-auto pb-1 text-xs">
         {[["#security", "Account & Security"], ["#verification", "Verification"], ["#notifications", "Notifications"], ["#appearance", "Appearance"], ["#app", "App"], ["#legal", "Legal"]].map(([href, label]) => (
           <a key={href} href={href} className="shrink-0 rounded-full border border-border bg-card px-3 py-1 font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground">{label}</a>
         ))}

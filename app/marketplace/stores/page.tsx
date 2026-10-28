@@ -34,7 +34,7 @@ export default async function StoresPage({ searchParams }: { searchParams: Promi
         <div className="mt-2 h-px bg-linear-to-r from-gold/60 via-gold/20 to-transparent" />
       </div>
 
-      <nav aria-label="Filter stores by campus" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+      <nav aria-label="Filter stores by campus" className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
         {chip("/marketplace/stores", "All campuses", !campus)}
         {CAMPUSES.map(([value, label]) => chip(`/marketplace/stores?campus=${value}`, label, campus === value))}
       </nav>

@@ -169,7 +169,7 @@ export function StoreShop({ ctx, viewHref }: { ctx: DashboardCtx; viewHref: stri
         <p className="mt-1 text-sm text-muted-foreground">Changes appear on your storefront after you save.</p>
 
         {/* Quick links to each section */}
-        <nav aria-label="Storefront settings sections" className="mt-4 flex gap-2 overflow-x-auto pb-1">
+        <nav aria-label="Storefront settings sections" className="scrollbar-none mt-4 flex gap-2 overflow-x-auto pb-1">
           {SECTIONS.map((s) => (
             <a key={s.id} href={`#${s.id}`}
               className="shrink-0 rounded-full border border-border bg-card px-3.5 py-1.5 text-sm font-medium text-foreground hover:border-primary/40 hover:bg-primary/5">
