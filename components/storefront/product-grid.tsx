@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { ChevronLeft, ChevronRight, Package } from "lucide-react"
 import { ProductCard } from "@/components/marketplace/product-card"

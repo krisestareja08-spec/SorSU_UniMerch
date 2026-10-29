@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { VerifiedBadge } from "@/components/verified-badge"
 import { AFFILIATION_LABELS, CAMPUS_LABELS, type Affiliation, type Campus } from "@/lib/roles"
 import { type AdminProfile, formatDateTime } from "@/lib/admin"
@@ -26,7 +26,7 @@ export function ProfileDetails({ profile, email }: { profile: AdminProfile; emai
       <div className="flex items-center gap-4">
         <div className="relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/10 text-lg font-bold text-primary">
           {profile.avatar_url
-            ? <Image src={profile.avatar_url} alt="" fill className="object-cover" />
+            ? <Image src={profile.avatar_url} alt="" fill className="object-cover" sizes="56px" />
             : (profile.full_name || "U").split(" ").map((p) => p[0]).slice(0, 2).join("").toUpperCase()}
         </div>
         <div className="min-w-0">

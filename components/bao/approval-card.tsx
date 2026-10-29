@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { CheckCircle2, XCircle, MessageCircle, Package, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -65,7 +65,7 @@ export function BaoApprovalCard({ product, variants = [] }: { product: Product; 
         {/* Image */}
         <div className="relative size-20 shrink-0 overflow-hidden rounded-xl bg-muted sm:size-24">
           {product.image_url ? (
-            <Image src={product.image_url} alt={product.name} fill className="object-cover" />
+            <Image src={product.image_url} alt={product.name} fill className="object-cover" sizes="96px" />
           ) : (
             <div className="flex h-full items-center justify-center">
               <Package className="size-8 text-muted-foreground/30" />

@@ -4,7 +4,7 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { AddProductModal } from "@/components/seller/add-product-modal"
 import { Card } from "@/components/ui/card"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 import { deleteProduct } from "@/app/seller/products/actions"
@@ -85,7 +85,7 @@ export default async function CashierProductsPage({ searchParams }: { searchPara
                 <div key={product.id} className="flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm">
                   <div className="relative aspect-square w-full overflow-hidden bg-muted">
                     {product.image_url ? (
-                      <Image src={product.image_url} alt={product.name} fill className="object-cover" />
+                      <Image src={product.image_url} alt={product.name} fill className="object-cover" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px" />
                     ) : (
                       <div className="flex h-full items-center justify-center">
                         <Package className="size-10 text-muted-foreground/30" />

@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { use, useState, useRef, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
@@ -389,7 +389,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
             {items.map((item) => (
                 <div key={lineKey(item)} className="flex gap-3">
                   <div className="relative size-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-                    <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" />
+                    <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" sizes="64px" />
                   </div>
                   <div className="flex flex-1 flex-col gap-0.5 min-w-0">
                     <p className="line-clamp-1 text-sm font-medium text-foreground">{item.name}</p>
@@ -545,7 +545,7 @@ export default function CheckoutPage({ searchParams }: { searchParams: Promise<{
                   sellerQrs.map((s) => (
                     <div key={s.sellerId} className="flex flex-col items-center gap-2">
                       <div className="relative size-44 overflow-hidden rounded-2xl border border-border bg-muted/40">
-                        <Image src={s.qrUrl} alt={`${s.orgName} GCash QR`} fill className="object-contain" />
+                        <Image src={s.qrUrl} alt={`${s.orgName} GCash QR`} fill className="object-contain" sizes="176px" unoptimized />
                       </div>
                       <p className="text-xs font-medium text-muted-foreground">{s.orgName}</p>
                     </div>

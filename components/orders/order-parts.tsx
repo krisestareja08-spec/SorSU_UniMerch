@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { CheckCircle2, Circle, Clock3, MapPin, Package, Store } from "lucide-react"
 import { buildTimeline, formatOrderTime, isClosedUnfulfilled, ORDER_FLOW, peso, statusDef, type OrderStatus } from "@/lib/order-status"

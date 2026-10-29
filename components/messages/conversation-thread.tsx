@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { ArrowLeft, BadgeCheck, ImagePlus, Loader2, Lock, LockOpen, Package, Send, ShieldCheck, ShoppingBag, Store, X } from "lucide-react"
 import { Button } from "@/components/ui/button"

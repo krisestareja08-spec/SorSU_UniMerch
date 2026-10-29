@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { AlertTriangle, Lock, PackageSearch, Settings, LogOut, ChevronRight, Edit2, Check, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -122,7 +122,7 @@ export default function AccountPage() {
       {/* Profile header */}
       <div className="mb-6 flex items-center gap-4 rounded-2xl bg-linear-to-br from-primary to-primary/80 px-5 py-6 shadow-md">
         <div className="relative flex size-16 shrink-0 items-center justify-center rounded-full bg-primary-foreground/15 text-xl font-bold text-primary-foreground ring-2 ring-gold/40">
-          {profile?.avatar_url ? <Image src={profile.avatar_url} alt="" fill className="rounded-full object-cover" /> : initials}
+          {profile?.avatar_url ? <Image src={profile.avatar_url} alt="" fill className="rounded-full object-cover" sizes="64px" /> : initials}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-serif text-lg font-semibold text-primary-foreground">{profile?.full_name || "Loading…"}</p>

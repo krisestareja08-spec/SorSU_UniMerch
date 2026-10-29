@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { TERMS_UPDATED, hasAcceptedTerms, safeNext } from "@/lib/legal"

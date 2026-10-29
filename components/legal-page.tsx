@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { TERMS_UPDATED } from "@/lib/legal"

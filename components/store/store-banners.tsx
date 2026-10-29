@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { CalendarClock, ImagePlus, Loader2, Megaphone, Pencil, Plus, Trash2, X } from "lucide-react"
 import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"

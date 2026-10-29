@@ -1,11 +1,11 @@
 "use client"
 
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { useEffect, useRef, useState } from "react"
 import { AlertTriangle, Banknote, CheckCircle2, Clock, Loader2, Smartphone, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, currentUserId } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 
 type Penalty = {
@@ -33,12 +33,14 @@ export function PenaltyCharges() {
   async function fetchPenalties(): Promise<Penalty[] | null> {
     const supabase = createClient()
     // Overdue pre-orders are discarded (and charged) first, so the list is current
-    await supabase.rpc("expire_overdue_preorders").then(() => {}, () => {})
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    const [, userId] = await Promise.all([
+      supabase.rpc("expire_overdue_preorders").then(() => {}, () => {}),
+      currentUserId(),
+    ])
+    if (!userId) return null
     const { data, error } = await supabase.from("buyer_penalties")
       .select("id, order_id, amount, reason, status, created_at, store_id")
-      .eq("buyer_id", user.id).order("created_at", { ascending: false }).limit(30)
+      .eq("buyer_id", userId).order("created_at", { ascending: false }).limit(30)
     if (error || !data?.length) return [] // table arrives with scripts/29
     const storeIds = [...new Set(data.map((p) => p.store_id))]
     type Shop = { id: string; org_name: string | null; store_hours?: string | null; pickup_location?: string | null; gcash_qr_url?: string | null; qr_status?: string | null }

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { ManagementShell } from "@/components/management/management-shell"

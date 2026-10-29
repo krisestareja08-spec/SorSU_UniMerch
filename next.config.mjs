@@ -10,10 +10,18 @@ const securityHeaders = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
 ]
 
+// Product photos, logos and banners live in the project's Supabase Storage
+const storageHost = (() => {
+  try { return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").hostname } catch { return "" }
+})()
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    unoptimized: true,
+    // Only Storage photos are optimized (components/ui/smart-image.tsx leaves other hosts as they are)
+    remotePatterns: storageHost ? [{ protocol: "https", hostname: storageHost, pathname: "/storage/v1/object/public/**" }] : [],
+    // Every upload gets a new file name, so a resized copy never goes stale: keep it 31 days
+    minimumCacheTTL: 2678400,
   },
   // allow accessing the dev server from other devices on the LAN (e.g. phone testing)
   allowedDevOrigins: ["192.168.56.1"],

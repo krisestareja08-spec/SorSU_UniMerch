@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { CalendarDays, Package, Settings2, Star, Store } from "lucide-react"
 import { ACCENTS, type Storefront } from "@/lib/storefront"

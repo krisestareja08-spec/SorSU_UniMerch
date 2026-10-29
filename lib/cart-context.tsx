@@ -145,7 +145,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       const server = Array.isArray(row?.items) ? (row.items as CartItem[]) : []
       try { localStorage.setItem(OWNER_KEY, userId) } catch {}
       syncUser.current = userId
-      dispatch({ type: "LOAD", items: mergeCarts(server, mine) })
+      const merged = mergeCarts(server, mine)
+      // Already saved as it is: don't write it back on every page load
+      if (JSON.stringify(merged) === JSON.stringify(server)) skipPush.current = true
+      dispatch({ type: "LOAD", items: merged })
 
       channel = supabase
         .channel(`cart-${userId}`)

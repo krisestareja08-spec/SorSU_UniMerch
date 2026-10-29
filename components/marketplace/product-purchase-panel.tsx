@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { useState } from "react"
 import { Check, Package, ShoppingCart, Zap } from "lucide-react"
 import { useRouter } from "next/navigation"

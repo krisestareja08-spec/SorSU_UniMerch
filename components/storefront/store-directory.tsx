@@ -1,5 +1,5 @@
 import Link from "next/link"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { Package, Star, Store } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
 import { storefrontHref } from "@/lib/storefront-theme"

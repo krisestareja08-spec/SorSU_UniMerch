@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { MessageCircle, Package, Search } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"

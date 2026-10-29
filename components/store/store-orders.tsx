@@ -295,45 +295,49 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
 
   async function load() {
     const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
     setProfile({ role: "", full_name: ctx.fullName, email: ctx.email })
-    // Discard overdue pre-orders and charge their penalty before listing (no-op before scripts/29)
-    await supabase.rpc("expire_overdue_preorders").then(() => {}, () => {})
+    // Overdue pre-orders are discarded (and charged) while the list loads; when any were, the list
+    // is fetched again so it shows them cancelled (no-op before scripts/29)
+    const expiring = supabase.rpc("expire_overdue_preorders").then(({ data }) => Number(data) || 0, () => 0)
 
     // One request returns up to 1000 lines: newest orders first, so only the oldest history is left
-    // out (sorting by the random order id dropped random orders). Older databases: unsorted.
-    const lines = (newestFirst: boolean) => {
+    // out (sorting by the random order id dropped random orders). The pre-order details come in the
+    // same request; older databases fall back to fewer columns and no sorting.
+    const BASIC = "id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid"
+    const PREORDER = ", pickup_date, pickup_deadline, id_status, buyer_id_path, is_preorder, payment_plan"
+    const lines = (columns: string, newestFirst: boolean) => {
       const q = supabase
         .from("order_items")
-        .select("order_id, product_name, product_image_url, variant, quantity, unit_price, orders(id, buyer_id, status, total, payment_method, created_at, receipt_url, reference_number, amount_paid)")
+        .select(`order_id, product_name, product_image_url, variant, quantity, unit_price, orders(${columns})`)
         .eq("seller_id", ctx.storeId ?? "")
       return (newestFirst ? q.order("orders(created_at)", { ascending: false }) : q.order("order_id", { ascending: false })).limit(1000)
     }
-    let { data, error: err } = await lines(true)
-    if (err) ({ data, error: err } = await lines(false))
+    const fetchLines = async () => {
+      let result = await lines(BASIC + PREORDER, true)
+      if (result.error) result = await lines(BASIC + PREORDER, false)
+      if (result.error) result = await lines(BASIC, false)
+      return result
+    }
+    let { data, error: err } = await fetchLines()
+    if (!err && (await expiring) > 0) ({ data, error: err } = await fetchLines())
 
     if (err) { setError(err.message); setLoading(false); return }
 
+    type Row = Omit<Order, "items" | "total" | "amount_paid"> & { total: number | string; amount_paid: number | string | null; pickup_date?: string | null; buyer_id_path?: string | null; is_preorder?: boolean }
     const map = new Map<string, Order>()
-    for (const item of data ?? []) {
+    for (const item of (data ?? []) as unknown as { product_name: string; product_image_url: string | null; variant: string | null; quantity: number; unit_price: number; orders: Row | Row[] | null }[]) {
       const o = Array.isArray(item.orders) ? item.orders[0] : item.orders
       if (!o) continue
-      const cur: Order = map.get(o.id) ?? { ...o, total: Number(o.total), amount_paid: o.amount_paid ? Number(o.amount_paid) : null, items: [] }
+      const cur: Order = map.get(o.id) ?? {
+        ...o, total: Number(o.total), amount_paid: o.amount_paid ? Number(o.amount_paid) : null, items: [],
+        is_preorder: !!o.is_preorder || !!o.pickup_date || !!o.buyer_id_path,
+      }
       cur.items.push({ name: item.product_name, variant: item.variant, quantity: item.quantity, unitPrice: Number(item.unit_price), image: item.product_image_url })
       map.set(o.id, cur)
     }
-    // Pre-order details in a separate query so older databases still list orders
-    type Pre = { id: string; pickup_date: string | null; pickup_deadline?: string | null; id_status: string | null; buyer_id_path: string | null; is_preorder?: boolean; payment_plan?: string | null }
-    const preFor = (columns: string) => supabase.from("orders").select(columns).in("id", [...map.keys()]) as unknown as Promise<{ data: Pre[] | null; error: unknown }>
-    let { data: pre, error: preError } = await preFor("id, pickup_date, pickup_deadline, id_status, buyer_id_path, is_preorder, payment_plan")
-    if (preError) ({ data: pre } = await preFor("id, pickup_date, id_status, buyer_id_path")) // before the latest scripts/29
-    for (const p of pre ?? []) {
-      const o = map.get(p.id)
-      if (o) Object.assign(o, { ...p, is_preorder: !!p.is_preorder || !!p.pickup_date || !!p.buyer_id_path })
-    }
     // Newest first (order ids are random, so they can't be used for ordering)
     setOrders([...map.values()].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+    setLoading(false)
     const chatParam = new URLSearchParams(window.location.search).get("chat")
     const chatOrder = chatParam && !chatParamHandled.current ? map.get(chatParam) : undefined
     if (chatOrder) {
@@ -342,6 +346,7 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
       if (["completed", "cancelled", "refunded"].includes(chatOrder.status)) { setTab("history"); setHistoryDays(3650) }
       setTimeout(() => document.getElementById(`order-${chatOrder.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 100)
     }
+    // Buyer names and restricted-item flags fill in once the orders are showing
     const ids = [...map.keys()]
     const [restrictedIds, buyerInfo] = await Promise.all([
       restrictedOrderIds(ctx.module, ids).then(unwrap).catch(() => [] as string[]),
@@ -349,7 +354,6 @@ export function StoreOrders({ ctx }: { ctx: DashboardCtx }) {
     ])
     setRestricted(new Set(restrictedIds))
     setBuyers(buyerInfo)
-    setLoading(false)
   }
 
   useEffect(() => {

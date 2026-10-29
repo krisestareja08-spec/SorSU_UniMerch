@@ -1,5 +1,5 @@
 import Link from "next/link"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { Store, Star, ChevronRight, CalendarDays } from "lucide-react"
 import { storefrontHref, type Storefront } from "@/lib/storefront"
 import { formatJoinDate } from "@/components/storefront/seller-header"

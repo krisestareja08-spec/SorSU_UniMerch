@@ -1,5 +1,5 @@
 import Link from "next/link"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { ChevronRight, Package } from "lucide-react"
 
 type CarouselProduct = {

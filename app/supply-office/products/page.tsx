@@ -4,7 +4,7 @@ import { ManagementShell } from "@/components/management/management-shell"
 import { PageHeading } from "@/components/management/dashboard-ui"
 import { AddProductModal } from "@/components/seller/add-product-modal"
 import { Card } from "@/components/ui/card"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { cn } from "@/lib/utils"
 import { Package, Clock, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 import { deleteProduct } from "@/app/seller/products/actions"
@@ -65,7 +65,7 @@ export default async function SupplyOfficeProductsPage({ searchParams }: { searc
               return (
                 <div key={product.id} className="flex flex-col overflow-hidden rounded-xl border border-primary/10 bg-card shadow-sm">
                   <div className="relative aspect-square w-full overflow-hidden bg-muted">
-                    {product.image_url ? <Image src={product.image_url} alt={product.name} fill className="object-cover" /> : <div className="flex h-full items-center justify-center"><Package className="size-10 text-muted-foreground/30" /></div>}
+                    {product.image_url ? <Image src={product.image_url} alt={product.name} fill className="object-cover" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px" /> : <div className="flex h-full items-center justify-center"><Package className="size-10 text-muted-foreground/30" /></div>}
                     <div className={cn("absolute inset-x-0 bottom-0 flex items-center gap-1 px-2 py-1 text-[10px] font-bold backdrop-blur-sm", s.color)}><Icon className="size-3 shrink-0" /><span className="truncate">{s.label}</span></div>
                   </div>
                   <div className="flex flex-1 flex-col gap-1 p-3">

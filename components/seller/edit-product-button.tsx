@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react"
 import { createPortal } from "react-dom"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { useRouter } from "next/navigation"
 import { AlertCircle, AlertTriangle, ImagePlus, Loader2, Pencil, X } from "lucide-react"
 import { Button } from "@/components/ui/button"

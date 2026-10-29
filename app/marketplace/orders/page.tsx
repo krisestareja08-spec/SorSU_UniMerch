@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { ChevronRight, MapPin, Package } from "lucide-react"

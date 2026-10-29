@@ -91,17 +91,28 @@ async function getBuyerIdentityImpl(orderId: string, module: ModuleKey): Promise
   }
 }
 
+/**
+ * Runs a query per batch of ids, side by side: a store can have hundreds of orders, and all their
+ * ids in one request make its address too long for the database API.
+ */
+async function inBatches<T>(ids: string[], query: (batch: string[]) => PromiseLike<{ data: unknown }>): Promise<T[]> {
+  const batches: string[][] = []
+  for (let i = 0; i < ids.length; i += 150) batches.push(ids.slice(i, i + 150))
+  const results = await Promise.all(batches.map((batch) => query(batch)))
+  return results.flatMap((r) => (r.data ?? []) as T[])
+}
+
 /** Which of these orders contain restricted items from the current store (for badges / gating). */
 async function restrictedOrderIdsImpl(module: ModuleKey, orderIds: string[]): Promise<string[]> {
   if (!STORE_MODULES.includes(module) || orderIds.length === 0) return []
   const { supabase, storeId } = await assertDashboard(module, "orders")
-  const { data } = await supabase
+  const rows = await inBatches<{ order_id: string }>(orderIds, (batch) => supabase
     .from("order_items")
     .select("order_id, products!inner(is_restricted)")
     .eq("seller_id", storeId ?? "")
     .eq("products.is_restricted", true)
-    .in("order_id", orderIds)
-  return [...new Set((data ?? []).map((r) => r.order_id as string))]
+    .in("order_id", batch))
+  return [...new Set(rows.map((r) => r.order_id))]
 }
 
 export type OrderBuyer = { name: string | null; contact: string | null; verified: boolean; accountStatus: string }
@@ -113,20 +124,27 @@ export type OrderBuyer = { name: string | null; contact: string | null; verified
 async function getOrderBuyersImpl(module: ModuleKey, orderIds: string[]): Promise<Record<string, OrderBuyer>> {
   if (!STORE_MODULES.includes(module) || orderIds.length === 0) return {}
   const { supabase, storeId } = await assertDashboard(module, "orders")
-  const { data: own } = await supabase.from("order_items").select("order_id").eq("seller_id", storeId ?? "").in("order_id", orderIds)
-  const ownIds = [...new Set((own ?? []).map((r) => r.order_id as string))]
-  if (ownIds.length === 0) return {}
+  // This store's lines of those orders, with each order's buyer (one request per batch)
+  type Line = { order_id: string; orders: { buyer_id: string } | { buyer_id: string }[] | null }
+  const lines = await inBatches<Line>(orderIds, (batch) => supabase
+    .from("order_items").select("order_id, orders!inner(buyer_id)").eq("seller_id", storeId ?? "").in("order_id", batch))
+  const buyerOf = new Map<string, string>()
+  for (const l of lines) {
+    const o = Array.isArray(l.orders) ? l.orders[0] : l.orders
+    if (o?.buyer_id) buyerOf.set(l.order_id, o.buyer_id)
+  }
+  if (buyerOf.size === 0) return {}
 
-  const { data: orders } = await supabase.from("orders").select("id, buyer_id").in("id", ownIds)
   const service = serviceClient()
-  const buyerIds = [...new Set((orders ?? []).map((o) => o.buyer_id as string))]
-  const { data: profiles } = await service.from("profiles").select("id, full_name, contact, is_identity_verified, account_status").in("id", buyerIds)
-  const byId = new Map((profiles ?? []).map((p) => [p.id as string, p]))
+  type Person = { id: string; full_name: string | null; contact: string | null; is_identity_verified: boolean | null; account_status: string | null }
+  const profiles = await inBatches<Person>([...new Set(buyerOf.values())], (batch) =>
+    service.from("profiles").select("id, full_name, contact, is_identity_verified, account_status").in("id", batch))
+  const byId = new Map(profiles.map((p) => [p.id, p]))
 
   const result: Record<string, OrderBuyer> = {}
-  for (const o of orders ?? []) {
-    const p = byId.get(o.buyer_id)
-    result[o.id] = {
+  for (const [orderId, buyerId] of buyerOf) {
+    const p = byId.get(buyerId)
+    result[orderId] = {
       name: p?.full_name ?? null,
       contact: p?.contact ?? null,
       verified: !!p?.is_identity_verified,

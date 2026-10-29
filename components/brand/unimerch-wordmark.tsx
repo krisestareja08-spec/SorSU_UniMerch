@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { cn } from "@/lib/utils"
 
 type Size = "sm" | "md" | "lg"

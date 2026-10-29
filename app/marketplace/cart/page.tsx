@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { use, useEffect, useRef, useState } from "react"
 import { Minus, Plus, Trash2, ShoppingBag, ChevronRight, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -161,7 +161,7 @@ export default function CartPage({ searchParams }: { searchParams: Promise<{ reo
                     <input type="checkbox" checked={item.selected !== false} onChange={(e) => setSelected([lineKey(item)], e.target.checked)} className="size-4 rounded accent-primary" aria-label={`Select ${item.name}`} />
                   </div>
                   <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-muted sm:size-24">
-                    <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" draggable={false} />
+                    <Image src={item.image || "/placeholder.jpg"} alt={item.name} fill className="object-cover" draggable={false} sizes="96px" />
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col gap-1">
                     <div className="flex items-start justify-between gap-2">

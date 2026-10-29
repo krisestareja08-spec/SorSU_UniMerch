@@ -1,4 +1,4 @@
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { UniMerchWordmark } from "@/components/brand/unimerch-wordmark"

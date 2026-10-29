@@ -1,16 +1,18 @@
 import type { ReactNode } from "react"
 import { Package } from "lucide-react"
+import Image from "@/components/ui/smart-image"
 import { cn } from "@/lib/utils"
 
 const SIZES = { xs: "size-8 rounded-md", sm: "size-10 rounded-lg", md: "size-12 rounded-lg", lg: "size-16 rounded-xl" }
+// Width each size is shown at, so a small photo is downloaded small
+const PIXELS = { xs: "32px", sm: "40px", md: "48px", lg: "64px" }
 
 /** A product's photo, the same everywhere a product is picked or managed; a box icon when it has none. */
 export function ProductThumb({ src, alt = "", size = "sm", className }: { src?: string | null; alt?: string; size?: keyof typeof SIZES; className?: string }) {
   return (
-    <span className={cn("flex shrink-0 items-center justify-center overflow-hidden border border-border bg-muted", SIZES[size], className)}>
+    <span className={cn("relative flex shrink-0 items-center justify-center overflow-hidden border border-border bg-muted", SIZES[size], className)}>
       {src
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={src} alt={alt} loading="lazy" className="size-full object-cover" />
+        ? <Image src={src} alt={alt} fill sizes={PIXELS[size]} className="object-cover" />
         : <Package className="size-1/2 text-muted-foreground/50" aria-hidden />}
     </span>
   )

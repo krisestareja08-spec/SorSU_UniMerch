@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { use, useState } from "react"
 import { AlertTriangle, ArrowLeft, Loader2, MailCheck } from "lucide-react"

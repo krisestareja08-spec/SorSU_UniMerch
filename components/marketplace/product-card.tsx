@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import Link from "next/link"
 import { useState } from "react"
 import { ShoppingCart, Zap, CheckCircle2, MapPin } from "lucide-react"
@@ -84,7 +84,7 @@ export function ProductCard({ product, readOnly = false }: { product: Product; r
     <>
       <div className="relative aspect-square w-full overflow-hidden bg-muted">
         <Image src={product.image} alt={product.name} fill
-          className="object-cover transition-transform duration-300 group-hover:scale-105" />
+          className="object-cover transition-transform duration-300 group-hover:scale-105" sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 240px" />
         {/* Which campus the seller is from */}
         {product.campus && (
           <span title={CAMPUS_LABELS[product.campus as Campus] ?? product.campus}

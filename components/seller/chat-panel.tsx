@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import Image from "next/image"
+import Image from "@/components/ui/smart-image"
 import { MessageCircle, Package, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -95,7 +95,7 @@ export function SellerChatPanel({ products, sellerId }: { products: Product[]; s
           >
             <div className="relative size-10 shrink-0 overflow-hidden rounded-lg bg-muted">
               {p.image_url ? (
-                <Image src={p.image_url} alt={p.name} fill className="object-cover" />
+                <Image src={p.image_url} alt={p.name} fill className="object-cover" sizes="40px" />
               ) : (
                 <Package className="m-auto size-5 text-muted-foreground/40" />
               )}
